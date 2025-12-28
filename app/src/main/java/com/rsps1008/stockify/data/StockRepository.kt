@@ -7,6 +7,6 @@ import kotlinx.coroutines.flow.Flow
 
 interface StockRepository {
     fun getHoldings(): Flow<HoldingsUiState>
-    fun getHoldingInfo(stockId: Int): Flow<HoldingInfo?>
-    fun getTransactionsForStock(stockId: Int): Flow<List<TransactionUiState>>
+    fun getHoldingInfo(stockCode: String): Flow<HoldingInfo?>
+    fun getTransactionsForStock(stockCode: String): Flow<List<TransactionUiState>>
 }

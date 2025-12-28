@@ -17,9 +17,9 @@ class CsvService {
 
     private val csvHeader = listOf(
         "id", "isETF", "交易", "交易稅", "帳戶ID", "手續費", "支出", "收入", "日期",
-        "現金股利", "筆記", "紀錄時間", "股名", "股息收入", "股票股利", "股號",
+        "現金股利", "筆記", "紀錄時間", "股名", "股票股利", "股號",
         "買進價格", "買進股數", "賣出價格", "賣出股數", "退還股款", "配發股數",
-        "除息股數", "除權股數"
+        "除息股數", "除權股數", "股息收入"
     )
 
     fun export(transactions: List<TransactionWithStock>, outputStream: OutputStream) {
@@ -60,7 +60,6 @@ class CsvService {
         record["筆記"] = transaction.note.ifEmpty { "" }
         record["紀錄時間"] = dateTimeFormat.format(Date(transaction.recordTime))
         record["股名"] = stock.name
-        record["股息收入"] = if (transaction.type == "dividend") transaction.income.toInt() else 0
         record["股票股利"] = transaction.stockDividend
         record["股號"] = stock.code
         record["買進價格"] = if (transaction.type == "buy") transaction.price else 0.0
@@ -71,6 +70,7 @@ class CsvService {
         record["配發股數"] = transaction.dividendShares.toInt()
         record["除息股數"] = transaction.exDividendShares.toInt()
         record["除權股數"] = transaction.exRightsShares.toInt()
+        record["股息收入"] = transaction.dividendIncome.toInt()
 
         // Ensure the order matches the header
         return csvHeader.map { header ->
@@ -82,11 +82,11 @@ class CsvService {
         val lines = inputStream.bufferedReader().readLines()
         if (lines.isEmpty()) return listOf()
 
-        val headerMap = lines.first().split(",").mapIndexed { index, s -> s.trim().removeSurrounding("\"") to index }.toMap()
+        val headerMap = lines.first().split(",".toRegex()).mapIndexed { index, s -> s.trim().removeSurrounding("\"") to index }.toMap()
 
         return lines.drop(1).mapNotNull { line ->
             try {
-                val values = line.split(",")
+                val values = line.split(",".toRegex())
                 CsvTransaction(
                     stockName = values[headerMap["股名"]!!].trim().removeSurrounding("\""),
                     stockCode = values[headerMap["股號"]!!].trim().removeSurrounding("\""),
@@ -114,7 +114,6 @@ class CsvService {
         val price = when(type) {
             "buy" -> values[headerMap["買進價格"]!!].toDoubleOrNull() ?: 0.0
             "sell" -> values[headerMap["賣出價格"]!!].toDoubleOrNull() ?: 0.0
-            "dividend" -> values[headerMap["收入"]!!].toDoubleOrNull() ?: 0.0
             else -> 0.0
         }
 
@@ -127,7 +126,7 @@ class CsvService {
 
         return StockTransaction(
             id = 0, // Let Room auto-generate
-            stockId = 0, // Placeholder, will be set in ViewModel
+            stockCode = values[headerMap["股號"]!!].trim().removeSurrounding("\""),
             accountId = values[headerMap["帳戶ID"]!!].toIntOrNull() ?: 1,
             date = dateFormat.parse(values[headerMap["日期"]!!].trim().removeSurrounding("\""))?.time ?: 0L,
             recordTime = try { dateTimeFormat.parse(values[headerMap["紀錄時間"]!!].trim().removeSurrounding("\""))?.time ?: System.currentTimeMillis() } catch (e: Exception) { System.currentTimeMillis() },
@@ -144,7 +143,8 @@ class CsvService {
             dividendShares = values[headerMap["配發股數"]!!].toDoubleOrNull() ?: 0.0,
             exRightsShares = values[headerMap["除權股數"]!!].toDoubleOrNull() ?: 0.0,
             capitalReturn = values[headerMap["退還股款"]!!].toDoubleOrNull() ?: 0.0,
-            note = values.getOrNull(headerMap["筆記"]!!)?.trim()?.removeSurrounding("\"") ?: ""
+            note = values.getOrNull(headerMap["筆記"]!!)?.trim()?.removeSurrounding("\"") ?: "",
+            dividendIncome = values[headerMap["股息收入"]!!].toDoubleOrNull() ?: 0.0
         )
     }
 }

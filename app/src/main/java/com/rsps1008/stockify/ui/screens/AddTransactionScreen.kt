@@ -74,12 +74,12 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
     var expanded by remember { mutableStateOf(false) }
 
     // Optional fields for dividend calculation
-    var dividendPricePerShare by remember { mutableStateOf("") }
-    var dividendShares by remember { mutableStateOf("") }
+    var cashDividend by remember { mutableStateOf("") }
+    var exDividendShares by remember { mutableStateOf("") }
 
     // Optional fields for stock dividend calculation
     var stockDividendRate by remember { mutableStateOf("") }
-    var stockDividendBaseShares by remember { mutableStateOf("") }
+    var exRightsShares by remember { mutableStateOf("") }
 
     LaunchedEffect(price, shares, transactionType) {
         when (transactionType) {
@@ -92,7 +92,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
     LaunchedEffect(transactionToEdit, allStocks) {
         if (transactionToEdit != null && allStocks.isNotEmpty()) {
             val it = transactionToEdit!!
-            val stock = allStocks.find { s -> s.id == it.stockId }
+            val stock = allStocks.find { s -> s.code == it.stockCode }
             stockName = stock?.name ?: ""
             stockCode = stock?.code ?: ""
             date = it.date
@@ -104,12 +104,14 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
                     shares = it.shares.toInt().toString()
                 }
                 "dividend" -> {
-                    price = it.price.toInt().toString() // Total amount
-                    shares = "" // Not used in UI
+                    cashDividend = it.cashDividend.toString()
+                    exDividendShares = it.exDividendShares.toInt().toString()
+                    price = it.income.toInt().toString()
                 }
                 "stock_dividend" -> {
-                    price = "" // Not used in UI
-                    shares = it.shares.toInt().toString()
+                    stockDividendRate = it.stockDividend.toString()
+                    exRightsShares = it.exRightsShares.toInt().toString()
+                    shares = it.shares.toInt().toString() // shares is 'dividendShares'
                 }
             }
         }
@@ -120,18 +122,18 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
         if (transactionId == null) { // Only for new transactions
             price = ""
             shares = ""
-            dividendPricePerShare = ""
-            dividendShares = ""
+            cashDividend = ""
+            exDividendShares = ""
             stockDividendRate = ""
-            stockDividendBaseShares = ""
+            exRightsShares = ""
         }
     }
 
     // Auto-calculate total dividend amount
-    LaunchedEffect(dividendPricePerShare, dividendShares) {
+    LaunchedEffect(cashDividend, exDividendShares) {
         if (transactionType == "dividend") {
-            val pps = dividendPricePerShare.toDoubleOrNull()
-            val s = dividendShares.toDoubleOrNull()
+            val pps = cashDividend.toDoubleOrNull()
+            val s = exDividendShares.toDoubleOrNull()
             if (pps != null && s != null) {
                 price = (pps * s).toInt().toString()
             }
@@ -139,10 +141,10 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
     }
 
     // Auto-calculate total stock dividend shares
-    LaunchedEffect(stockDividendRate, stockDividendBaseShares) {
+    LaunchedEffect(stockDividendRate, exRightsShares) {
         if (transactionType == "stock_dividend") {
             val rate = stockDividendRate.toDoubleOrNull()
-            val baseShares = stockDividendBaseShares.toDoubleOrNull()
+            val baseShares = exRightsShares.toDoubleOrNull()
             // Assuming Taiwan stock market rules: rate is NTD per 10 NTD par value share.
             // So a 1 NTD stock dividend means 100 shares for every 1000 shares held.
             if (rate != null && baseShares != null) {
@@ -179,19 +181,18 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
     }
 
     val onAddOrUpdateTransaction: () -> Unit = {
-        val (finalPrice, finalShares) = when (transactionType) {
-            "dividend" -> Pair(price.toDoubleOrNull() ?: 0.0, 1.0) // Store total amount in price
-            "stock_dividend" -> Pair(0.0, shares.toDoubleOrNull() ?: 0.0)
-            else -> Pair(price.toDoubleOrNull() ?: 0.0, shares.toDoubleOrNull() ?: 0.0)
-        }
-
         viewModel.addOrUpdateTransaction(
             stockName = stockName,
             stockCode = stockCode,
             date = date,
             type = transactionType,
-            price = finalPrice,
-            shares = finalShares
+            price = price.toDoubleOrNull() ?: 0.0,
+            shares = shares.toDoubleOrNull() ?: 0.0,
+            cashDividend = cashDividend.toDoubleOrNull() ?: 0.0,
+            exDividendShares = exDividendShares.toDoubleOrNull() ?: 0.0,
+            stockDividend = stockDividendRate.toDoubleOrNull() ?: 0.0,
+            exRightsShares = exRightsShares.toDoubleOrNull() ?: 0.0,
+            dividendShares = shares.toDoubleOrNull() ?: 0.0
         )
         val message = if (transactionId == null) "新增成功" else "更新成功"
         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
@@ -285,18 +286,18 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
                 LabeledOutlinedTextField(label = "收入金額", value = income.toInt().toString(), onValueChange = { /* Read-only */ }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), readOnly = true)
             }
             "dividend" -> {
-                LabeledOutlinedTextField(label = "每股股息(可略過)", value = dividendPricePerShare, onValueChange = { dividendPricePerShare = it }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                LabeledOutlinedTextField(label = "每股股息(可略過)", value = cashDividend, onValueChange = { cashDividend = it }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 Spacer(modifier = Modifier.height(8.dp))
-                LabeledOutlinedTextField(label = "除息股數(可略過)", value = dividendShares, onValueChange = { dividendShares = it.filter { c -> c.isDigit() } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                LabeledOutlinedTextField(label = "除息股數(可略過)", value = exDividendShares, onValueChange = { exDividendShares = it.filter { c -> c.isDigit() } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                 Spacer(modifier = Modifier.height(8.dp))
-                LabeledOutlinedTextField(label = "配發金額", value = price, onValueChange = { price = it.filter { c -> c.isDigit() } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                LabeledOutlinedTextField(label = "股息收入", value = price, onValueChange = { price = it.filter { c -> c.isDigit() } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                 Spacer(modifier = Modifier.height(8.dp))
                 LabeledOutlinedTextField(label = "手續費", value = fee.toInt().toString(), onValueChange = { /* Read-only */ }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), readOnly = true)
             }
             "stock_dividend" -> {
                 LabeledOutlinedTextField(label = "每股股利(可略過)", value = stockDividendRate, onValueChange = { stockDividendRate = it }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 Spacer(modifier = Modifier.height(8.dp))
-                LabeledOutlinedTextField(label = "除權股數(可略過)", value = stockDividendBaseShares, onValueChange = { stockDividendBaseShares = it.filter { c -> c.isDigit() } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                LabeledOutlinedTextField(label = "除權股數(可略過)", value = exRightsShares, onValueChange = { exRightsShares = it.filter { c -> c.isDigit() } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                 Spacer(modifier = Modifier.height(8.dp))
                 LabeledOutlinedTextField(label = "配發股數", value = shares, onValueChange = { shares = it.filter { c -> c.isDigit() } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
             }

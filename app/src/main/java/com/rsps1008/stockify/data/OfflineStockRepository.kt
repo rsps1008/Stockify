@@ -16,7 +16,7 @@ class OfflineStockRepository(
         // Combine held stocks, all transactions, and real-time data to calculate holdings state
         return combine(stockDao.getHeldStocks(), stockDao.getAllTransactions(), realtimeStockDataService.realtimeStockInfo) { stocks, transactions, realTimeData ->
             val holdingInfos = stocks.map { stock ->
-                val stockTransactions = transactions.filter { it.stockId == stock.id }
+                val stockTransactions = transactions.filter { it.stockCode == stock.code }
                 val currentPrice = realTimeData[stock.code]?.currentPrice ?: 0.0
                 val dailyChange = realTimeData[stock.code]?.change ?: 0.0
                 val dailyChangePercentage = realTimeData[stock.code]?.changePercent ?: 0.0
@@ -42,22 +42,22 @@ class OfflineStockRepository(
         }
     }
 
-    override fun getHoldingInfo(stockId: Int): Flow<HoldingInfo?> {
-        val stockFlow = stockDao.getStockById(stockId)
-        val transactionsFlow = stockDao.getTransactionsForStock(stockId)
+    override fun getHoldingInfo(stockCode: String): Flow<HoldingInfo?> {
+        val stockFlow = stockDao.getStockByCodeFlow(stockCode)
+        val transactionsFlow = stockDao.getTransactionsForStock(stockCode)
 
         return combine(stockFlow, transactionsFlow, realtimeStockDataService.realtimeStockInfo) { stock, transactions, realTimeData ->
             stock?.let {
-                val currentPrice = realTimeData[stock.code]?.currentPrice ?: 0.0
-                val dailyChange = realTimeData[stock.code]?.change ?: 0.0
-                val dailyChangePercentage = realTimeData[stock.code]?.changePercent ?: 0.0
+                val currentPrice = realTimeData[it.code]?.currentPrice ?: 0.0
+                val dailyChange = realTimeData[it.code]?.change ?: 0.0
+                val dailyChangePercentage = realTimeData[it.code]?.changePercent ?: 0.0
                 calculateHoldingInfo(it, transactions, currentPrice, dailyChange, dailyChangePercentage)
             }
         }
     }
 
-    override fun getTransactionsForStock(stockId: Int): Flow<List<TransactionUiState>> {
-        return stockDao.getTransactionsForStock(stockId).combine(stockDao.getStockById(stockId)) { transactions, stock ->
+    override fun getTransactionsForStock(stockCode: String): Flow<List<TransactionUiState>> {
+        return stockDao.getTransactionsForStock(stockCode).combine(stockDao.getStockByCodeFlow(stockCode)) { transactions, stock ->
             transactions.map { transaction ->
                 TransactionUiState(
                     transaction = transaction,

@@ -111,11 +111,8 @@ class SettingsViewModel(
                     if (stock == null) {
                         val newStock = Stock(name = csvTransaction.stockName, code = csvTransaction.stockCode)
                         stockDao.insertStock(newStock)
-                        stock = stockDao.getStockByCode(csvTransaction.stockCode)
                     }
-                    stock?.let {
-                        stockDao.insertTransaction(csvTransaction.transaction.copy(stockId = it.id))
-                    }
+                    stockDao.insertTransaction(csvTransaction.transaction)
                 }
                 _message.value = "匯入成功，共 ${csvTransactions.size} 筆紀錄"
             } catch (e: Exception) {

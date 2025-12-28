@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -41,13 +41,13 @@ import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StockDetailScreen(stockId: Int, navController: NavController) {
+fun StockDetailScreen(stockCode: String, navController: NavController) {
     val application = LocalContext.current.applicationContext as StockifyApplication
     val viewModel: StockDetailViewModel = viewModel(
         factory = ViewModelFactory(
             stockDao = application.database.stockDao(), 
             realtimeStockDataService = application.realtimeStockDataService, 
-            stockId = stockId
+            stockCode = stockCode
         )
     )
     val holdingInfo by viewModel.holdingInfo.collectAsState()
@@ -59,7 +59,7 @@ fun StockDetailScreen(stockId: Int, navController: NavController) {
                 title = { Text(text = "${holdingInfo?.stock?.name} ${holdingInfo?.stock?.code}") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )

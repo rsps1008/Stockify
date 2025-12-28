@@ -118,34 +118,38 @@ class AddTransactionViewModel(
         type: String,
         price: Double,
         shares: Double,
-        // fee: Double,  // Fee is now from state
-        tax: Double = 0.0,
-        income: Double = 0.0,
-        expense: Double = 0.0,
         cashDividend: Double = 0.0,
         exDividendShares: Double = 0.0,
         stockDividend: Double = 0.0,
-        dividendShares: Double = 0.0,
         exRightsShares: Double = 0.0,
+        dividendShares: Double = 0.0,
         capitalReturn: Double = 0.0,
         note: String = ""
     ) {
         viewModelScope.launch {
-            val finalExpense = if (type == "buy") _expense.value else expense
-            val finalIncome = if (type == "sell") _income.value else income
-            val finalTax = if (type == "sell") _tax.value else tax
+            val finalIncome = when (type) {
+                "sell" -> _income.value
+                "dividend" -> price
+                else -> 0.0
+            }
+
+            val finalExpense = if (type == "buy") _expense.value else 0.0
+            val finalTax = if (type == "sell") _tax.value else 0.0
+            val finalShares = if (type == "stock_dividend") dividendShares else shares
+            val finalDividendIncome = if (type == "dividend") finalIncome else 0.0
 
             if (transactionId == null) {
                 addTransaction(
-                    stockName, stockCode, date, type, price, shares, _fee.value, finalTax, finalIncome, finalExpense,
+                    stockName, stockCode, date, type, price, finalShares, _fee.value, finalTax, finalIncome, finalExpense,
                     cashDividend, exDividendShares, stockDividend, dividendShares, exRightsShares,
-                    capitalReturn, note
+                    capitalReturn, note, finalDividendIncome
                 )
             } else {
                 updateTransaction(
-                    date, type, price, shares, _fee.value, finalTax, finalIncome, finalExpense, cashDividend,
+                    stockCode,
+                    date, type, price, finalShares, _fee.value, finalTax, finalIncome, finalExpense, cashDividend,
                     exDividendShares, stockDividend, dividendShares, exRightsShares,
-                    capitalReturn, note
+                    capitalReturn, note, finalDividendIncome
                 )
             }
         }
@@ -168,7 +172,8 @@ class AddTransactionViewModel(
         dividendShares: Double,
         exRightsShares: Double,
         capitalReturn: Double,
-        note: String
+        note: String,
+        dividendIncome: Double
     ) {
         var stock = stockDao.getStockByCode(stockCode)
 
@@ -180,11 +185,11 @@ class AddTransactionViewModel(
 
         stock?.let {
             val transaction = StockTransaction(
-                stockId = it.id,
+                stockCode = it.code,
                 date = date,
                 recordTime = System.currentTimeMillis(),
                 type = type,
-                price = price,
+                price = if (type == "dividend" || type == "stock_dividend") 0.0 else price,
                 shares = shares,
                 fee = fee,
                 tax = tax,
@@ -196,13 +201,15 @@ class AddTransactionViewModel(
                 dividendShares = dividendShares,
                 exRightsShares = exRightsShares,
                 capitalReturn = capitalReturn,
-                note = note
+                note = note,
+                dividendIncome = dividendIncome
             )
             stockDao.insertTransaction(transaction)
         }
     }
 
     private suspend fun updateTransaction(
+        stockCode: String,
         date: Long,
         type: String,
         price: Double,
@@ -217,13 +224,15 @@ class AddTransactionViewModel(
         dividendShares: Double,
         exRightsShares: Double,
         capitalReturn: Double,
-        note: String
+        note: String,
+        dividendIncome: Double
     ) {
         _transactionToEdit.value?.let {
             val updatedTransaction = it.copy(
+                stockCode = stockCode,
                 date = date,
                 type = type,
-                price = price,
+                price = if (type == "dividend" || type == "stock_dividend") 0.0 else price,
                 shares = shares,
                 fee = fee,
                 tax = tax,
@@ -235,7 +244,8 @@ class AddTransactionViewModel(
                 dividendShares = dividendShares,
                 exRightsShares = exRightsShares,
                 capitalReturn = capitalReturn,
-                note = note
+                note = note,
+                dividendIncome = dividendIncome
             )
             stockDao.updateTransaction(updatedTransaction)
         }

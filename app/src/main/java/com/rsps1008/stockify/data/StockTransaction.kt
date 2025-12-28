@@ -1,62 +1,80 @@
 package com.rsps1008.stockify.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Embedded
 import androidx.room.Entity
-import androidx.room.ForeignKey
 import androidx.room.PrimaryKey
 import androidx.room.Relation
 
-@Entity(
-    tableName = "stock_transactions",
-    foreignKeys = [
-        ForeignKey(
-            entity = Stock::class,
-            parentColumns = ["id"],
-            childColumns = ["stockId"],
-            onDelete = ForeignKey.CASCADE
-        )
-    ]
-)
+@Entity(tableName = "stock_transactions")
 data class StockTransaction(
     @PrimaryKey(autoGenerate = true)
-    val id: Int = 0, // 流水號
-    val stockId: Int, // 對應到 Stock 表的 ID
-    val accountId: Int = 1, // 帳戶ID
+    @ColumnInfo(name = "id")
+    val id: Int = 0,
 
-    val date: Long, // 日期
-    val recordTime: Long, // 紀錄時間
+    @ColumnInfo(name = "股號")
+    val stockCode: String,
 
-    val type: String, // 交易: 買進, 賣出, 配息, 配股
+    @ColumnInfo(name = "帳戶ID")
+    val accountId: Int = 1,
 
-    // 買賣相關
-    val price: Double = 0.0, // 買進價格 / 賣出價格
-    val shares: Double = 0.0, // 買進股數 / 賣出股數
+    @ColumnInfo(name = "日期")
+    val date: Long,
 
-    // 成本與收益
-    val fee: Double = 0.0, // 手續費
-    val tax: Double = 0.0, // 交易稅
-    val income: Double = 0.0,      // 收入 (股息收入或賣出所得)
-    val expense: Double = 0.0,     // 支出
+    @ColumnInfo(name = "紀錄時間")
+    val recordTime: Long,
 
-    // 配息相關
-    val cashDividend: Double = 0.0, // 現金股利 (per share)
-    val exDividendShares: Double = 0.0, // 除息股數
+    @ColumnInfo(name = "交易")
+    val type: String,
 
-    // 配股相關
-    val stockDividend: Double = 0.0, // 股票股利 (per share)
-    val dividendShares: Double = 0.0, // 配發股數
-    val exRightsShares: Double = 0.0, // 除權股數
+    @ColumnInfo(name = "價格")
+    val price: Double = 0.0,
 
-    // 其他
-    val capitalReturn: Double = 0.0, // 退還股款
-    val note: String = "" // 筆記
+    @ColumnInfo(name = "股數")
+    val shares: Double = 0.0,
+
+    @ColumnInfo(name = "手續費")
+    val fee: Double = 0.0,
+
+    @ColumnInfo(name = "交易稅")
+    val tax: Double = 0.0,
+
+    @ColumnInfo(name = "收入")
+    val income: Double = 0.0,
+
+    @ColumnInfo(name = "支出")
+    val expense: Double = 0.0,
+
+    @ColumnInfo(name = "現金股利")
+    val cashDividend: Double = 0.0,
+
+    @ColumnInfo(name = "除息股數")
+    val exDividendShares: Double = 0.0,
+
+    @ColumnInfo(name = "股息收入")
+    val dividendIncome: Double = 0.0,
+
+    @ColumnInfo(name = "股票股利")
+    val stockDividend: Double = 0.0,
+
+    @ColumnInfo(name = "配發股數")
+    val dividendShares: Double = 0.0,
+
+    @ColumnInfo(name = "除權股數")
+    val exRightsShares: Double = 0.0,
+
+    @ColumnInfo(name = "退還股款")
+    val capitalReturn: Double = 0.0,
+
+    @ColumnInfo(name = "筆記")
+    val note: String = ""
 )
 
 data class TransactionWithStock(
     @Embedded val transaction: StockTransaction,
     @Relation(
-        parentColumn = "stockId",
-        entityColumn = "id"
+        parentColumn = "股號",
+        entityColumn = "code"
     )
     val stock: Stock
 )

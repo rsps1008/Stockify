@@ -45,10 +45,10 @@ fun NavGraph(
         }
         composable(
             route = Screen.StockDetail.route,
-            arguments = listOf(navArgument("stockId") { type = NavType.IntType })
+            arguments = listOf(navArgument("stockCode") { type = NavType.StringType })
         ) { backStackEntry ->
-            val stockId = backStackEntry.arguments?.getInt("stockId") ?: 0
-            StockDetailScreen(stockId = stockId, navController = navController)
+            val stockCode = backStackEntry.arguments?.getString("stockCode") ?: ""
+            StockDetailScreen(stockCode = stockCode, navController = navController)
         }
         composable(
             route = Screen.TransactionDetail.route,

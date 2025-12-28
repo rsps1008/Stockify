@@ -131,7 +131,7 @@ fun HoldingCard(holding: HoldingInfo, navController: NavController) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .clickable { navController.navigate(Screen.StockDetail.createRoute(holding.stock.id)) }
+            .clickable { navController.navigate(Screen.StockDetail.createRoute(holding.stock.code)) }
     ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {

@@ -9,11 +9,11 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 
-class StockDetailViewModel(stockId: Int, stockRepository: StockRepository) : ViewModel() {
+class StockDetailViewModel(stockCode: String, stockRepository: StockRepository) : ViewModel() {
 
-    val holdingInfo: StateFlow<HoldingInfo?> = stockRepository.getHoldingInfo(stockId)
+    val holdingInfo: StateFlow<HoldingInfo?> = stockRepository.getHoldingInfo(stockCode)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
-    val transactions: StateFlow<List<TransactionUiState>> = stockRepository.getTransactionsForStock(stockId)
+    val transactions: StateFlow<List<TransactionUiState>> = stockRepository.getTransactionsForStock(stockCode)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 }

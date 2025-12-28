@@ -13,7 +13,7 @@ class ViewModelFactory(
     private val application: Application? = null,
     private val realtimeStockDataService: RealtimeStockDataService? = null,
     private val settingsDataStore: SettingsDataStore? = null,
-    private val stockId: Int? = null,
+    private val stockCode: String? = null,
     private val transactionId: Int? = null
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -36,7 +36,7 @@ class ViewModelFactory(
             }
             modelClass.isAssignableFrom(StockDetailViewModel::class.java) -> {
                 @Suppress("UNCHECKED_CAST")
-                StockDetailViewModel(stockId!!, OfflineStockRepository(stockDao, realtimeStockDataService!!)) as T
+                StockDetailViewModel(stockCode!!, OfflineStockRepository(stockDao, realtimeStockDataService!!)) as T
             }
             modelClass.isAssignableFrom(TransactionDetailViewModel::class.java) -> {
                 @Suppress("UNCHECKED_CAST")
