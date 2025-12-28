@@ -123,7 +123,6 @@ class AddTransactionViewModel(
         stockDividend: Double = 0.0,
         exRightsShares: Double = 0.0,
         dividendShares: Double = 0.0,
-        capitalReturn: Double = 0.0,
         note: String = ""
     ) {
         viewModelScope.launch {
@@ -143,14 +142,14 @@ class AddTransactionViewModel(
                 addTransaction(
                     stockName, stockCode, date, type, price, finalShares, _fee.value, finalTax, finalIncome, finalExpense,
                     cashDividend, exDividendShares, stockDividend, finalDividendShares, exRightsShares,
-                    capitalReturn, note, finalDividendIncome
+                    note, finalDividendIncome
                 )
             } else {
                 updateTransaction(
                     stockCode,
                     date, type, price, finalShares, _fee.value, finalTax, finalIncome, finalExpense, cashDividend,
                     exDividendShares, stockDividend, finalDividendShares, exRightsShares,
-                    capitalReturn, note, finalDividendIncome
+                    note, finalDividendIncome
                 )
             }
         }
@@ -172,7 +171,6 @@ class AddTransactionViewModel(
         stockDividend: Double,
         dividendShares: Double,
         exRightsShares: Double,
-        capitalReturn: Double,
         note: String,
         dividendIncome: Double
     ) {
@@ -201,7 +199,6 @@ class AddTransactionViewModel(
                 stockDividend = stockDividend,
                 dividendShares = dividendShares,
                 exRightsShares = exRightsShares,
-                capitalReturn = capitalReturn,
                 note = note,
                 dividendIncome = dividendIncome
             )
@@ -224,7 +221,6 @@ class AddTransactionViewModel(
         stockDividend: Double,
         dividendShares: Double,
         exRightsShares: Double,
-        capitalReturn: Double,
         note: String,
         dividendIncome: Double
     ) {
@@ -244,7 +240,6 @@ class AddTransactionViewModel(
                 stockDividend = stockDividend,
                 dividendShares = dividendShares,
                 exRightsShares = exRightsShares,
-                capitalReturn = capitalReturn,
                 note = note,
                 dividendIncome = dividendIncome
             )

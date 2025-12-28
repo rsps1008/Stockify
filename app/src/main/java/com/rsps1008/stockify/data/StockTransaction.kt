@@ -27,11 +27,17 @@ data class StockTransaction(
     @ColumnInfo(name = "交易")
     val type: String,
 
-    @ColumnInfo(name = "價格")
-    val price: Double = 0.0,
+    @ColumnInfo(name = "買進價格")
+    val buyPrice: Double = 0.0,
 
-    @ColumnInfo(name = "股數")
-    val shares: Double = 0.0,
+    @ColumnInfo(name = "買進股數")
+    val buyShares: Double = 0.0,
+
+    @ColumnInfo(name = "賣出價格")
+    val sellPrice: Double = 0.0,
+
+    @ColumnInfo(name = "賣出股數")
+    val sellShares: Double = 0.0,
 
     @ColumnInfo(name = "手續費")
     val fee: Double = 0.0,
@@ -62,9 +68,6 @@ data class StockTransaction(
 
     @ColumnInfo(name = "除權股數")
     val exRightsShares: Double = 0.0,
-
-    @ColumnInfo(name = "退還股款")
-    val capitalReturn: Double = 0.0,
 
     @ColumnInfo(name = "筆記")
     val note: String = ""

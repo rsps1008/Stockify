@@ -151,7 +151,6 @@ class SettingsViewModel(
     fun deleteAllData() {
         viewModelScope.launch {
             stockDao.deleteAllTransactions()
-            stockDao.deleteAllStocks()
         }
     }
 

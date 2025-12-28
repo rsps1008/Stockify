@@ -99,7 +99,7 @@ class OfflineStockRepository(
                     shares -= it.shares
                 }
                 "配股" -> {
-                    shares += it.shares
+                    shares += it.dividendShares
                 }
                 "配息" -> {
                     dividendIncome += it.income
