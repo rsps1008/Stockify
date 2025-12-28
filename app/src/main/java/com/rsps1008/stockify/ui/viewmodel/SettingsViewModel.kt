@@ -35,9 +35,36 @@ class SettingsViewModel(
     val lastStockListUpdateTime: StateFlow<Long?> = settingsDataStore.lastStockListUpdateTimeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
+    val feeDiscount: StateFlow<Double> = settingsDataStore.feeDiscountFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 0.28)
+
+    val minFeeRegular: StateFlow<Int> = settingsDataStore.minFeeRegularFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 20)
+
+    val minFeeOddLot: StateFlow<Int> = settingsDataStore.minFeeOddLotFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 1)
+
     fun setRefreshInterval(interval: Int) {
         viewModelScope.launch {
             settingsDataStore.setRefreshInterval(interval)
+        }
+    }
+
+    fun setFeeDiscount(discount: Double) {
+        viewModelScope.launch {
+            settingsDataStore.setFeeDiscount(discount)
+        }
+    }
+
+    fun setMinFeeRegular(fee: Int) {
+        viewModelScope.launch {
+            settingsDataStore.setMinFeeRegular(fee)
+        }
+    }
+
+    fun setMinFeeOddLot(fee: Int) {
+        viewModelScope.launch {
+            settingsDataStore.setMinFeeOddLot(fee)
         }
     }
 

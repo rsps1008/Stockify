@@ -2,6 +2,7 @@ package com.rsps1008.stockify.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.StockDao
 import com.rsps1008.stockify.data.StockTransaction
@@ -9,19 +10,31 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlin.math.max
+import kotlin.math.roundToInt
 
-class AddTransactionViewModel(private val stockDao: StockDao, private val transactionId: Int?) : ViewModel() {
+class AddTransactionViewModel(
+    private val stockDao: StockDao,
+    private val settingsDataStore: SettingsDataStore,
+    private val transactionId: Int?
+) : ViewModel() {
 
     private val _transactionToEdit = MutableStateFlow<StockTransaction?>(null)
     val transactionToEdit = _transactionToEdit.asStateFlow()
 
+    private val _fee = MutableStateFlow(0.0)
+    val fee = _fee.asStateFlow()
+
     init {
         transactionId?.let {
             viewModelScope.launch {
-                _transactionToEdit.value = stockDao.getTransactionById(it).firstOrNull()
+                val transaction = stockDao.getTransactionById(it).firstOrNull()
+                _transactionToEdit.value = transaction
+                transaction?.let { tx -> _fee.value = tx.fee }
             }
         }
     }
@@ -33,6 +46,29 @@ class AddTransactionViewModel(private val stockDao: StockDao, private val transa
             initialValue = emptyList()
         )
 
+    private val feeSettings = combine(
+        settingsDataStore.feeDiscountFlow,
+        settingsDataStore.minFeeRegularFlow,
+        settingsDataStore.minFeeOddLotFlow
+    ) { discount, minRegular, minOdd ->
+        Triple(discount, minRegular, minOdd)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), Triple(0.28, 20, 1))
+
+    fun calculateFee(price: Double, shares: Double) {
+        if (price <= 0 || shares <= 0) {
+            _fee.value = 0.0
+            return
+        }
+
+        val (discount, minFeeRegular, minFeeOddLot) = feeSettings.value
+        val transactionValue = price * shares
+        val calculatedFee = transactionValue * 0.001425 * discount
+
+        val minFee = if (shares % 1000 == 0.0) minFeeRegular else minFeeOddLot
+
+        _fee.value = max(calculatedFee, minFee.toDouble()).roundToInt().toDouble()
+    }
+
     fun addOrUpdateTransaction(
         stockName: String,
         stockCode: String,
@@ -40,7 +76,7 @@ class AddTransactionViewModel(private val stockDao: StockDao, private val transa
         type: String,
         price: Double,
         shares: Double,
-        fee: Double,
+        // fee: Double,  // Fee is now from state
         tax: Double = 0.0,
         income: Double = 0.0,
         expense: Double = 0.0,
@@ -55,13 +91,13 @@ class AddTransactionViewModel(private val stockDao: StockDao, private val transa
         viewModelScope.launch {
             if (transactionId == null) {
                 addTransaction(
-                    stockName, stockCode, date, type, price, shares, fee, tax, income, expense,
+                    stockName, stockCode, date, type, price, shares, _fee.value, tax, income, expense,
                     cashDividend, exDividendShares, stockDividend, dividendShares, exRightsShares,
                     capitalReturn, note
                 )
             } else {
                 updateTransaction(
-                    date, type, price, shares, fee, tax, income, expense, cashDividend,
+                    date, type, price, shares, _fee.value, tax, income, expense, cashDividend,
                     exDividendShares, stockDividend, dividendShares, exRightsShares,
                     capitalReturn, note
                 )

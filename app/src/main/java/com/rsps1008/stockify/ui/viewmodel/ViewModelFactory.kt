@@ -24,7 +24,7 @@ class ViewModelFactory(
             }
             modelClass.isAssignableFrom(AddTransactionViewModel::class.java) -> {
                 @Suppress("UNCHECKED_CAST")
-                AddTransactionViewModel(stockDao, transactionId) as T
+                AddTransactionViewModel(stockDao, settingsDataStore!!, transactionId) as T
             }
             modelClass.isAssignableFrom(TransactionsViewModel::class.java) -> {
                 @Suppress("UNCHECKED_CAST")
