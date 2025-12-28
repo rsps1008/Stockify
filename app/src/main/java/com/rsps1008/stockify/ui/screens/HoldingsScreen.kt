@@ -80,7 +80,7 @@ fun SummarySection(uiState: HoldingsUiState) {
                 )
                 Spacer(modifier = Modifier.padding(horizontal = 4.dp))
                 Text(
-                    text = "${String.format("%.2f", abs(uiState.cumulativePLPercentage))}%",
+                    text = String.format("%+.2f%%", uiState.cumulativePLPercentage),
                     style = MaterialTheme.typography.bodyLarge,
                     color = cumulativePlColor,
                     modifier = Modifier.alignByBaseline()
@@ -160,12 +160,12 @@ fun HoldingCard(holding: HoldingInfo, navController: NavController) {
             }
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
                 Text(
-                    text = String.format("%,.0f", abs(holding.totalPL)),
+                    text = String.format("%,.0f", holding.totalPL),
                     style = MaterialTheme.typography.bodyLarge,
                     color = totalPlColor
                 )
                 Text(
-                    text = "${String.format("%.2f", abs(holding.totalPLPercentage))}%",
+                    text = String.format("%+.2f%%", holding.totalPLPercentage),
                     style = MaterialTheme.typography.bodySmall,
                     color = totalPlColor
                 )
