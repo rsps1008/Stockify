@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.util.Calendar
+import java.util.TimeZone
 
 class RealtimeStockDataService(
     private val stockDao: StockDao,
@@ -21,6 +23,7 @@ class RealtimeStockDataService(
 
     private var fetchJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
+    private var fetchCount = 0
 
     init {
         startFetching()
@@ -29,24 +32,67 @@ class RealtimeStockDataService(
     private fun startFetching() {
         fetchJob?.cancel()
         fetchJob = scope.launch {
-            settingsDataStore.refreshIntervalFlow.collectLatest { interval ->
-                while (true) {
-                    val stocks = stockDao.getHeldStocks().first()
-                    val updatedInfos = _realtimeStockInfo.value.toMutableMap()
-                    val isMarketOpen = yahooStockInfoFetcher.isMarketOpen()
+            // 1. Load from cache first
+            val cachedData = settingsDataStore.realtimeStockInfoCacheFlow.first()
+            if (cachedData.isNotEmpty()) {
+                _realtimeStockInfo.value = cachedData
+            }
 
-                    for (stock in stocks) {
-                        val shouldFetch = !_realtimeStockInfo.value.containsKey(stock.code) || isMarketOpen
-                        if (shouldFetch) {
-                            yahooStockInfoFetcher.fetchStockInfo(stock.code)?.let { info ->
-                                updatedInfos[stock.code] = info
-                            }
-                        }
+            // 2. Check market hours and decide fetching strategy
+            val isMarketOpen = isMarketOpen()
+
+            if (isMarketOpen) {
+                // Fetch continuously during market hours
+                settingsDataStore.refreshIntervalFlow.collectLatest { interval ->
+                    while (isMarketOpen()) {
+                        fetchAllStockInfo(true)
+                        delay(interval * 1000L)
                     }
-                    _realtimeStockInfo.value = updatedInfos
-                    delay(interval * 1000L)
+                    // When market closes, do one final fetch and save
+                    fetchAllStockInfo(true, forceSave = true)
                 }
+            } else {
+                // Fetch once after market hours
+                fetchAllStockInfo(false)
             }
         }
+    }
+
+    private suspend fun fetchAllStockInfo(isContinuous: Boolean, forceSave: Boolean = false) {
+        val stocks = stockDao.getHeldStocks().first()
+        val updatedInfos = _realtimeStockInfo.value.toMutableMap()
+
+        for (stock in stocks) {
+            yahooStockInfoFetcher.fetchStockInfo(stock.code)?.let {
+                updatedInfos[stock.code] = it
+            }
+        }
+        _realtimeStockInfo.value = updatedInfos
+
+        if (isContinuous) {
+            fetchCount++
+            if (fetchCount >= 10 || forceSave) {
+                settingsDataStore.setRealtimeStockInfoCache(updatedInfos)
+                fetchCount = 0
+            }
+        } else {
+            settingsDataStore.setRealtimeStockInfoCache(updatedInfos)
+        }
+    }
+
+    private fun isMarketOpen(): Boolean {
+        val calendar = Calendar.getInstance(TimeZone.getTimeZone("Asia/Taipei"))
+        val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
+        val hour = calendar.get(Calendar.HOUR_OF_DAY)
+        val minute = calendar.get(Calendar.MINUTE)
+
+        // Monday to Friday
+        val isWeekday = dayOfWeek >= Calendar.MONDAY && dayOfWeek <= Calendar.FRIDAY
+        if (!isWeekday) return false
+
+        // 9:00 AM to 1:30 PM
+        val isMarketHour = (hour == 9 && minute >= 0) || (hour > 9 && hour < 13) || (hour == 13 && minute <= 30)
+
+        return isMarketHour
     }
 }

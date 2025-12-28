@@ -7,12 +7,14 @@ import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
 import org.jsoup.Jsoup
 import java.time.DayOfWeek
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
+@Serializable
 data class RealtimeStockInfo(
     val currentPrice: Double,
     val change: Double,

@@ -8,9 +8,12 @@ import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
@@ -23,6 +26,7 @@ class SettingsDataStore(val context: Context) {
     private val minFeeRegularKey = intPreferencesKey("min_fee_regular")
     private val minFeeOddLotKey = intPreferencesKey("min_fee_odd_lot")
     private val preDeductSellFeesKey = booleanPreferencesKey("pre_deduct_sell_fees")
+    private val realtimeStockInfoCacheKey = stringPreferencesKey("realtime_stock_info_cache")
 
     val refreshIntervalFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
@@ -52,6 +56,13 @@ class SettingsDataStore(val context: Context) {
     val preDeductSellFeesFlow: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
             preferences[preDeductSellFeesKey] ?: false
+        }
+
+    val realtimeStockInfoCacheFlow: Flow<Map<String, RealtimeStockInfo>> = context.dataStore.data
+        .map { preferences ->
+            preferences[realtimeStockInfoCacheKey]?.let {
+                Json.decodeFromString<Map<String, RealtimeStockInfo>>(it)
+            } ?: emptyMap()
         }
 
     suspend fun setRefreshInterval(interval: Int) {
@@ -87,6 +98,12 @@ class SettingsDataStore(val context: Context) {
     suspend fun setPreDeductSellFees(preDeduct: Boolean) {
         context.dataStore.edit {
             it[preDeductSellFeesKey] = preDeduct
+        }
+    }
+
+    suspend fun setRealtimeStockInfoCache(cache: Map<String, RealtimeStockInfo>) {
+        context.dataStore.edit {
+            it[realtimeStockInfoCacheKey] = Json.encodeToString(cache)
         }
     }
 }

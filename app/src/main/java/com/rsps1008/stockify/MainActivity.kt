@@ -94,9 +94,6 @@ fun MainScreen() {
                                 }
                             )
                         }
-                        FloatingActionButton(onClick = { navController.navigate(Screen.AddTransaction.route) }) {
-                            Icon(Icons.Filled.Add, contentDescription = "Add Transaction")
-                        }
                         IconButton(onClick = { 
                             navController.navigate(Screen.Settings.route) {
                                 popUpTo(navController.graph.findStartDestination().id) {
@@ -115,6 +112,9 @@ fun MainScreen() {
                                     androidx.compose.material3.MaterialTheme.colorScheme.onSurface
                                 }
                             )
+                        }
+                        FloatingActionButton(onClick = { navController.navigate(Screen.AddTransaction.route) }) {
+                            Icon(Icons.Filled.Add, contentDescription = "Add Transaction")
                         }
                     }
                 }
