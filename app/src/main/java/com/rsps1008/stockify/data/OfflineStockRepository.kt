@@ -5,22 +5,24 @@ import com.rsps1008.stockify.ui.screens.HoldingsUiState
 import com.rsps1008.stockify.ui.screens.TransactionUiState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 class OfflineStockRepository(
     private val stockDao: StockDao,
-    private val realtimeStockDataService: RealtimeStockDataService
+    private val realtimeStockDataService: RealtimeStockDataService,
+    private val settingsDataStore: SettingsDataStore
 ) : StockRepository {
 
     override fun getHoldings(): Flow<HoldingsUiState> {
         // Combine held stocks, all transactions, and real-time data to calculate holdings state
-        return combine(stockDao.getHeldStocks(), stockDao.getAllTransactions(), realtimeStockDataService.realtimeStockInfo) { stocks, transactions, realTimeData ->
+        return combine(stockDao.getHeldStocks(), stockDao.getAllTransactions(), realtimeStockDataService.realtimeStockInfo, settingsDataStore.preDeductSellFeesFlow) { stocks, transactions, realTimeData, preDeductSellFees ->
             val holdingInfos = stocks.map { stock ->
                 val stockTransactions = transactions.filter { it.stockCode == stock.code }
                 val currentPrice = realTimeData[stock.code]?.currentPrice ?: 0.0
                 val dailyChange = realTimeData[stock.code]?.change ?: 0.0
                 val dailyChangePercentage = realTimeData[stock.code]?.changePercent ?: 0.0
-                calculateHoldingInfo(stock, stockTransactions, currentPrice, dailyChange, dailyChangePercentage)
+                calculateHoldingInfo(stock, stockTransactions, currentPrice, dailyChange, dailyChangePercentage, preDeductSellFees)
             }
 
             // Aggregate data for the summary
@@ -46,12 +48,12 @@ class OfflineStockRepository(
         val stockFlow = stockDao.getStockByCodeFlow(stockCode)
         val transactionsFlow = stockDao.getTransactionsForStock(stockCode)
 
-        return combine(stockFlow, transactionsFlow, realtimeStockDataService.realtimeStockInfo) { stock, transactions, realTimeData ->
+        return combine(stockFlow, transactionsFlow, realtimeStockDataService.realtimeStockInfo, settingsDataStore.preDeductSellFeesFlow) { stock, transactions, realTimeData, preDeductSellFees ->
             stock?.let {
                 val currentPrice = realTimeData[it.code]?.currentPrice ?: 0.0
                 val dailyChange = realTimeData[it.code]?.change ?: 0.0
                 val dailyChangePercentage = realTimeData[it.code]?.changePercent ?: 0.0
-                calculateHoldingInfo(it, transactions, currentPrice, dailyChange, dailyChangePercentage)
+                calculateHoldingInfo(it, transactions, currentPrice, dailyChange, dailyChangePercentage, preDeductSellFees)
             }
         }
     }
@@ -67,12 +69,13 @@ class OfflineStockRepository(
         }
     }
 
-    private fun calculateHoldingInfo(
+    private suspend fun calculateHoldingInfo(
         stock: Stock,
         transactions: List<StockTransaction>,
         currentPrice: Double,
         dailyChange: Double,
-        dailyChangePercentage: Double
+        dailyChangePercentage: Double,
+        preDeductSellFees: Boolean
     ): HoldingInfo {
         var shares = 0.0
         var totalCost = 0.0
@@ -112,8 +115,18 @@ class OfflineStockRepository(
         val averageCost = if (shares > 0 && totalCost > 0) totalCost / shares else 0.0
         val buyAverage = if (buySharesTotal > 0) buyCostTotal / buySharesTotal else 0.0
         val marketValue = shares * currentPrice
-        val totalPL = (marketValue - totalCost) + dividendIncome
+        var totalPL = (marketValue - totalCost) + dividendIncome
         val totalPLPercentage = if (totalCost > 0) (totalPL / totalCost) * 100 else 0.0
+
+        if (preDeductSellFees) {
+            val feeDiscount = settingsDataStore.feeDiscountFlow.first()
+            val minFeeRegular = settingsDataStore.minFeeRegularFlow.first()
+
+            val sellFee = (marketValue * 0.001425 * feeDiscount).coerceAtLeast(minFeeRegular.toDouble())
+            val sellTax = marketValue * 0.003
+            totalPL -= (sellFee + sellTax)
+        }
+
 
         return HoldingInfo(
             stock = stock,

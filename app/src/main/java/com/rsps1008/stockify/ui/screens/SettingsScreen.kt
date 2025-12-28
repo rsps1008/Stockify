@@ -19,6 +19,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -60,6 +61,7 @@ fun SettingsScreen() {
     val feeDiscount by viewModel.feeDiscount.collectAsState()
     val minFeeRegular by viewModel.minFeeRegular.collectAsState()
     val minFeeOddLot by viewModel.minFeeOddLot.collectAsState()
+    val preDeductSellFees by viewModel.preDeductSellFees.collectAsState()
 
     val context = LocalContext.current
 
@@ -133,6 +135,22 @@ fun SettingsScreen() {
             Text("上次更新時間：${formatTimestamp(it)}")
         } ?: Text("尚未更新過股票列表")
         Spacer(modifier = Modifier.height(24.dp))
+
+        Text("損益計算設定", style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("預先扣除賣出費用與稅金", modifier = Modifier.weight(1f))
+            Switch(
+                checked = preDeductSellFees,
+                onCheckedChange = { viewModel.setPreDeductSellFees(it) }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
 
         Text("手續費設定", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(8.dp))

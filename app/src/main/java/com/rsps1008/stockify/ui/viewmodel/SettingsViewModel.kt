@@ -56,6 +56,9 @@ class SettingsViewModel(
     val minFeeOddLot: StateFlow<Int> = settingsDataStore.minFeeOddLotFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 1)
 
+    val preDeductSellFees: StateFlow<Boolean> = settingsDataStore.preDeductSellFeesFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), false)
+
     fun exportTransactions(uri: Uri) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -145,6 +148,12 @@ class SettingsViewModel(
     fun setMinFeeOddLot(fee: Int) {
         viewModelScope.launch {
             settingsDataStore.setMinFeeOddLot(fee)
+        }
+    }
+
+    fun setPreDeductSellFees(preDeduct: Boolean) {
+        viewModelScope.launch {
+            settingsDataStore.setPreDeductSellFees(preDeduct)
         }
     }
 

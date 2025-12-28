@@ -45,8 +45,9 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
     val application = LocalContext.current.applicationContext as StockifyApplication
     val viewModel: StockDetailViewModel = viewModel(
         factory = ViewModelFactory(
-            stockDao = application.database.stockDao(), 
-            realtimeStockDataService = application.realtimeStockDataService, 
+            stockDao = application.database.stockDao(),
+            realtimeStockDataService = application.realtimeStockDataService,
+            settingsDataStore = application.settingsDataStore,
             stockCode = stockCode
         )
     )

@@ -37,7 +37,11 @@ import kotlin.math.abs
 fun HoldingsScreen(navController: NavController) {
     val application = LocalContext.current.applicationContext as StockifyApplication
     val viewModel: HoldingsViewModel = viewModel(
-        factory = ViewModelFactory(application.database.stockDao(), realtimeStockDataService = application.realtimeStockDataService)
+        factory = ViewModelFactory(
+            stockDao = application.database.stockDao(),
+            realtimeStockDataService = application.realtimeStockDataService,
+            settingsDataStore = application.settingsDataStore
+        )
     )
     val uiState by viewModel.uiState.collectAsState()
 
