@@ -1,5 +1,6 @@
 package com.rsps1008.stockify.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,10 +21,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.rsps1008.stockify.R
 import com.rsps1008.stockify.StockifyApplication
 import com.rsps1008.stockify.ui.navigation.Screen
 import com.rsps1008.stockify.ui.viewmodel.HoldingsViewModel
@@ -38,7 +41,17 @@ fun HoldingsScreen(navController: NavController) {
     )
     val uiState by viewModel.uiState.collectAsState()
 
-    Column(modifier = Modifier.padding(16.dp)) {
+    Column(
+        modifier = Modifier.padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.stockify),
+            contentDescription = "Stockify Logo",
+            modifier = Modifier
+                .fillMaxWidth(0.35f)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
         SummarySection(uiState)
         Spacer(modifier = Modifier.height(16.dp))
         HoldingsListHeader()
