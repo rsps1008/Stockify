@@ -56,7 +56,10 @@ fun MainScreen() {
                     ) {
                         val navBackStackEntry by navController.currentBackStackEntryAsState()
                         val currentDestination = navBackStackEntry?.destination
-                        IconButton(onClick = { 
+                        IconButton(onClick = {
+                            if (navController.currentDestination?.route == Screen.AddTransaction.route) {
+                                navController.popBackStack()
+                            }
                             navController.navigate(Screen.Holdings.route) {
                                 popUpTo(navController.graph.findStartDestination().id) {
                                     saveState = true
@@ -75,7 +78,10 @@ fun MainScreen() {
                                 }
                             )
                         }
-                        IconButton(onClick = { 
+                        IconButton(onClick = {
+                            if (navController.currentDestination?.route == Screen.AddTransaction.route) {
+                                navController.popBackStack()
+                            }
                             navController.navigate(Screen.Transactions.route) {
                                 popUpTo(navController.graph.findStartDestination().id) {
                                     saveState = true
@@ -94,7 +100,10 @@ fun MainScreen() {
                                 }
                             )
                         }
-                        IconButton(onClick = { 
+                        IconButton(onClick = {
+                            if (navController.currentDestination?.route == Screen.AddTransaction.route) {
+                                navController.popBackStack()
+                            }
                             navController.navigate(Screen.Settings.route) {
                                 popUpTo(navController.graph.findStartDestination().id) {
                                     saveState = true
@@ -113,8 +122,17 @@ fun MainScreen() {
                                 }
                             )
                         }
-                        FloatingActionButton(onClick = { navController.navigate(Screen.AddTransaction.route) }) {
-                            Icon(Icons.Filled.Add, contentDescription = "Add Transaction")
+                        FloatingActionButton(
+                            onClick = {
+                                navController.navigate(Screen.AddTransaction.route) {
+                                    launchSingleTop = true
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Add,
+                                contentDescription = "Add Transaction"
+                            )
                         }
                     }
                 }
