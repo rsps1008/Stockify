@@ -32,6 +32,9 @@ class SettingsViewModel(
     val refreshInterval: StateFlow<Int> = settingsDataStore.refreshIntervalFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 5)
 
+    val lastStockListUpdateTime: StateFlow<Long?> = settingsDataStore.lastStockListUpdateTimeFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
+
     fun setRefreshInterval(interval: Int) {
         viewModelScope.launch {
             settingsDataStore.setRefreshInterval(interval)
@@ -45,12 +48,16 @@ class SettingsViewModel(
         }
     }
 
-    fun updateStockList() {
+    fun updateStockListFromTwse() {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                val stocks = stockDataFetcher.fetchStocks()
+                val stocks = stockDataFetcher.fetchStockList()
+                // Save to json file
                 stockListRepository.saveStocks(stocks)
+                // And also save to Room database
+                stockDao.insertStocks(stocks)
+                settingsDataStore.setLastStockListUpdateTime(System.currentTimeMillis())
                 _message.value = "股票列表更新成功！共 ${stocks.size} 筆"
             } catch (e: Exception) {
                 _message.value = "更新失敗: ${e.message}"

@@ -16,5 +16,7 @@ data class Stock(
     @Transient
     val id: Int = 0,
     val name: String,
-    val code: String
+    val code: String,
+    val market: String = "",
+    val industry: String = ""
 )

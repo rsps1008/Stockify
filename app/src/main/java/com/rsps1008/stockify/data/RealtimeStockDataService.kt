@@ -33,9 +33,14 @@ class RealtimeStockDataService(
                 while (true) {
                     val stocks = stockDao.getHeldStocks().first()
                     val updatedInfos = _realtimeStockInfo.value.toMutableMap()
+                    val isMarketOpen = yahooStockInfoFetcher.isMarketOpen()
+
                     for (stock in stocks) {
-                        yahooStockInfoFetcher.fetchStockInfo(stock.code)?.let { info ->
-                            updatedInfos[stock.code] = info
+                        val shouldFetch = !_realtimeStockInfo.value.containsKey(stock.code) || isMarketOpen
+                        if (shouldFetch) {
+                            yahooStockInfoFetcher.fetchStockInfo(stock.code)?.let { info ->
+                                updatedInfos[stock.code] = info
+                            }
                         }
                     }
                     _realtimeStockInfo.value = updatedInfos

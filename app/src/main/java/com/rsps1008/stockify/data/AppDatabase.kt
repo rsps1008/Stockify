@@ -5,13 +5,14 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.rsps1008.stockify.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.json.JSONArray
+import kotlinx.serialization.json.Json
 import java.io.BufferedReader
 
-@Database(entities = [Stock::class, StockTransaction::class], version = 1, exportSchema = false)
+@Database(entities = [Stock::class, StockTransaction::class], version = 3, exportSchema = false) // Bumped version
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun stockDao(): StockDao
@@ -27,6 +28,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "stock_database"
                 )
+                .fallbackToDestructiveMigration() // Handle migrations destructively
                 .addCallback(object : RoomDatabase.Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
@@ -42,16 +44,13 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         private suspend fun prepopulateDatabase(context: Context, stockDao: StockDao) {
-            val jsonString = context.assets.open("stocks.json").bufferedReader().use(BufferedReader::readText)
-            val jsonArray = JSONArray(jsonString)
-            val stocks = mutableListOf<Stock>()
-            for (i in 0 until jsonArray.length()) {
-                val jsonObject = jsonArray.getJSONObject(i)
-                val code = jsonObject.getString("code")
-                val name = jsonObject.getString("name")
-                stocks.add(Stock(name = name, code = code))
+            try {
+                val jsonString = context.assets.open("stocks.json").bufferedReader().use(BufferedReader::readText)
+                val stocks = Json.decodeFromString<List<Stock>>(jsonString)
+                stockDao.insertStocks(stocks)
+            } catch (e: Exception) {
+                // Handle exception, e.g. file not found
             }
-            stockDao.insertStocks(stocks)
         }
     }
 }

@@ -27,7 +27,7 @@ class YahooStockInfoFetcher {
         }
     }
 
-    private fun isMarketOpen(): Boolean {
+    fun isMarketOpen(): Boolean {
         val taipeiZone = ZoneId.of("Asia/Taipei")
         val now = ZonedDateTime.now(taipeiZone)
         val dayOfWeek = now.dayOfWeek
@@ -40,11 +40,6 @@ class YahooStockInfoFetcher {
     }
 
     suspend fun fetchStockInfo(stockCode: String): RealtimeStockInfo? = withContext(Dispatchers.IO) {
-        if (!isMarketOpen()) {
-            Log.d("YahooStockInfoFetcher", "Market is not open. Skipping fetch for $stockCode")
-            return@withContext null
-        }
-
         val url = "https://tw.stock.yahoo.com/quote/$stockCode"
         //Log.d("YahooStockInfoFetcher", "Fetching stock info for: $stockCode from url: $url")
         try {

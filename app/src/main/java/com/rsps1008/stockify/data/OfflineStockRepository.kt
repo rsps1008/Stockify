@@ -5,15 +5,22 @@ import com.rsps1008.stockify.ui.screens.HoldingsUiState
 import com.rsps1008.stockify.ui.screens.TransactionUiState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 
-class OfflineStockRepository(private val stockDao: StockDao) : StockRepository {
+class OfflineStockRepository(
+    private val stockDao: StockDao,
+    private val realtimeStockDataService: RealtimeStockDataService
+) : StockRepository {
 
     override fun getHoldings(): Flow<HoldingsUiState> {
-        // Combine held stocks with all transactions to calculate holdings state
-        return stockDao.getHeldStocks().combine(stockDao.getAllTransactions()) { stocks, transactions ->
+        // Combine held stocks, all transactions, and real-time data to calculate holdings state
+        return combine(stockDao.getHeldStocks(), stockDao.getAllTransactions(), realtimeStockDataService.realtimeStockInfo) { stocks, transactions, realTimeData ->
             val holdingInfos = stocks.map { stock ->
                 val stockTransactions = transactions.filter { it.stockId == stock.id }
-                calculateHoldingInfo(stock, stockTransactions)
+                val currentPrice = realTimeData[stock.code]?.currentPrice ?: 0.0
+                val dailyChange = realTimeData[stock.code]?.change ?: 0.0
+                val dailyChangePercentage = realTimeData[stock.code]?.changePercent ?: 0.0
+                calculateHoldingInfo(stock, stockTransactions, currentPrice, dailyChange, dailyChangePercentage)
             }
 
             // Aggregate data for the summary
@@ -23,7 +30,6 @@ class OfflineStockRepository(private val stockDao: StockDao) : StockRepository {
             val cumulativePLPercentage = if (totalInvestment > 0) (cumulativePL / totalInvestment) * 100 else 0.0
             val dividendIncome = holdingInfos.sumOf { it.dividendIncome }
             val dailyPL = holdingInfos.sumOf { it.dailyChange * it.shares }
-
 
             HoldingsUiState(
                 holdings = holdingInfos.filter { it.shares > 0 }, // Only show stocks currently held
@@ -40,9 +46,12 @@ class OfflineStockRepository(private val stockDao: StockDao) : StockRepository {
         val stockFlow = stockDao.getStockById(stockId)
         val transactionsFlow = stockDao.getTransactionsForStock(stockId)
 
-        return stockFlow.combine(transactionsFlow) { stock, transactions ->
+        return combine(stockFlow, transactionsFlow, realtimeStockDataService.realtimeStockInfo) { stock, transactions, realTimeData ->
             stock?.let {
-                calculateHoldingInfo(it, transactions)
+                val currentPrice = realTimeData[stock.code]?.currentPrice ?: 0.0
+                val dailyChange = realTimeData[stock.code]?.change ?: 0.0
+                val dailyChangePercentage = realTimeData[stock.code]?.changePercent ?: 0.0
+                calculateHoldingInfo(it, transactions, currentPrice, dailyChange, dailyChangePercentage)
             }
         }
     }
@@ -58,14 +67,19 @@ class OfflineStockRepository(private val stockDao: StockDao) : StockRepository {
         }
     }
 
-    private fun calculateHoldingInfo(stock: Stock, transactions: List<StockTransaction>): HoldingInfo {
+    private fun calculateHoldingInfo(
+        stock: Stock,
+        transactions: List<StockTransaction>,
+        currentPrice: Double,
+        dailyChange: Double,
+        dailyChangePercentage: Double
+    ): HoldingInfo {
         var shares = 0.0
         var totalCost = 0.0
         var buySharesTotal = 0.0
         var buyCostTotal = 0.0
         var dividendIncome = 0.0
 
-        // Sort transactions by date to process them in order
         val sortedTransactions = transactions.sortedBy { it.date }
 
         for (it in sortedTransactions) {
@@ -78,10 +92,9 @@ class OfflineStockRepository(private val stockDao: StockDao) : StockRepository {
                     buyCostTotal += cost
                 }
                 "sell" -> {
-                    // Reduce cost basis by the average cost of shares sold
                     if (shares > 0) {
-                         val costPerShare = totalCost / shares
-                         totalCost -= it.shares * costPerShare
+                        val costPerShare = totalCost / shares
+                        totalCost -= it.shares * costPerShare
                     }
                     shares -= it.shares
                 }
@@ -89,27 +102,19 @@ class OfflineStockRepository(private val stockDao: StockDao) : StockRepository {
                     shares += it.shares
                 }
                 "dividend" -> {
-                    dividendIncome += it.price // In 'dividend' type, 'price' holds the total amount
+                    dividendIncome += it.price
                 }
             }
         }
-        
-        // Ensure shares are not negative from bad data
+
         if (shares < 0) shares = 0.0
 
         val averageCost = if (shares > 0 && totalCost > 0) totalCost / shares else 0.0
         val buyAverage = if (buySharesTotal > 0) buyCostTotal / buySharesTotal else 0.0
-        
-        // For an offline repository, current price is not available. We'll leave it at 0.
-        // A full implementation would inject a real-time data fetcher.
-        val currentPrice = 0.0
         val marketValue = shares * currentPrice
-        
-        // If we sold everything, PL is based on income vs cost. A simple proxy for this is missing.
-        // Let's stick to unrealized PL for now.
-        val totalPL = (marketValue - totalCost) + dividendIncome // Simplified: Includes dividend income in PL
+        val totalPL = (marketValue - totalCost) + dividendIncome
         val totalPLPercentage = if (totalCost > 0) (totalPL / totalCost) * 100 else 0.0
-        
+
         return HoldingInfo(
             stock = stock,
             shares = shares,
@@ -120,8 +125,8 @@ class OfflineStockRepository(private val stockDao: StockDao) : StockRepository {
             marketValue = marketValue,
             totalPL = totalPL,
             totalPLPercentage = totalPLPercentage,
-            dailyChange = 0.0,
-            dailyChangePercentage = 0.0
+            dailyChange = dailyChange,
+            dailyChangePercentage = dailyChangePercentage
         )
     }
 }

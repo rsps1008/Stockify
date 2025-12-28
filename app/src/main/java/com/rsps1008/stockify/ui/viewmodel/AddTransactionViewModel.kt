@@ -63,7 +63,7 @@ class AddTransactionViewModel(private val stockDao: StockDao, private val transa
         var stock = stockDao.getStockByCode(stockCode)
 
         if (stock == null) {
-            val newStock = Stock(name = stockName, code = stockCode)
+            val newStock = Stock(name = stockName, code = stockCode, market = "", industry = "")
             stockDao.insertStock(newStock)
             stock = stockDao.getStockByCode(stockCode)
         }

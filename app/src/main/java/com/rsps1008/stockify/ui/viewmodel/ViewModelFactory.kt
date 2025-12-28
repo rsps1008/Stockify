@@ -20,7 +20,7 @@ class ViewModelFactory(
         return when {
             modelClass.isAssignableFrom(HoldingsViewModel::class.java) -> {
                 @Suppress("UNCHECKED_CAST")
-                HoldingsViewModel(OfflineStockRepository(stockDao)) as T
+                HoldingsViewModel(OfflineStockRepository(stockDao, realtimeStockDataService!!)) as T
             }
             modelClass.isAssignableFrom(AddTransactionViewModel::class.java) -> {
                 @Suppress("UNCHECKED_CAST")
@@ -36,7 +36,7 @@ class ViewModelFactory(
             }
             modelClass.isAssignableFrom(StockDetailViewModel::class.java) -> {
                 @Suppress("UNCHECKED_CAST")
-                StockDetailViewModel(stockId!!, OfflineStockRepository(stockDao)) as T
+                StockDetailViewModel(stockId!!, OfflineStockRepository(stockDao, realtimeStockDataService!!)) as T
             }
             modelClass.isAssignableFrom(TransactionDetailViewModel::class.java) -> {
                 @Suppress("UNCHECKED_CAST")
