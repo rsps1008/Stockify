@@ -39,29 +39,43 @@ class StockDataFetcher {
     suspend fun fetchStockList(): List<Stock> = withContext(Dispatchers.IO) {
         val url = "https://isin.twse.com.tw/isin/C_public.jsp?strMode=2"
         val stocks = mutableListOf<Stock>()
-        
+
         try {
-            val doc = Jsoup.connect(url).get()
-            val rows = doc.select("tr")
+            // 修改點 1: 使用 .execute() 並指定編碼，或是先抓 byte 再解析
+            val response = Jsoup.connect(url)
+                .userAgent("Mozilla/5.0")
+                .timeout(30000)
+                .maxBodySize(0) // 關鍵：0 代表不限制大小
+                .execute();
+            val doc = Jsoup.parse(response.bodyAsBytes().inputStream(), "Big5", url)
+
+            // 修改點 2: 定位更精準的 table 標籤 (比照 Python 的 table.h4)
+            val rows = doc.select("table.h4 tr")
 
             for (row in rows) {
                 val cols = row.select("td")
-                if (cols.size > 1) {
-                    val codeAndName = cols[0].text().split("　") //注意這裡是全形空白
-                    if (codeAndName.size >= 2) {
-                        val code = codeAndName[0].trim()
-                        val name = codeAndName[1].trim()
-                        val market = cols[2].text().trim()
-                        val industry = cols[4].text().trim()
 
-                        if (isValidStock(code, name)) {
-                            stocks.add(Stock(id = 0, code = code, name = name, market = market, industry = industry))
+                // 必須要有 7 個欄位才是我們要的資料列 (0050 那一行有 7 個 td)
+                if (cols.size == 7) {
+                    val fullText = cols[0].text()
+
+                    // 修改點 3: 處理全形空白切割，先取代為半形或直接用 Regex
+                    if (fullText.contains("　")) {
+                        val codeAndName = fullText.split("　")
+                        if (codeAndName.size >= 2) {
+                            val code = codeAndName[0].trim()
+                            val name = codeAndName[1].trim()
+                            val market = cols[3].text().trim() // 索引位置請對照網頁，通常市場在第 4 欄
+                            val industry = cols[4].text().trim()
+
+                            if (isValidStock(code, name)) {
+                                stocks.add(Stock(id = 0, code = code, name = name, market = market, industry = industry))
+                            }
                         }
                     }
                 }
             }
         } catch (e: Exception) {
-            // Handle exceptions, e.g., network errors
             e.printStackTrace()
         }
         stocks
