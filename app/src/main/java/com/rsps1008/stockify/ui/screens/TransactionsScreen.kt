@@ -1,15 +1,13 @@
 package com.rsps1008.stockify.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -42,69 +41,109 @@ fun TransactionsScreen(navController: NavController) {
         SimpleDateFormat("yyyy/MM/dd (E)", Locale.getDefault()).format(Date(it.transaction.date))
     }
 
-    LazyColumn(modifier = Modifier.padding(16.dp)) {
-        groupedTransactions.forEach { (date, transactionsOnDate) ->
-            item {
-                Text(
-                    text = date,
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-            }
-            items(transactionsOnDate) { transaction ->
-                TransactionCard(transaction, navController)
+    Column {
+        TransactionsListHeader()
+        LazyColumn(modifier = Modifier.padding(horizontal = 16.dp)) {
+            groupedTransactions.forEach { (date, transactionsOnDate) ->
+                item {
+                    Text(
+                        text = date,
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+                items(transactionsOnDate) { transaction ->
+                    TransactionRow(transaction, navController)
+                }
             }
         }
     }
 }
 
 @Composable
-fun TransactionCard(transaction: TransactionUiState, navController: NavController) {
-    Card(
+private fun TransactionsListHeader() {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .clickable { navController.navigate(Screen.TransactionDetail.createRoute(transaction.transaction.id)) }
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = transaction.stockName, style = MaterialTheme.typography.bodyLarge)
-                val transactionText = when (transaction.transaction.type) {
-                    "買進" -> "買${transaction.transaction.buyShares.toInt()}股"
-                    "賣出" -> "賣${transaction.transaction.sellShares.toInt()}股"
-                    "配息" -> "配息${transaction.transaction.income.toInt()}元"
-                    "配股" -> "配股${transaction.transaction.dividendShares.toInt()}股"
-                    else -> transaction.transaction.type
-                }
-                Text(
-                    text = transactionText,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            if (transaction.transaction.type == "買進" || transaction.transaction.type == "賣出") {
-                val price = if (transaction.transaction.type == "買進") transaction.transaction.buyPrice else transaction.transaction.sellPrice
-                Text(
-                    text = String.format("%,.2f", price),
-                    style = MaterialTheme.typography.bodyLarge
-                )
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            val amount = when (transaction.transaction.type) {
-                "買進" -> -transaction.transaction.expense
-                "賣出" -> transaction.transaction.income
-                "配息" -> transaction.transaction.income
-                "配股" -> 0.0
-                else -> 0.0
-            }
+        Text(text = "股票", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1.5f))
+        Text(text = "交易", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1.5f), textAlign = TextAlign.Center)
+        Text(text = "股價", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+        Text(text = "收支", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+    }
+}
+
+@Composable
+private fun TransactionRow(transaction: TransactionUiState, navController: NavController) {
+    val amountColor = when (transaction.transaction.type) {
+        "買進" -> Color.Green
+        "賣出", "配息" -> Color.Red
+        else -> Color.Unspecified
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { navController.navigate(Screen.TransactionDetail.createRoute(transaction.transaction.id)) }
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1.5f)) {
             Text(
-                text = String.format("%,.0f", amount),
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (amount >= 0) Color.Red else Color.Green
+                text = transaction.stockName,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Text(
+                text = transaction.transaction.stockCode,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+
+        val transactionText = when (transaction.transaction.type) {
+            "買進" -> "買${transaction.transaction.buyShares.toInt()}股"
+            "賣出" -> "賣${transaction.transaction.sellShares.toInt()}股"
+            "配息" -> "配息${transaction.transaction.income.toInt()}元"
+            "配股" -> "配股${transaction.transaction.dividendShares.toInt()}股"
+            else -> transaction.transaction.type
+        }
+        Text(
+            text = transactionText,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1.5f), 
+            textAlign = TextAlign.Center
+        )
+
+        val priceText = when (transaction.transaction.type) {
+            "買進" -> String.format("%,.2f", transaction.transaction.buyPrice)
+            "賣出" -> String.format("%,.2f", transaction.transaction.sellPrice)
+            else -> "-"
+        }
+        Text(
+            text = priceText,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.Center
+        )
+
+        val amount = when (transaction.transaction.type) {
+            "買進" -> -transaction.transaction.expense
+            "賣出" -> transaction.transaction.income
+            "配息" -> transaction.transaction.income
+            "配股" -> 0.0
+            else -> 0.0
+        }
+        Text(
+            text = String.format("%,.0f", amount),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+            color = amountColor,
+            textAlign = TextAlign.End
+        )
     }
 }

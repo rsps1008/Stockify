@@ -16,6 +16,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -120,103 +121,122 @@ fun SettingsScreen() {
             .padding(16.dp)
             .fillMaxWidth()
             .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { viewModel.updateStockListFromTwse() }, enabled = !isLoading) {
-                Text("更新股票列表")
-            }
-            if (isLoading) {
-                CircularProgressIndicator()
-            }
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        lastUpdateTime?.let {
-            Text("上次更新時間：${formatTimestamp(it)}")
-        } ?: Text("尚未更新過股票列表")
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text("損益計算設定", style = MaterialTheme.typography.titleMedium)
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("預先扣除賣出費用與稅金", modifier = Modifier.weight(1f))
-            Switch(
-                checked = preDeductSellFees,
-                onCheckedChange = { viewModel.setPreDeductSellFees(it) }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-
-        Text("手續費設定", style = MaterialTheme.typography.titleMedium)
-        Spacer(modifier = Modifier.height(8.dp))
-
-        var feeDiscountText by remember { mutableStateOf(feeDiscount.toString()) }
-        LaunchedEffect(feeDiscount) { feeDiscountText = feeDiscount.toString() }
-        OutlinedTextField(
-            value = feeDiscountText,
-            onValueChange = {
-                feeDiscountText = it
-                it.toDoubleOrNull()?.let { discount -> viewModel.setFeeDiscount(discount) }
-            },
-            label = { Text("手續費折數 (例如 0.28)") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        var minFeeRegularText by remember { mutableStateOf(minFeeRegular.toString()) }
-        LaunchedEffect(minFeeRegular) { minFeeRegularText = minFeeRegular.toString() }
-        OutlinedTextField(
-            value = minFeeRegularText,
-            onValueChange = {
-                minFeeRegularText = it
-                it.toIntOrNull()?.let { fee -> viewModel.setMinFeeRegular(fee) }
-            },
-            label = { Text("整股最低手續費 (元)") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        var minFeeOddLotText by remember { mutableStateOf(minFeeOddLot.toString()) }
-        LaunchedEffect(minFeeOddLot) { minFeeOddLotText = minFeeOddLot.toString() }
-        OutlinedTextField(
-            value = minFeeOddLotText,
-            onValueChange = {
-                minFeeOddLotText = it
-                it.toIntOrNull()?.let { fee -> viewModel.setMinFeeOddLot(fee) }
-            },
-            label = { Text("零股最低手續費 (元)") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text("資料管理", style = MaterialTheme.typography.titleMedium)
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = {
-                val sdf = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-                val fileName = "stockify_backup_${sdf.format(Date())}.csv"
-                exportCsvLauncher.launch(fileName)
-            }, enabled = !isLoading) {
-                Text("匯出 CSV")
-            }
-            Button(onClick = {
-                importCsvLauncher.launch("*/*")
-            }, enabled = !isLoading) {
-                Text("匯入 CSV")
+        // Stock Data Update Section
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("股票資料更新", style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { viewModel.updateStockListFromTwse() }, enabled = !isLoading) {
+                        Text("更新股票列表")
+                    }
+                    if (isLoading) {
+                        CircularProgressIndicator()
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                lastUpdateTime?.let {
+                    Text("上次更新時間：${formatTimestamp(it)}", style = MaterialTheme.typography.bodySmall)
+                } ?: Text("尚未更新過股票列表", style = MaterialTheme.typography.bodySmall)
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-        Button(onClick = { viewModel.deleteAllData() }) {
-            Text("刪除所有資料")
+        // P&L Calculation Settings Section
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("損益計算設定", style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("預先扣除賣出費用與稅金", modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = preDeductSellFees,
+                        onCheckedChange = { viewModel.setPreDeductSellFees(it) }
+                    )
+                }
+            }
+        }
+
+        // Fee Settings Section
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("手續費設定", style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                var feeDiscountText by remember { mutableStateOf(feeDiscount.toString()) }
+                LaunchedEffect(feeDiscount) { feeDiscountText = feeDiscount.toString() }
+                OutlinedTextField(
+                    value = feeDiscountText,
+                    onValueChange = {
+                        feeDiscountText = it
+                        it.toDoubleOrNull()?.let { discount -> viewModel.setFeeDiscount(discount) }
+                    },
+                    label = { Text("手續費折數 (例如 0.28)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                var minFeeRegularText by remember { mutableStateOf(minFeeRegular.toString()) }
+                LaunchedEffect(minFeeRegular) { minFeeRegularText = minFeeRegular.toString() }
+                OutlinedTextField(
+                    value = minFeeRegularText,
+                    onValueChange = {
+                        minFeeRegularText = it
+                        it.toIntOrNull()?.let { fee -> viewModel.setMinFeeRegular(fee) }
+                    },
+                    label = { Text("整股最低手續費 (元)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                var minFeeOddLotText by remember { mutableStateOf(minFeeOddLot.toString()) }
+                LaunchedEffect(minFeeOddLot) { minFeeOddLotText = minFeeOddLot.toString() }
+                OutlinedTextField(
+                    value = minFeeOddLotText,
+                    onValueChange = {
+                        minFeeOddLotText = it
+                        it.toIntOrNull()?.let { fee -> viewModel.setMinFeeOddLot(fee) }
+                    },
+                    label = { Text("零股最低手續費 (元)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        // Data Management Section
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("資料管理", style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = {
+                        val sdf = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+                        val fileName = "stockify_backup_${sdf.format(Date())}.csv"
+                        exportCsvLauncher.launch(fileName)
+                    }, enabled = !isLoading) {
+                        Text("匯出 CSV")
+                    }
+                    Button(onClick = {
+                        importCsvLauncher.launch("*/*")
+                    }, enabled = !isLoading) {
+                        Text("匯入 CSV")
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(onClick = { viewModel.deleteAllData() }) {
+                    Text("刪除所有資料")
+                }
+            }
         }
     }
 }

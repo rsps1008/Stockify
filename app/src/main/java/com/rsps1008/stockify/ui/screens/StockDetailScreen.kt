@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Card
+import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -70,7 +72,7 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp)
+                .padding(horizontal = 16.dp)
         ) {
             holdingInfo?.let { StockDetailSummary(it) }
             Spacer(modifier = Modifier.height(16.dp))
@@ -81,7 +83,7 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
 }
 
 @Composable
-fun StockDetailSummary(holdingInfo: HoldingInfo) {
+private fun StockDetailSummary(holdingInfo: HoldingInfo) {
     val totalPlColor = if (holdingInfo.totalPL >= 0) Color.Red else Color.Green
     val dailyPlColor = if (holdingInfo.dailyChange >= 0) Color.Red else Color.Green
 
@@ -90,14 +92,14 @@ fun StockDetailSummary(holdingInfo: HoldingInfo) {
             Text("累積損益", style = MaterialTheme.typography.bodySmall)
             Row {
                 Text(
-                    text = String.format("%,.0f", abs(holdingInfo.totalPL)),
+                    text = String.format("%,.0f", holdingInfo.totalPL),
                     style = MaterialTheme.typography.headlineLarge,
                     color = totalPlColor,
                     modifier = Modifier.alignByBaseline()
                 )
                 Spacer(modifier = Modifier.padding(horizontal = 4.dp))
                 Text(
-                    text = "${String.format("%.2f", holdingInfo.totalPLPercentage)}%",
+                    text = String.format("%+.2f%%", holdingInfo.totalPLPercentage),
                     style = MaterialTheme.typography.bodyLarge,
                     color = totalPlColor,
                     modifier = Modifier.alignByBaseline()
@@ -138,66 +140,66 @@ fun StockDetailSummary(holdingInfo: HoldingInfo) {
 }
 
 @Composable
-fun TransactionListHeader() {
-    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text(text = "日期", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-        Text(text = "交易", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1.5f))
-        Text(text = "股價", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-        Text(text = "收支", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+private fun TransactionListHeader() {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Text(text = "日期", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1.5f))
+        Text(text = "交易", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1.5f), textAlign = TextAlign.Center)
+        Text(text = "股價", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+        Text(text = "收支", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
     }
 }
 
 @Composable
-fun TransactionList(transactions: List<TransactionUiState>, navController: NavController) {
+private fun TransactionList(transactions: List<TransactionUiState>, navController: NavController) {
     LazyColumn {
         items(transactions) { transaction ->
             TransactionRow(transaction, navController)
+            Divider()
         }
     }
 }
 
 @Composable
-fun TransactionRow(transaction: TransactionUiState, navController: NavController) {
+private fun TransactionRow(transaction: TransactionUiState, navController: NavController) {
     val amountColor = when (transaction.transaction.type) {
         "買進" -> Color.Green
         "賣出", "配息" -> Color.Red
         else -> Color.Unspecified
     }
 
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
             .clickable { navController.navigate(Screen.TransactionDetail.createRoute(transaction.transaction.id)) }
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(modifier = Modifier.padding(16.dp)) {
-            val sdf = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault())
-            Text(text = sdf.format(Date(transaction.transaction.date)), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            
-            val transactionText = when(transaction.transaction.type) {
-                "買進" -> "買${transaction.transaction.buyShares.toInt()}股"
-                "賣出" -> "賣${transaction.transaction.sellShares.toInt()}股"
-                "配息" -> "配息${transaction.transaction.income.toInt()}元"
-                "配股" -> "配股${transaction.transaction.dividendShares.toInt()}股"
-                else -> transaction.transaction.type
-            }
-            Text(text = transactionText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1.5f))
-            
-            val priceText = when (transaction.transaction.type) {
-                "買進" -> String.format("%,.2f", transaction.transaction.buyPrice)
-                "賣出" -> String.format("%,.2f", transaction.transaction.sellPrice)
-                else -> "-"
-            }
-            Text(text = priceText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            
-            val amount = when (transaction.transaction.type) {
-                "買進" -> -transaction.transaction.expense
-                "賣出" -> transaction.transaction.income
-                "配息" -> transaction.transaction.income
-                "配股" -> 0.0
-                else -> 0.0
-            }
-            Text(text = String.format("%,.0f", amount), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), color = amountColor)
+        val sdf = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault())
+        Text(text = sdf.format(Date(transaction.transaction.date)), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1.5f))
+
+        val transactionText = when(transaction.transaction.type) {
+            "買進" -> "買${transaction.transaction.buyShares.toInt()}股"
+            "賣出" -> "賣${transaction.transaction.sellShares.toInt()}股"
+            "配息" -> "配息${transaction.transaction.income.toInt()}元"
+            "配股" -> "配股${transaction.transaction.dividendShares.toInt()}股"
+            else -> transaction.transaction.type
         }
+        Text(text = transactionText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1.5f), textAlign = TextAlign.Center)
+
+        val priceText = when (transaction.transaction.type) {
+            "買進" -> String.format("%,.2f", transaction.transaction.buyPrice)
+            "賣出" -> String.format("%,.2f", transaction.transaction.sellPrice)
+            else -> "-"
+        }
+        Text(text = priceText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+
+        val amount = when (transaction.transaction.type) {
+            "買進" -> -transaction.transaction.expense
+            "賣出" -> transaction.transaction.income
+            "配息" -> transaction.transaction.income
+            "配股" -> 0.0
+            else -> 0.0
+        }
+        Text(text = String.format("%,.0f", amount), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), color = amountColor, textAlign = TextAlign.End)
     }
 }

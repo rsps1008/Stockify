@@ -4,7 +4,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -45,72 +48,77 @@ fun MainScreen() {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
-            BottomAppBar {
-                val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentDestination = navBackStackEntry?.destination
-                IconButton(onClick = { 
-                    navController.navigate(Screen.Holdings.route) {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
+            BottomAppBar(
+                actions = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceAround
+                    ) {
+                        val navBackStackEntry by navController.currentBackStackEntryAsState()
+                        val currentDestination = navBackStackEntry?.destination
+                        IconButton(onClick = { 
+                            navController.navigate(Screen.Holdings.route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }) {
+                            Icon(
+                                imageVector = Icons.Filled.Assessment,
+                                contentDescription = "Holdings",
+                                tint = if (currentDestination?.hierarchy?.any { it.route == Screen.Holdings.route } == true) {
+                                    androidx.compose.material3.MaterialTheme.colorScheme.primary
+                                } else {
+                                    androidx.compose.material3.MaterialTheme.colorScheme.onSurface
+                                }
+                            )
                         }
-                        launchSingleTop = true
-                        restoreState = true
+                        IconButton(onClick = { 
+                            navController.navigate(Screen.Transactions.route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }) {
+                            Icon(
+                                imageVector = Icons.Filled.History,
+                                contentDescription = "Transactions",
+                                tint = if (currentDestination?.hierarchy?.any { it.route == Screen.Transactions.route } == true) {
+                                    androidx.compose.material3.MaterialTheme.colorScheme.primary
+                                } else {
+                                    androidx.compose.material3.MaterialTheme.colorScheme.onSurface
+                                }
+                            )
+                        }
+                        FloatingActionButton(onClick = { navController.navigate(Screen.AddTransaction.route) }) {
+                            Icon(Icons.Filled.Add, contentDescription = "Add Transaction")
+                        }
+                        IconButton(onClick = { 
+                            navController.navigate(Screen.Settings.route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }) {
+                            Icon(
+                                imageVector = Icons.Filled.Settings,
+                                contentDescription = "Settings",
+                                tint = if (currentDestination?.hierarchy?.any { it.route == Screen.Settings.route } == true) {
+                                    androidx.compose.material3.MaterialTheme.colorScheme.primary
+                                } else {
+                                    androidx.compose.material3.MaterialTheme.colorScheme.onSurface
+                                }
+                            )
+                        }
                     }
-                }) {
-                    Icon(
-                        imageVector = Icons.Filled.Assessment,
-                        contentDescription = "Holdings",
-                        tint = if (currentDestination?.hierarchy?.any { it.route == Screen.Holdings.route } == true) {
-                            androidx.compose.material3.MaterialTheme.colorScheme.primary
-                        } else {
-                            androidx.compose.material3.MaterialTheme.colorScheme.onSurface
-                        }
-                    )
                 }
-                IconButton(onClick = { 
-                    navController.navigate(Screen.Transactions.route) {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }) {
-                    Icon(
-                        imageVector = Icons.Filled.History,
-                        contentDescription = "Transactions",
-                        tint = if (currentDestination?.hierarchy?.any { it.route == Screen.Transactions.route } == true) {
-                            androidx.compose.material3.MaterialTheme.colorScheme.primary
-                        } else {
-                            androidx.compose.material3.MaterialTheme.colorScheme.onSurface
-                        }
-                    )
-                }
-                IconButton(onClick = { 
-                    navController.navigate(Screen.Settings.route) {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }) {
-                    Icon(
-                        imageVector = Icons.Filled.Settings,
-                        contentDescription = "Settings",
-                        tint = if (currentDestination?.hierarchy?.any { it.route == Screen.Settings.route } == true) {
-                            androidx.compose.material3.MaterialTheme.colorScheme.primary
-                        } else {
-                            androidx.compose.material3.MaterialTheme.colorScheme.onSurface
-                        }
-                    )
-                }
-            }
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { navController.navigate(Screen.AddTransaction.route) }) {
-                Icon(Icons.Filled.Add, contentDescription = "Add Transaction")
-            }
+            )
         }
     ) { innerPadding ->
         NavGraph(
