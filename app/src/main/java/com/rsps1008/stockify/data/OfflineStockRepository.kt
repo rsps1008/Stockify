@@ -78,10 +78,11 @@ class OfflineStockRepository(
         preDeductSellFees: Boolean
     ): HoldingInfo {
         var shares = 0.0
-        var totalCost = 0.0
+        var totalBuyExpense = 0.0
+        var totalSellIncome = 0.0
+        var totalDividendIncome = 0.0
         var buySharesTotal = 0.0
         var buyCostTotal = 0.0
-        var dividendIncome = 0.0
 
         val sortedTransactions = transactions.sortedBy { it.date }
 
@@ -89,34 +90,31 @@ class OfflineStockRepository(
             when (it.type) {
                 "買進" -> {
                     shares += it.buyShares
-                    val cost = it.buyPrice * it.buyShares + it.fee
-                    totalCost += cost
+                    totalBuyExpense += it.expense
                     buySharesTotal += it.buyShares
-                    buyCostTotal += cost
+                    buyCostTotal += it.expense
                 }
                 "賣出" -> {
-                    if (shares > 0) {
-                        val costPerShare = totalCost / shares
-                        totalCost -= it.sellShares * costPerShare
-                    }
                     shares -= it.sellShares
+                    totalSellIncome += it.income
                 }
                 "配股" -> {
                     shares += it.dividendShares
                 }
                 "配息" -> {
-                    dividendIncome += it.income
+                    totalDividendIncome += it.income
                 }
             }
         }
 
         if (shares < 0) shares = 0.0
 
-        val averageCost = if (shares > 0 && totalCost > 0) totalCost / shares else 0.0
+        val costBasis = totalBuyExpense - totalSellIncome - totalDividendIncome
+        val averageCost = if (shares > 0) costBasis / shares else 0.0
         val buyAverage = if (buySharesTotal > 0) buyCostTotal / buySharesTotal else 0.0
         val marketValue = shares * currentPrice
-        var totalPL = (marketValue - totalCost) + dividendIncome
-        val totalPLPercentage = if (totalCost > 0) (totalPL / totalCost) * 100 else 0.0
+        var totalPL = marketValue - costBasis
+        val totalPLPercentage = if (costBasis > 0) (totalPL / costBasis) * 100 else 0.0
 
         if (preDeductSellFees) {
             val feeDiscount = settingsDataStore.feeDiscountFlow.first()
@@ -133,7 +131,7 @@ class OfflineStockRepository(
             shares = shares,
             averageCost = averageCost,
             buyAverage = buyAverage,
-            dividendIncome = dividendIncome,
+            dividendIncome = totalDividendIncome,
             currentPrice = currentPrice,
             marketValue = marketValue,
             totalPL = totalPL,
