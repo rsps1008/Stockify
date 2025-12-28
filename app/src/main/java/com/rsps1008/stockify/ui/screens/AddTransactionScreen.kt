@@ -59,6 +59,9 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
     val allStocks by viewModel.stocks.collectAsState()
     val transactionToEdit by viewModel.transactionToEdit.collectAsState()
     val fee by viewModel.fee.collectAsState()
+    val tax by viewModel.tax.collectAsState()
+    val expense by viewModel.expense.collectAsState()
+    val income by viewModel.income.collectAsState()
 
     var stockName by remember { mutableStateOf("") }
     var stockCode by remember { mutableStateOf("") }
@@ -78,9 +81,10 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
     var stockDividendRate by remember { mutableStateOf("") }
     var stockDividendBaseShares by remember { mutableStateOf("") }
 
-    LaunchedEffect(price, shares) {
-        if (transactionType == "buy" || transactionType == "sell") {
-            viewModel.calculateFee(price.toDoubleOrNull() ?: 0.0, shares.toDoubleOrNull() ?: 0.0)
+    LaunchedEffect(price, shares, transactionType) {
+        when (transactionType) {
+            "buy" -> viewModel.calculateBuyCosts(price.toDoubleOrNull() ?: 0.0, shares.toDoubleOrNull() ?: 0.0)
+            "sell" -> viewModel.calculateSellCosts(price.toDoubleOrNull() ?: 0.0, shares.toDoubleOrNull() ?: 0.0)
         }
     }
 
@@ -259,12 +263,26 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
         Spacer(modifier = Modifier.height(16.dp))
 
         when (transactionType) {
-            "buy", "sell" -> {
+            "buy" -> {
                 LabeledOutlinedTextField(label = "股價", value = price, onValueChange = { price = it }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 Spacer(modifier = Modifier.height(8.dp))
                 LabeledOutlinedTextField(label = "股數", value = shares, onValueChange = { shares = it.filter { c -> c.isDigit() } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                 Spacer(modifier = Modifier.height(8.dp))
                 LabeledOutlinedTextField(label = "手續費", value = fee.toInt().toString(), onValueChange = { /* Read-only */ }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), readOnly = true)
+                Spacer(modifier = Modifier.height(8.dp))
+                LabeledOutlinedTextField(label = "支出金額", value = expense.toInt().toString(), onValueChange = { /* Read-only */ }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), readOnly = true)
+
+            }
+            "sell" -> {
+                LabeledOutlinedTextField(label = "股價", value = price, onValueChange = { price = it }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                Spacer(modifier = Modifier.height(8.dp))
+                LabeledOutlinedTextField(label = "股數", value = shares, onValueChange = { shares = it.filter { c -> c.isDigit() } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                Spacer(modifier = Modifier.height(8.dp))
+                LabeledOutlinedTextField(label = "手續費", value = fee.toInt().toString(), onValueChange = { /* Read-only */ }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), readOnly = true)
+                Spacer(modifier = Modifier.height(8.dp))
+                LabeledOutlinedTextField(label = "交易稅", value = tax.toInt().toString(), onValueChange = { /* Read-only */ }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), readOnly = true)
+                Spacer(modifier = Modifier.height(8.dp))
+                LabeledOutlinedTextField(label = "收入金額", value = income.toInt().toString(), onValueChange = { /* Read-only */ }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), readOnly = true)
             }
             "dividend" -> {
                 LabeledOutlinedTextField(label = "每股股息(可略過)", value = dividendPricePerShare, onValueChange = { dividendPricePerShare = it }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
@@ -276,7 +294,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
                 LabeledOutlinedTextField(label = "手續費", value = fee.toInt().toString(), onValueChange = { /* Read-only */ }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), readOnly = true)
             }
             "stock_dividend" -> {
-                LabeledOutlinedTextField(label = "每股股利(元,可略過)", value = stockDividendRate, onValueChange = { stockDividendRate = it }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                LabeledOutlinedTextField(label = "每股股利(可略過)", value = stockDividendRate, onValueChange = { stockDividendRate = it }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 Spacer(modifier = Modifier.height(8.dp))
                 LabeledOutlinedTextField(label = "除權股數(可略過)", value = stockDividendBaseShares, onValueChange = { stockDividendBaseShares = it.filter { c -> c.isDigit() } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                 Spacer(modifier = Modifier.height(8.dp))

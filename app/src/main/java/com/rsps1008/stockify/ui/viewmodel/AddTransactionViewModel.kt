@@ -29,12 +29,26 @@ class AddTransactionViewModel(
     private val _fee = MutableStateFlow(0.0)
     val fee = _fee.asStateFlow()
 
+    private val _tax = MutableStateFlow(0.0)
+    val tax = _tax.asStateFlow()
+
+    private val _expense = MutableStateFlow(0.0)
+    val expense = _expense.asStateFlow()
+
+    private val _income = MutableStateFlow(0.0)
+    val income = _income.asStateFlow()
+
     init {
         transactionId?.let {
             viewModelScope.launch {
                 val transaction = stockDao.getTransactionById(it).firstOrNull()
                 _transactionToEdit.value = transaction
-                transaction?.let { tx -> _fee.value = tx.fee }
+                transaction?.let { tx ->
+                    _fee.value = tx.fee
+                    _tax.value = tx.tax
+                    _expense.value = tx.expense
+                    _income.value = tx.income
+                }
             }
         }
     }
@@ -54,9 +68,10 @@ class AddTransactionViewModel(
         Triple(discount, minRegular, minOdd)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), Triple(0.28, 20, 1))
 
-    fun calculateFee(price: Double, shares: Double) {
+    fun calculateBuyCosts(price: Double, shares: Double) {
         if (price <= 0 || shares <= 0) {
             _fee.value = 0.0
+            _expense.value = 0.0
             return
         }
 
@@ -66,8 +81,35 @@ class AddTransactionViewModel(
 
         val minFee = if (shares % 1000 == 0.0) minFeeRegular else minFeeOddLot
 
-        _fee.value = max(calculatedFee, minFee.toDouble()).roundToInt().toDouble()
+        val finalFee = max(calculatedFee, minFee.toDouble()).roundToInt().toDouble()
+        _fee.value = finalFee
+        _expense.value = (transactionValue + finalFee).roundToInt().toDouble()
     }
+
+    fun calculateSellCosts(price: Double, shares: Double) {
+        if (price <= 0 || shares <= 0) {
+            _fee.value = 0.0
+            _tax.value = 0.0
+            _income.value = 0.0
+            return
+        }
+
+        // Fee calculation
+        val (discount, minFeeRegular, minFeeOddLot) = feeSettings.value
+        val transactionValue = price * shares
+        val calculatedFee = transactionValue * 0.001425 * discount
+        val minFee = if (shares % 1000 == 0.0) minFeeRegular else minFeeOddLot
+        val finalFee = max(calculatedFee, minFee.toDouble()).roundToInt().toDouble()
+        _fee.value = finalFee
+
+        // Tax calculation for sell
+        val finalTax = (transactionValue * 0.003).roundToInt().toDouble()
+        _tax.value = finalTax
+
+        // Net income calculation
+        _income.value = (transactionValue - finalFee - finalTax).roundToInt().toDouble()
+    }
+
 
     fun addOrUpdateTransaction(
         stockName: String,
@@ -89,15 +131,19 @@ class AddTransactionViewModel(
         note: String = ""
     ) {
         viewModelScope.launch {
+            val finalExpense = if (type == "buy") _expense.value else expense
+            val finalIncome = if (type == "sell") _income.value else income
+            val finalTax = if (type == "sell") _tax.value else tax
+
             if (transactionId == null) {
                 addTransaction(
-                    stockName, stockCode, date, type, price, shares, _fee.value, tax, income, expense,
+                    stockName, stockCode, date, type, price, shares, _fee.value, finalTax, finalIncome, finalExpense,
                     cashDividend, exDividendShares, stockDividend, dividendShares, exRightsShares,
                     capitalReturn, note
                 )
             } else {
                 updateTransaction(
-                    date, type, price, shares, _fee.value, tax, income, expense, cashDividend,
+                    date, type, price, shares, _fee.value, finalTax, finalIncome, finalExpense, cashDividend,
                     exDividendShares, stockDividend, dividendShares, exRightsShares,
                     capitalReturn, note
                 )
