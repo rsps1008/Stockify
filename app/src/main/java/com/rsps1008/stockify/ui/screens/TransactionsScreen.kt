@@ -73,8 +73,8 @@ fun TransactionCard(transaction: TransactionUiState, navController: NavControlle
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = transaction.stockName, style = MaterialTheme.typography.bodyLarge)
                 val transactionText = when (transaction.transaction.type) {
-                    "買進" -> "買${transaction.transaction.shares.toInt()}股"
-                    "賣出" -> "賣${transaction.transaction.shares.toInt()}股"
+                    "買進" -> "買${transaction.transaction.buyShares.toInt()}股"
+                    "賣出" -> "賣${transaction.transaction.sellShares.toInt()}股"
                     "配息" -> "配息${transaction.transaction.income.toInt()}元"
                     "配股" -> "配股${transaction.transaction.dividendShares.toInt()}股"
                     else -> transaction.transaction.type
@@ -86,8 +86,9 @@ fun TransactionCard(transaction: TransactionUiState, navController: NavControlle
             }
             Spacer(modifier = Modifier.width(16.dp))
             if (transaction.transaction.type == "買進" || transaction.transaction.type == "賣出") {
+                val price = if (transaction.transaction.type == "買進") transaction.transaction.buyPrice else transaction.transaction.sellPrice
                 Text(
-                    text = String.format("%,.2f", transaction.transaction.price),
+                    text = String.format("%,.2f", price),
                     style = MaterialTheme.typography.bodyLarge
                 )
             }

@@ -85,18 +85,18 @@ class OfflineStockRepository(
         for (it in sortedTransactions) {
             when (it.type) {
                 "買進" -> {
-                    shares += it.shares
-                    val cost = it.price * it.shares + it.fee
+                    shares += it.buyShares
+                    val cost = it.buyPrice * it.buyShares + it.fee
                     totalCost += cost
-                    buySharesTotal += it.shares
+                    buySharesTotal += it.buyShares
                     buyCostTotal += cost
                 }
                 "賣出" -> {
                     if (shares > 0) {
                         val costPerShare = totalCost / shares
-                        totalCost -= it.shares * costPerShare
+                        totalCost -= it.sellShares * costPerShare
                     }
-                    shares -= it.shares
+                    shares -= it.sellShares
                 }
                 "配股" -> {
                     shares += it.dividendShares

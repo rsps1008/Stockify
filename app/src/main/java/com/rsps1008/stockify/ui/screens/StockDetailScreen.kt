@@ -174,15 +174,19 @@ fun TransactionRow(transaction: TransactionUiState, navController: NavController
             Text(text = sdf.format(Date(transaction.transaction.date)), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             
             val transactionText = when(transaction.transaction.type) {
-                "買進" -> "買${transaction.transaction.shares.toInt()}股"
-                "賣出" -> "賣${transaction.transaction.shares.toInt()}股"
+                "買進" -> "買${transaction.transaction.buyShares.toInt()}股"
+                "賣出" -> "賣${transaction.transaction.sellShares.toInt()}股"
                 "配息" -> "配息${transaction.transaction.income.toInt()}元"
                 "配股" -> "配股${transaction.transaction.dividendShares.toInt()}股"
                 else -> transaction.transaction.type
             }
             Text(text = transactionText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1.5f))
             
-            val priceText = if (transaction.transaction.type == "買進" || transaction.transaction.type == "賣出") String.format("%,.2f", transaction.transaction.price) else "-"
+            val priceText = when (transaction.transaction.type) {
+                "買進" -> String.format("%,.2f", transaction.transaction.buyPrice)
+                "賣出" -> String.format("%,.2f", transaction.transaction.sellPrice)
+                else -> "-"
+            }
             Text(text = priceText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             
             val amount = when (transaction.transaction.type) {

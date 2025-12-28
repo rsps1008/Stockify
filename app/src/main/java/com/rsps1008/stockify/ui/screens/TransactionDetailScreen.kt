@@ -107,15 +107,19 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                 DetailRow(label = "交易", value = transaction.type)
 
                 when (transaction.type) {
-                    "買進", "賣出" -> {
-                        DetailRow(label = "股價", value = String.format("%,.2f", transaction.price))
-                        DetailRow(label = "股數", value = String.format("%,.0f", transaction.shares))
+                    "買進" -> {
+                        DetailRow(label = "買進價格", value = String.format("%,.2f", transaction.buyPrice))
+                        DetailRow(label = "買進股數", value = String.format("%,.0f", transaction.buyShares))
                         DetailRow(label = "手續費", value = String.format("%,.0f", transaction.fee))
                         DetailRow(label = "交易稅", value = String.format("%,.0f", transaction.tax))
-                        val amount = if (transaction.type == "買進") transaction.expense else transaction.income
-                        val amountLabel = if (transaction.type == "買進") "支出" else "收入"
-                        val amountColor = if (transaction.type == "買進") Color.Green else Color.Red
-                        DetailRow(label = amountLabel, value = String.format("%,.0f", amount), valueColor = amountColor)
+                        DetailRow(label = "支出", value = String.format("%,.0f", transaction.expense), valueColor = Color.Green)
+                    }
+                    "賣出" -> {
+                        DetailRow(label = "賣出價格", value = String.format("%,.2f", transaction.sellPrice))
+                        DetailRow(label = "賣出股數", value = String.format("%,.0f", transaction.sellShares))
+                        DetailRow(label = "手續費", value = String.format("%,.0f", transaction.fee))
+                        DetailRow(label = "交易稅", value = String.format("%,.0f", transaction.tax))
+                        DetailRow(label = "收入", value = String.format("%,.0f", transaction.income), valueColor = Color.Red)
                     }
                     "配息" -> {
                         DetailRow(label = "每股股息", value = String.format("%,.4f", transaction.cashDividend))
@@ -126,7 +130,7 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                     "配股" -> {
                         DetailRow(label = "股票股利", value = String.format("%,.4f", transaction.stockDividend))
                         DetailRow(label = "除權股數", value = String.format("%,.0f", transaction.exRightsShares))
-                        DetailRow(label = "配發股數", value = String.format("%,.0f", transaction.shares))
+                        DetailRow(label = "配發股數", value = String.format("%,.0f", transaction.dividendShares))
                     }
                 }
             }
