@@ -16,9 +16,9 @@ data class CsvTransaction(
 class CsvService {
 
     private val csvHeader = listOf(
-        "id", "isETF", "交易", "交易稅", "帳戶ID", "手續費", "支出", "收入", "日期",
+        "id", "交易", "交易稅", "帳戶ID", "手續費", "支出", "收入", "日期",
         "現金股利", "筆記", "紀錄時間", "股名", "股票股利", "股號",
-        "買進價格", "買進股數", "賣出價格", "賣出股數", "退還股款", "配發股數",
+        "價格", "股數", "退還股款", "配發股數",
         "除息股數", "除權股數", "股息收入"
     )
 
@@ -42,14 +42,7 @@ class CsvService {
         val dateTimeFormat = SimpleDateFormat("yyyyMMdd HH:mm:ss", Locale.getDefault())
 
         record["id"] = transaction.id
-        record["isETF"] = 0 // Default value
-        record["交易"] = when (transaction.type) {
-            "buy" -> "買進"
-            "sell" -> "賣出"
-            "dividend" -> "配息"
-            "stock_dividend" -> "配股"
-            else -> transaction.type
-        }
+        record["交易"] = transaction.type
         record["交易稅"] = transaction.tax.toInt()
         record["帳戶ID"] = transaction.accountId
         record["手續費"] = transaction.fee.toInt()
@@ -62,10 +55,8 @@ class CsvService {
         record["股名"] = stock.name
         record["股票股利"] = transaction.stockDividend
         record["股號"] = stock.code
-        record["買進價格"] = if (transaction.type == "buy") transaction.price else 0.0
-        record["買進股數"] = if (transaction.type == "buy") transaction.shares.toInt() else 0
-        record["賣出價格"] = if (transaction.type == "sell") transaction.price else 0.0
-        record["賣出股數"] = if (transaction.type == "sell") transaction.shares.toInt() else 0
+        record["價格"] = transaction.price
+        record["股數"] = transaction.shares
         record["退還股款"] = transaction.capitalReturn.toInt()
         record["配發股數"] = transaction.dividendShares.toInt()
         record["除息股數"] = transaction.exDividendShares.toInt()
@@ -102,27 +93,8 @@ class CsvService {
     private fun parseTransaction(values: List<String>, headerMap: Map<String, Int>): StockTransaction {
         val dateFormat = SimpleDateFormat("yyyyMMdd", Locale.getDefault())
         val dateTimeFormat = SimpleDateFormat("yyyyMMdd HH:mm:ss", Locale.getDefault())
-
-        val type = when (values[headerMap["交易"]!!].trim().removeSurrounding("\"")) {
-            "買進" -> "buy"
-            "賣出" -> "sell"
-            "配息" -> "dividend"
-            "配股" -> "stock_dividend"
-            else -> "unknown"
-        }
-
-        val price = when(type) {
-            "buy" -> values[headerMap["買進價格"]!!].toDoubleOrNull() ?: 0.0
-            "sell" -> values[headerMap["賣出價格"]!!].toDoubleOrNull() ?: 0.0
-            else -> 0.0
-        }
-
-        val shares = when(type) {
-            "buy" -> values[headerMap["買進股數"]!!].toDoubleOrNull() ?: 0.0
-            "sell" -> values[headerMap["賣出股數"]!!].toDoubleOrNull() ?: 0.0
-            "stock_dividend" -> values[headerMap["配發股數"]!!].toDoubleOrNull() ?: 0.0
-            else -> 0.0
-        }
+        
+        val type = values[headerMap["交易"]!!].trim().removeSurrounding("\"")
 
         return StockTransaction(
             id = 0, // Let Room auto-generate
@@ -131,8 +103,8 @@ class CsvService {
             date = dateFormat.parse(values[headerMap["日期"]!!].trim().removeSurrounding("\""))?.time ?: 0L,
             recordTime = try { dateTimeFormat.parse(values[headerMap["紀錄時間"]!!].trim().removeSurrounding("\""))?.time ?: System.currentTimeMillis() } catch (e: Exception) { System.currentTimeMillis() },
             type = type,
-            price = price,
-            shares = shares,
+            price = values[headerMap["價格"]!!].toDoubleOrNull() ?: 0.0,
+            shares = values[headerMap["股數"]!!].toDoubleOrNull() ?: 0.0,
             fee = values[headerMap["手續費"]!!].toDoubleOrNull() ?: 0.0,
             tax = values[headerMap["交易稅"]!!].toDoubleOrNull() ?: 0.0,
             income = values[headerMap["收入"]!!].toDoubleOrNull() ?: 0.0,

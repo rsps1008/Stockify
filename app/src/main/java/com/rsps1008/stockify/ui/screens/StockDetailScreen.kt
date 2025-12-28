@@ -157,9 +157,9 @@ fun TransactionList(transactions: List<TransactionUiState>, navController: NavCo
 
 @Composable
 fun TransactionRow(transaction: TransactionUiState, navController: NavController) {
-    val amountColor = when {
-        transaction.transaction.type == "buy" -> Color.Green
-        transaction.transaction.type == "sell" || transaction.transaction.type == "dividend" -> Color.Red
+    val amountColor = when (transaction.transaction.type) {
+        "買進" -> Color.Green
+        "賣出", "配息" -> Color.Red
         else -> Color.Unspecified
     }
 
@@ -174,22 +174,22 @@ fun TransactionRow(transaction: TransactionUiState, navController: NavController
             Text(text = sdf.format(Date(transaction.transaction.date)), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             
             val transactionText = when(transaction.transaction.type) {
-                "buy" -> "買${transaction.transaction.shares.toInt()}股"
-                "sell" -> "賣${transaction.transaction.shares.toInt()}股"
-                "dividend" -> "配息${transaction.transaction.price}元"
-                "stock_dividend" -> "配股${transaction.transaction.shares.toInt()}股"
-                else -> ""
+                "買進" -> "買${transaction.transaction.shares.toInt()}股"
+                "賣出" -> "賣${transaction.transaction.shares.toInt()}股"
+                "配息" -> "配息${transaction.transaction.price}元"
+                "配股" -> "配股${transaction.transaction.shares.toInt()}股"
+                else -> transaction.transaction.type
             }
             Text(text = transactionText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1.5f))
             
-            val priceText = if (transaction.transaction.type == "buy" || transaction.transaction.type == "sell") String.format("%,.2f", transaction.transaction.price) else "-"
+            val priceText = if (transaction.transaction.type == "買進" || transaction.transaction.type == "賣出") String.format("%,.2f", transaction.transaction.price) else "-"
             Text(text = priceText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             
             val amount = when (transaction.transaction.type) {
-                "buy" -> - (transaction.transaction.price * transaction.transaction.shares + transaction.transaction.fee)
-                "sell" -> transaction.transaction.price * transaction.transaction.shares - transaction.transaction.fee
-                "dividend" -> transaction.transaction.price * transaction.transaction.shares
-                "stock_dividend" -> 0.0
+                "買進" -> - (transaction.transaction.price * transaction.transaction.shares + transaction.transaction.fee)
+                "賣出" -> transaction.transaction.price * transaction.transaction.shares - transaction.transaction.fee
+                "配息" -> transaction.transaction.price * transaction.transaction.shares
+                "配股" -> 0.0
                 else -> 0.0
             }
             Text(text = String.format("%,.0f", amount), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), color = amountColor)

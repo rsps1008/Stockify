@@ -96,13 +96,6 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
     ) { paddingValues ->
         transactionUiState?.let { uiState ->
             val transaction = uiState.transaction
-            val transactionTypeText = when (transaction.type) {
-                "buy" -> "買進"
-                "sell" -> "賣出"
-                "dividend" -> "配息"
-                "stock_dividend" -> "配股"
-                else -> transaction.type
-            }
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -111,26 +104,26 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
             ) {
                 DetailRow(label = "股票", value = uiState.stockName)
                 DetailRow(label = "日期", value = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault()).format(Date(transaction.date)))
-                DetailRow(label = "交易", value = transactionTypeText)
+                DetailRow(label = "交易", value = transaction.type)
 
                 when (transaction.type) {
-                    "buy", "sell" -> {
+                    "買進", "賣出" -> {
                         DetailRow(label = "股價", value = String.format("%,.2f", transaction.price))
                         DetailRow(label = "股數", value = String.format("%,.0f", transaction.shares))
                         DetailRow(label = "手續費", value = String.format("%,.0f", transaction.fee))
                         DetailRow(label = "交易稅", value = String.format("%,.0f", transaction.tax))
-                        val amount = if (transaction.type == "buy") transaction.expense else transaction.income
-                        val amountLabel = if (transaction.type == "buy") "支出" else "收入"
-                        val amountColor = if (transaction.type == "buy") Color.Green else Color.Red
+                        val amount = if (transaction.type == "買進") transaction.expense else transaction.income
+                        val amountLabel = if (transaction.type == "買進") "支出" else "收入"
+                        val amountColor = if (transaction.type == "買進") Color.Green else Color.Red
                         DetailRow(label = amountLabel, value = String.format("%,.0f", amount), valueColor = amountColor)
                     }
-                    "dividend" -> {
+                    "配息" -> {
                         DetailRow(label = "每股股息", value = String.format("%,.4f", transaction.cashDividend))
                         DetailRow(label = "除息股數", value = String.format("%,.0f", transaction.exDividendShares))
                         DetailRow(label = "股息收入", value = String.format("%,.0f", transaction.income), valueColor = Color.Red)
                         DetailRow(label = "手續費", value = String.format("%,.0f", transaction.fee))
                     }
-                    "stock_dividend" -> {
+                    "配股" -> {
                         DetailRow(label = "股票股利", value = String.format("%,.4f", transaction.stockDividend))
                         DetailRow(label = "除權股數", value = String.format("%,.0f", transaction.exRightsShares))
                         DetailRow(label = "配發股數", value = String.format("%,.0f", transaction.shares))

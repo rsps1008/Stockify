@@ -66,7 +66,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
     var stockName by remember { mutableStateOf("") }
     var stockCode by remember { mutableStateOf("") }
     var date by remember { mutableStateOf(System.currentTimeMillis()) }
-    var transactionType by remember { mutableStateOf("buy") }
+    var transactionType by remember { mutableStateOf("買進") }
     var price by remember { mutableStateOf("") } // Represents total amount for dividend, price per share for buy/sell
     var shares by remember { mutableStateOf("") } // Represents shares for buy/sell/stock_dividend
 
@@ -83,8 +83,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
 
     LaunchedEffect(price, shares, transactionType) {
         when (transactionType) {
-            "buy" -> viewModel.calculateBuyCosts(price.toDoubleOrNull() ?: 0.0, shares.toDoubleOrNull() ?: 0.0)
-            "sell" -> viewModel.calculateSellCosts(price.toDoubleOrNull() ?: 0.0, shares.toDoubleOrNull() ?: 0.0)
+            "買進" -> viewModel.calculateBuyCosts(price.toDoubleOrNull() ?: 0.0, shares.toDoubleOrNull() ?: 0.0)
+            "賣出" -> viewModel.calculateSellCosts(price.toDoubleOrNull() ?: 0.0, shares.toDoubleOrNull() ?: 0.0)
         }
     }
 
@@ -99,19 +99,19 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
             transactionType = it.type
 
             when (it.type) {
-                "buy", "sell" -> {
+                "買進", "賣出" -> {
                     price = it.price.toString()
                     shares = it.shares.toInt().toString()
                 }
-                "dividend" -> {
+                "配息" -> {
                     cashDividend = it.cashDividend.toString()
                     exDividendShares = it.exDividendShares.toInt().toString()
                     price = it.income.toInt().toString()
                 }
-                "stock_dividend" -> {
+                "配股" -> {
                     stockDividendRate = it.stockDividend.toString()
                     exRightsShares = it.exRightsShares.toInt().toString()
-                    shares = it.shares.toInt().toString() // shares is 'dividendShares'
+                    shares = it.dividendShares.toInt().toString()
                 }
             }
         }
@@ -131,7 +131,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
 
     // Auto-calculate total dividend amount
     LaunchedEffect(cashDividend, exDividendShares) {
-        if (transactionType == "dividend") {
+        if (transactionType == "配息") {
             val pps = cashDividend.toDoubleOrNull()
             val s = exDividendShares.toDoubleOrNull()
             if (pps != null && s != null) {
@@ -142,7 +142,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
 
     // Auto-calculate total stock dividend shares
     LaunchedEffect(stockDividendRate, exRightsShares) {
-        if (transactionType == "stock_dividend") {
+        if (transactionType == "配股") {
             val rate = stockDividendRate.toDoubleOrNull()
             val baseShares = exRightsShares.toDoubleOrNull()
             // Assuming Taiwan stock market rules: rate is NTD per 10 NTD par value share.
@@ -154,16 +154,16 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
     }
 
     val isFormValid = when (transactionType) {
-        "buy", "sell" ->
+        "買進", "賣出" ->
             stockName.isNotBlank() &&
             stockCode.isNotBlank() &&
             (price.toDoubleOrNull() ?: 0.0) > 0.0 &&
             (shares.toLongOrNull() ?: 0L) > 0L
-        "dividend" ->
+        "配息" ->
             stockName.isNotBlank() &&
             stockCode.isNotBlank() &&
             (price.toDoubleOrNull() ?: -1.0) >= 0.0
-        "stock_dividend" ->
+        "配股" ->
             stockName.isNotBlank() &&
             stockCode.isNotBlank() &&
             (shares.toLongOrNull() ?: 0L) > 0L
@@ -177,7 +177,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
     fun clearForm() {
         stockName = ""
         stockCode = ""
-        transactionType = "buy" // This will trigger the LaunchedEffect to reset other fields
+        transactionType = "買進" // This will trigger the LaunchedEffect to reset other fields
     }
 
     val onAddOrUpdateTransaction: () -> Unit = {
@@ -256,15 +256,15 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
         Text(text = "交易類型", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(4.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { transactionType = "buy" }, enabled = transactionType != "buy") { Text("買進") }
-            Button(onClick = { transactionType = "sell" }, enabled = transactionType != "sell") { Text("賣出") }
-            Button(onClick = { transactionType = "dividend" }, enabled = transactionType != "dividend") { Text("配息") }
-            Button(onClick = { transactionType = "stock_dividend" }, enabled = transactionType != "stock_dividend") { Text("配股") }
+            Button(onClick = { transactionType = "買進" }, enabled = transactionType != "買進") { Text("買進") }
+            Button(onClick = { transactionType = "賣出" }, enabled = transactionType != "賣出") { Text("賣出") }
+            Button(onClick = { transactionType = "配息" }, enabled = transactionType != "配息") { Text("配息") }
+            Button(onClick = { transactionType = "配股" }, enabled = transactionType != "配股") { Text("配股") }
         }
         Spacer(modifier = Modifier.height(16.dp))
 
         when (transactionType) {
-            "buy" -> {
+            "買進" -> {
                 LabeledOutlinedTextField(label = "股價", value = price, onValueChange = { price = it }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 Spacer(modifier = Modifier.height(8.dp))
                 LabeledOutlinedTextField(label = "股數", value = shares, onValueChange = { shares = it.filter { c -> c.isDigit() } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
@@ -274,7 +274,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
                 LabeledOutlinedTextField(label = "支出金額", value = expense.toInt().toString(), onValueChange = { /* Read-only */ }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), readOnly = true)
 
             }
-            "sell" -> {
+            "賣出" -> {
                 LabeledOutlinedTextField(label = "股價", value = price, onValueChange = { price = it }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 Spacer(modifier = Modifier.height(8.dp))
                 LabeledOutlinedTextField(label = "股數", value = shares, onValueChange = { shares = it.filter { c -> c.isDigit() } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
@@ -285,7 +285,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
                 Spacer(modifier = Modifier.height(8.dp))
                 LabeledOutlinedTextField(label = "收入金額", value = income.toInt().toString(), onValueChange = { /* Read-only */ }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), readOnly = true)
             }
-            "dividend" -> {
+            "配息" -> {
                 LabeledOutlinedTextField(label = "每股股息(可略過)", value = cashDividend, onValueChange = { cashDividend = it }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 Spacer(modifier = Modifier.height(8.dp))
                 LabeledOutlinedTextField(label = "除息股數(可略過)", value = exDividendShares, onValueChange = { exDividendShares = it.filter { c -> c.isDigit() } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
@@ -294,7 +294,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
                 Spacer(modifier = Modifier.height(8.dp))
                 LabeledOutlinedTextField(label = "手續費", value = fee.toInt().toString(), onValueChange = { /* Read-only */ }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), readOnly = true)
             }
-            "stock_dividend" -> {
+            "配股" -> {
                 LabeledOutlinedTextField(label = "每股股利(可略過)", value = stockDividendRate, onValueChange = { stockDividendRate = it }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 Spacer(modifier = Modifier.height(8.dp))
                 LabeledOutlinedTextField(label = "除權股數(可略過)", value = exRightsShares, onValueChange = { exRightsShares = it.filter { c -> c.isDigit() } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))

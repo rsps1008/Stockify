@@ -128,27 +128,28 @@ class AddTransactionViewModel(
     ) {
         viewModelScope.launch {
             val finalIncome = when (type) {
-                "sell" -> _income.value
-                "dividend" -> price
+                "賣出" -> _income.value
+                "配息" -> price
                 else -> 0.0
             }
 
-            val finalExpense = if (type == "buy") _expense.value else 0.0
-            val finalTax = if (type == "sell") _tax.value else 0.0
-            val finalShares = if (type == "stock_dividend") dividendShares else shares
-            val finalDividendIncome = if (type == "dividend") finalIncome else 0.0
+            val finalExpense = if (type == "買進") _expense.value else 0.0
+            val finalTax = if (type == "賣出") _tax.value else 0.0
+            val finalShares = if (type == "配股") 0.0 else shares
+            val finalDividendShares = if (type == "配股") shares else 0.0
+            val finalDividendIncome = if (type == "配息") finalIncome else 0.0
 
             if (transactionId == null) {
                 addTransaction(
                     stockName, stockCode, date, type, price, finalShares, _fee.value, finalTax, finalIncome, finalExpense,
-                    cashDividend, exDividendShares, stockDividend, dividendShares, exRightsShares,
+                    cashDividend, exDividendShares, stockDividend, finalDividendShares, exRightsShares,
                     capitalReturn, note, finalDividendIncome
                 )
             } else {
                 updateTransaction(
                     stockCode,
                     date, type, price, finalShares, _fee.value, finalTax, finalIncome, finalExpense, cashDividend,
-                    exDividendShares, stockDividend, dividendShares, exRightsShares,
+                    exDividendShares, stockDividend, finalDividendShares, exRightsShares,
                     capitalReturn, note, finalDividendIncome
                 )
             }
@@ -189,7 +190,7 @@ class AddTransactionViewModel(
                 date = date,
                 recordTime = System.currentTimeMillis(),
                 type = type,
-                price = if (type == "dividend" || type == "stock_dividend") 0.0 else price,
+                price = if (type == "配息" || type == "配股") 0.0 else price,
                 shares = shares,
                 fee = fee,
                 tax = tax,
@@ -232,7 +233,7 @@ class AddTransactionViewModel(
                 stockCode = stockCode,
                 date = date,
                 type = type,
-                price = if (type == "dividend" || type == "stock_dividend") 0.0 else price,
+                price = if (type == "配息" || type == "配股") 0.0 else price,
                 shares = shares,
                 fee = fee,
                 tax = tax,
