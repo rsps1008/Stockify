@@ -1,6 +1,9 @@
 package com.rsps1008.stockify.ui.screens
 
+import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,12 +11,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -48,12 +55,56 @@ fun SettingsScreen() {
     val isLoading by viewModel.isLoading.collectAsState()
     val message by viewModel.message.collectAsState()
     val lastUpdateTime by viewModel.lastStockListUpdateTime.collectAsState()
+    val showImportConfirmDialog by viewModel.showImportConfirmDialog.collectAsState()
 
     val feeDiscount by viewModel.feeDiscount.collectAsState()
     val minFeeRegular by viewModel.minFeeRegular.collectAsState()
     val minFeeOddLot by viewModel.minFeeOddLot.collectAsState()
 
     val context = LocalContext.current
+
+    // Launcher for CSV export (create file)
+    val exportCsvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv"),
+        onResult = { uri: Uri? ->
+            uri?.let {
+                viewModel.exportTransactions(it)
+            }
+        }
+    )
+
+    // Launcher for CSV import (pick file)
+    val importCsvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri: Uri? ->
+            uri?.let {
+                viewModel.onImportRequest(it)
+            }
+        }
+    )
+
+    if (showImportConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.onImportCancel() },
+            title = { Text("匯入確認") },
+            text = { Text("匯入新資料前，是否要先刪除所有現有交易紀錄？") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.onImportConfirm(true) }) {
+                    Text("是，刪除並匯入")
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { viewModel.onImportConfirm(false) }) {
+                        Text("否，直接匯入")
+                    }
+                    TextButton(onClick = { viewModel.onImportCancel() }) {
+                        Text("取消")
+                    }
+                }
+            }
+        )
+    }
 
     LaunchedEffect(message) {
         message?.let {
@@ -65,7 +116,8 @@ fun SettingsScreen() {
     Column(
         modifier = Modifier
             .padding(16.dp)
-            .fillMaxWidth(),
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -124,6 +176,25 @@ fun SettingsScreen() {
             label = { Text("零股最低手續費 (元)") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
         )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text("資料管理", style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = {
+                val sdf = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+                val fileName = "stockify_backup_${sdf.format(Date())}.csv"
+                exportCsvLauncher.launch(fileName)
+            }, enabled = !isLoading) {
+                Text("匯出 CSV")
+            }
+            Button(onClick = {
+                importCsvLauncher.launch("*/*")
+            }, enabled = !isLoading) {
+                Text("匯入 CSV")
+            }
+        }
 
         Spacer(modifier = Modifier.height(24.dp))
         Button(onClick = { viewModel.deleteAllData() }) {

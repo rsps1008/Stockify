@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
@@ -43,6 +44,10 @@ interface StockDao {
 
     @Query("SELECT * FROM stock_transactions ORDER BY date DESC")
     fun getAllTransactions(): Flow<List<StockTransaction>>
+
+    @Transaction
+    @Query("SELECT * FROM stock_transactions")
+    fun getTransactionsWithStock(): Flow<List<TransactionWithStock>>
 
     @Query("SELECT * FROM stock_transactions WHERE id = :transactionId")
     fun getTransactionById(transactionId: Int): Flow<StockTransaction?>

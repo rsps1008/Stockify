@@ -1,8 +1,10 @@
 package com.rsps1008.stockify.data
 
+import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.PrimaryKey
+import androidx.room.Relation
 
 @Entity(
     tableName = "stock_transactions",
@@ -48,4 +50,13 @@ data class StockTransaction(
     // 其他
     val capitalReturn: Double = 0.0, // 退還股款
     val note: String = "" // 筆記
+)
+
+data class TransactionWithStock(
+    @Embedded val transaction: StockTransaction,
+    @Relation(
+        parentColumn = "stockId",
+        entityColumn = "id"
+    )
+    val stock: Stock
 )
