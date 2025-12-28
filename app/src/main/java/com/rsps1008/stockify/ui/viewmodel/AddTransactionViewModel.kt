@@ -40,13 +40,31 @@ class AddTransactionViewModel(private val stockDao: StockDao, private val transa
         type: String,
         price: Double,
         shares: Double,
-        fee: Double
+        fee: Double,
+        tax: Double = 0.0,
+        income: Double = 0.0,
+        expense: Double = 0.0,
+        cashDividend: Double = 0.0,
+        exDividendShares: Double = 0.0,
+        stockDividend: Double = 0.0,
+        dividendShares: Double = 0.0,
+        exRightsShares: Double = 0.0,
+        capitalReturn: Double = 0.0,
+        note: String = ""
     ) {
         viewModelScope.launch {
             if (transactionId == null) {
-                addTransaction(stockName, stockCode, date, type, price, shares, fee)
+                addTransaction(
+                    stockName, stockCode, date, type, price, shares, fee, tax, income, expense,
+                    cashDividend, exDividendShares, stockDividend, dividendShares, exRightsShares,
+                    capitalReturn, note
+                )
             } else {
-                updateTransaction(date, type, price, shares, fee)
+                updateTransaction(
+                    date, type, price, shares, fee, tax, income, expense, cashDividend,
+                    exDividendShares, stockDividend, dividendShares, exRightsShares,
+                    capitalReturn, note
+                )
             }
         }
     }
@@ -58,7 +76,17 @@ class AddTransactionViewModel(private val stockDao: StockDao, private val transa
         type: String,
         price: Double,
         shares: Double,
-        fee: Double
+        fee: Double,
+        tax: Double,
+        income: Double,
+        expense: Double,
+        cashDividend: Double,
+        exDividendShares: Double,
+        stockDividend: Double,
+        dividendShares: Double,
+        exRightsShares: Double,
+        capitalReturn: Double,
+        note: String
     ) {
         var stock = stockDao.getStockByCode(stockCode)
 
@@ -72,10 +100,21 @@ class AddTransactionViewModel(private val stockDao: StockDao, private val transa
             val transaction = StockTransaction(
                 stockId = it.id,
                 date = date,
+                recordTime = System.currentTimeMillis(),
                 type = type,
                 price = price,
                 shares = shares,
-                fee = fee
+                fee = fee,
+                tax = tax,
+                income = income,
+                expense = expense,
+                cashDividend = cashDividend,
+                exDividendShares = exDividendShares,
+                stockDividend = stockDividend,
+                dividendShares = dividendShares,
+                exRightsShares = exRightsShares,
+                capitalReturn = capitalReturn,
+                note = note
             )
             stockDao.insertTransaction(transaction)
         }
@@ -86,7 +125,17 @@ class AddTransactionViewModel(private val stockDao: StockDao, private val transa
         type: String,
         price: Double,
         shares: Double,
-        fee: Double
+        fee: Double,
+        tax: Double,
+        income: Double,
+        expense: Double,
+        cashDividend: Double,
+        exDividendShares: Double,
+        stockDividend: Double,
+        dividendShares: Double,
+        exRightsShares: Double,
+        capitalReturn: Double,
+        note: String
     ) {
         _transactionToEdit.value?.let {
             val updatedTransaction = it.copy(
@@ -94,7 +143,17 @@ class AddTransactionViewModel(private val stockDao: StockDao, private val transa
                 type = type,
                 price = price,
                 shares = shares,
-                fee = fee
+                fee = fee,
+                tax = tax,
+                income = income,
+                expense = expense,
+                cashDividend = cashDividend,
+                exDividendShares = exDividendShares,
+                stockDividend = stockDividend,
+                dividendShares = dividendShares,
+                exRightsShares = exRightsShares,
+                capitalReturn = capitalReturn,
+                note = note
             )
             stockDao.updateTransaction(updatedTransaction)
         }
