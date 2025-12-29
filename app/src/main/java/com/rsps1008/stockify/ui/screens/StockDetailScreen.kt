@@ -12,6 +12,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -20,6 +23,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -55,6 +59,28 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
     )
     val holdingInfo by viewModel.holdingInfo.collectAsState()
     val transactions by viewModel.transactions.collectAsState()
+    val showDeleteConfirmDialog by viewModel.showDeleteConfirmDialog.collectAsState()
+
+    if (showDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.onDeleteTransactionsCancelled() },
+            title = { Text("刪除確認") },
+            text = { Text("確定要刪除這支股票的所有交易紀錄嗎？此動作無法復原。") },
+            confirmButton = {
+                TextButton(onClick = { 
+                    viewModel.onDeleteTransactionsConfirmed()
+                    navController.popBackStack()
+                }) {
+                    Text("確定")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.onDeleteTransactionsCancelled() }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -63,6 +89,11 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { viewModel.onDeleteTransactionsClicked() }) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete all transactions")
                     }
                 }
             )

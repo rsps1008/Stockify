@@ -36,7 +36,7 @@ class ViewModelFactory(
             }
             modelClass.isAssignableFrom(StockDetailViewModel::class.java) -> {
                 @Suppress("UNCHECKED_CAST")
-                StockDetailViewModel(stockCode!!, OfflineStockRepository(stockDao, realtimeStockDataService!!, settingsDataStore!!)) as T
+                StockDetailViewModel(stockCode!!, stockDao, OfflineStockRepository(stockDao, realtimeStockDataService!!, settingsDataStore!!)) as T
             }
             modelClass.isAssignableFrom(TransactionDetailViewModel::class.java) -> {
                 @Suppress("UNCHECKED_CAST")
