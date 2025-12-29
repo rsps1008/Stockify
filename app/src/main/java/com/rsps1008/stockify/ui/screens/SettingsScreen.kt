@@ -372,6 +372,31 @@ private fun DataManagementSection(
     googleSignInAccount: GoogleSignInAccount?,
     onSignInClick: () -> Unit
 ) {
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            title = { Text("確認刪除") },
+            text = { Text("這會刪除所有本地儲存的股票和交易紀錄。此動作無法復原。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteAllDataAndShowToast()
+                        showDeleteConfirmDialog = false
+                    }
+                ) {
+                    Text("全部刪除")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("資料管理", style = MaterialTheme.typography.titleLarge)
@@ -421,7 +446,7 @@ private fun DataManagementSection(
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
-            Button(onClick = { viewModel.deleteAllData() }) {
+            Button(onClick = { showDeleteConfirmDialog = true }) {
                 Text("刪除所有資料")
             }
         }
