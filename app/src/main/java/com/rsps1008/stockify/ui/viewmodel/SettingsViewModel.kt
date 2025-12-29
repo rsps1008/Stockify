@@ -73,13 +73,13 @@ class SettingsViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 0.28)
 
     val minFeeRegular: StateFlow<Int> = settingsDataStore.minFeeRegularFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 20)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 1)
 
     val minFeeOddLot: StateFlow<Int> = settingsDataStore.minFeeOddLotFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 1)
 
     val preDeductSellFees: StateFlow<Boolean> = settingsDataStore.preDeductSellFeesFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), false)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), true)
 
     val theme: StateFlow<String> = settingsDataStore.themeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), "System")

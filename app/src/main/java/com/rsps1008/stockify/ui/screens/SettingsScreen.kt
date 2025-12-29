@@ -182,7 +182,7 @@ fun SettingsScreen() {
                 Text("外觀", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(16.dp))
 
-                val themeOptions = listOf("System", "Light", "Dark")
+                val themeOptions = remember { mapOf("System" to "系統預設", "Light" to "淺色", "Dark" to "深色") }
                 var expanded by remember { mutableStateOf(false) }
 
                 ExposedDropdownMenuBox(
@@ -191,7 +191,7 @@ fun SettingsScreen() {
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     OutlinedTextField(
-                        value = theme,
+                        value = themeOptions[theme] ?: theme,
                         onValueChange = { },
                         label = { Text("主題") },
                         readOnly = true,
@@ -206,13 +206,13 @@ fun SettingsScreen() {
                         onDismissRequest = { expanded = false },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        themeOptions.forEach { theme ->
+                        themeOptions.forEach { (key, value) ->
                             DropdownMenuItem(
-                                text = { Text(theme) },
+                                text = { Text(value) },
                                 onClick = {
                                     scope.launch {
                                         delay(300) // Delay to allow dropdown to close
-                                        viewModel.setTheme(theme)
+                                        viewModel.setTheme(key)
                                     }
                                     expanded = false
                                 }
@@ -402,12 +402,32 @@ private fun DataManagementSection(
             Text("資料管理", style = MaterialTheme.typography.titleLarge)
             Spacer(modifier = Modifier.height(16.dp))
 
+            // 雲端備份
+            Text("雲端備份", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
             if (googleSignInAccount == null) {
                 Button(onClick = onSignInClick) {
                     Text("登入 Google 帳號")
                 }
             } else {
                 Text("已登入: ${googleSignInAccount.email}", style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { viewModel.backupToGoogleDrive() },
+                        enabled = !isLoading
+                    ) {
+                        Text("備份到 Google Drive")
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { viewModel.restoreFromGoogleDrive() },
+                        enabled = !isLoading
+                    ) {
+                        Text("從 Google Drive 還原")
+                    }
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(onClick = { viewModel.signOut() }) {
                     Text("登出")
@@ -416,6 +436,9 @@ private fun DataManagementSection(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // 手機儲存
+            Text("手機儲存", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = {
                     val sdf = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
@@ -428,21 +451,6 @@ private fun DataManagementSection(
                     importCsvLauncher.launch("*/*")
                 }, enabled = !isLoading) {
                     Text("匯入 CSV")
-                }
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = { viewModel.backupToGoogleDrive() }, 
-                    enabled = !isLoading && googleSignInAccount != null
-                ) {
-                    Text("備份到 Google Drive")
-                }
-                Button(
-                    onClick = { viewModel.restoreFromGoogleDrive() }, 
-                    enabled = !isLoading && googleSignInAccount != null
-                ) {
-                    Text("從 Google Drive 還原")
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
