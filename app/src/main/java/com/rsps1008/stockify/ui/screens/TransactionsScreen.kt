@@ -23,6 +23,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.rsps1008.stockify.StockifyApplication
 import com.rsps1008.stockify.ui.navigation.Screen
+import com.rsps1008.stockify.ui.theme.StockifyAppTheme
 import com.rsps1008.stockify.ui.viewmodel.TransactionsViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import java.text.SimpleDateFormat
@@ -81,8 +82,8 @@ private fun TransactionsListHeader() {
 @Composable
 private fun TransactionRow(transaction: TransactionUiState, navController: NavController) {
     val amountColor = when (transaction.transaction.type) {
-        "買進" -> Color.Green
-        "賣出", "配息" -> Color.Red
+        "買進" -> StockifyAppTheme.stockColors.loss
+        "賣出", "配息" -> StockifyAppTheme.stockColors.gain
         else -> Color.Unspecified
     }
 

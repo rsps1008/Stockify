@@ -34,6 +34,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +45,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rsps1008.stockify.StockifyApplication
 import com.rsps1008.stockify.ui.viewmodel.SettingsViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -70,8 +73,10 @@ fun SettingsScreen() {
     val minFeeOddLot by viewModel.minFeeOddLot.collectAsState()
     val preDeductSellFees by viewModel.preDeductSellFees.collectAsState()
     val yahooFetchInterval by viewModel.yahooFetchInterval.collectAsState()
+    val theme by viewModel.theme.collectAsState()
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     // Launcher for CSV export (create file)
     val exportCsvLauncher = rememberLauncherForActivityResult(
@@ -131,6 +136,51 @@ fun SettingsScreen() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("外觀", style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                val themeOptions = listOf("System", "Light", "Dark")
+                var expanded by remember { mutableStateOf(false) }
+
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = theme,
+                        onValueChange = { },
+                        label = { Text("主題") },
+                        readOnly = true,
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                        },
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        themeOptions.forEach { theme ->
+                            DropdownMenuItem(
+                                text = { Text(theme) },
+                                onClick = {
+                                    scope.launch {
+                                        delay(300) // Delay to allow dropdown to close
+                                        viewModel.setTheme(theme)
+                                    }
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
         // Stock Data Update Section
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {

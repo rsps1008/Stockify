@@ -29,7 +29,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
@@ -43,6 +42,7 @@ import androidx.navigation.NavController
 import com.rsps1008.stockify.R
 import com.rsps1008.stockify.StockifyApplication
 import com.rsps1008.stockify.ui.navigation.Screen
+import com.rsps1008.stockify.ui.theme.StockifyAppTheme
 import com.rsps1008.stockify.ui.viewmodel.HoldingsViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import kotlin.math.abs
@@ -79,8 +79,8 @@ fun HoldingsScreen(navController: NavController) {
 
 @Composable
 fun SummarySection(uiState: HoldingsUiState) {
-    val dailyPlColor = if (uiState.dailyPL >= 0) Color.Red else Color.Green
-    val cumulativePlColor = if (uiState.cumulativePL >= 0) Color.Red else Color.Green
+    val dailyPlColor = if (uiState.dailyPL >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
+    val cumulativePlColor = if (uiState.cumulativePL >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
     var showMarketValue by remember { mutableStateOf(true) }
 
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -157,8 +157,8 @@ fun HoldingsList(holdings: List<HoldingInfo>, navController: NavController) {
 
 @Composable
 fun HoldingCard(holding: HoldingInfo, navController: NavController) {
-    val dailyChangeColor = if (holding.dailyChange >= 0) Color.Red else Color.Green
-    val totalPlColor = if (holding.totalPL >= 0) Color.Red else Color.Green
+    val dailyChangeColor = if (holding.dailyChange >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
+    val totalPlColor = if (holding.totalPL >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
 
     val dailyChangeSymbol = if (holding.dailyChange >= 0) "▴" else "▾"
 

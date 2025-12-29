@@ -28,6 +28,7 @@ class SettingsDataStore(val context: Context) {
     private val minFeeOddLotKey = intPreferencesKey("min_fee_odd_lot")
     private val preDeductSellFeesKey = booleanPreferencesKey("pre_deduct_sell_fees")
     private val realtimeStockInfoCacheKey = stringPreferencesKey("realtime_stock_info_cache")
+    private val themeKey = stringPreferencesKey("theme")
 
     val refreshIntervalFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
@@ -69,6 +70,11 @@ class SettingsDataStore(val context: Context) {
             preferences[realtimeStockInfoCacheKey]?.let {
                 Json.decodeFromString<Map<String, RealtimeStockInfo>>(it)
             } ?: emptyMap()
+        }
+    
+    val themeFlow: Flow<String> = context.dataStore.data
+        .map { preferences ->
+            preferences[themeKey] ?: "System"
         }
 
     suspend fun setRefreshInterval(interval: Int) {
@@ -116,6 +122,12 @@ class SettingsDataStore(val context: Context) {
     suspend fun setRealtimeStockInfoCache(cache: Map<String, RealtimeStockInfo>) {
         context.dataStore.edit {
             it[realtimeStockInfoCacheKey] = Json.encodeToString(cache)
+        }
+    }
+
+    suspend fun setTheme(theme: String) {
+        context.dataStore.edit {
+            it[themeKey] = theme
         }
     }
 }

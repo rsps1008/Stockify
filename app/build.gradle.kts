@@ -70,6 +70,9 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 
+    // AppCompat for theme switching
+    implementation(libs.androidx.appcompat)
+
     // Navigation
     implementation(libs.androidx.navigation.compose)
 

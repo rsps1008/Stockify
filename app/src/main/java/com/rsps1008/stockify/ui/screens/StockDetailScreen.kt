@@ -38,6 +38,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.rsps1008.stockify.StockifyApplication
 import com.rsps1008.stockify.ui.navigation.Screen
+import com.rsps1008.stockify.ui.theme.StockifyAppTheme
 import com.rsps1008.stockify.ui.viewmodel.StockDetailViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import java.text.SimpleDateFormat
@@ -115,8 +116,8 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
 
 @Composable
 private fun StockDetailSummary(holdingInfo: HoldingInfo) {
-    val totalPlColor = if (holdingInfo.totalPL >= 0) Color.Red else Color.Green
-    val dailyPlColor = if (holdingInfo.dailyChange >= 0) Color.Red else Color.Green
+    val totalPlColor = if (holdingInfo.totalPL >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
+    val dailyPlColor = if (holdingInfo.dailyChange >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -193,8 +194,8 @@ private fun TransactionList(transactions: List<TransactionUiState>, navControlle
 @Composable
 private fun TransactionRow(transaction: TransactionUiState, navController: NavController) {
     val amountColor = when (transaction.transaction.type) {
-        "買進" -> Color.Green
-        "賣出", "配息" -> Color.Red
+        "買進" -> StockifyAppTheme.stockColors.loss
+        "賣出", "配息" -> StockifyAppTheme.stockColors.gain
         else -> Color.Unspecified
     }
 

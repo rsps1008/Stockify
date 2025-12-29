@@ -62,6 +62,9 @@ class SettingsViewModel(
     val preDeductSellFees: StateFlow<Boolean> = settingsDataStore.preDeductSellFeesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), false)
 
+    val theme: StateFlow<String> = settingsDataStore.themeFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), "System")
+
     fun exportTransactions(uri: Uri) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -139,6 +142,12 @@ class SettingsViewModel(
     fun setYahooFetchInterval(interval: Int) {
         viewModelScope.launch {
             settingsDataStore.setYahooFetchInterval(interval)
+        }
+    }
+
+    fun setTheme(theme: String) {
+        viewModelScope.launch {
+            settingsDataStore.setTheme(theme)
         }
     }
 
