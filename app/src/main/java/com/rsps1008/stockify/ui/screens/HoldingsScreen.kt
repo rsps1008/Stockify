@@ -1,5 +1,12 @@
 package com.rsps1008.stockify.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -143,32 +150,81 @@ fun HoldingCard(holding: HoldingInfo, navController: NavController) {
                 Text(text = "${String.format("%,.0f", holding.shares)}股", style = MaterialTheme.typography.bodySmall)
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = String.format("%,.2f", holding.currentPrice),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = dailyChangeColor
-                )
-                Text(
-                    text = "$dailyChangeSymbol${String.format("%.2f", abs(holding.dailyChange))} (${String.format("%.2f", abs(holding.dailyChangePercentage))}%)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = dailyChangeColor
-                )
+                AnimatedContent(targetState = holding.currentPrice, transitionSpec = {
+                    if (targetState > initialState) {
+                        slideInVertically { height -> height } + fadeIn() togetherWith
+                                slideOutVertically { height -> -height } + fadeOut()
+                    } else {
+                        slideInVertically { height -> -height } + fadeIn() togetherWith
+                                slideOutVertically { height -> height } + fadeOut()
+                    }.using(
+                        SizeTransform(clip = false)
+                    )
+                }) { targetPrice ->
+                    Text(
+                        text = String.format("%,.2f", targetPrice),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = dailyChangeColor
+                    )
+                }
+                AnimatedContent(targetState = holding.dailyChange, transitionSpec = {
+                    if (targetState > initialState) {
+                        slideInVertically { height -> height } + fadeIn() togetherWith
+                                slideOutVertically { height -> -height } + fadeOut()
+                    } else {
+                        slideInVertically { height -> -height } + fadeIn() togetherWith
+                                slideOutVertically { height -> height } + fadeOut()
+                    }.using(
+                        SizeTransform(clip = false)
+                    )
+                }) { targetChange ->
+                    Text(
+                        text = "$dailyChangeSymbol${String.format("%.2f", abs(targetChange))} (${String.format("%.2f", abs(holding.dailyChangePercentage))}%)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = dailyChangeColor
+                    )
+                }
             }
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(text = String.format("%,.2f", holding.averageCost), style = MaterialTheme.typography.bodyLarge)
                 Text(text = String.format("%,.2f", holding.buyAverage), style = MaterialTheme.typography.bodySmall)
             }
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                Text(
-                    text = String.format("%,.0f", holding.totalPL),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = totalPlColor
-                )
-                Text(
-                    text = String.format("%+.2f%%", holding.totalPLPercentage),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = totalPlColor
-                )
+                AnimatedContent(targetState = holding.totalPL, transitionSpec = {
+                    if (targetState > initialState) {
+                        slideInVertically { height -> height } + fadeIn() togetherWith
+                                slideOutVertically { height -> -height } + fadeOut()
+                    } else {
+                        slideInVertically { height -> -height } + fadeIn() togetherWith
+                                slideOutVertically { height -> height } + fadeOut()
+                    }.using(
+                        SizeTransform(clip = false)
+                    )
+                }) { targetTotalPL ->
+                    Text(
+                        text = String.format("%,.0f", targetTotalPL),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = totalPlColor
+                    )
+                }
+
+                AnimatedContent(targetState = holding.totalPLPercentage, transitionSpec = {
+                    if (targetState > initialState) {
+                        slideInVertically { height -> height } + fadeIn() togetherWith
+                                slideOutVertically { height -> -height } + fadeOut()
+                    } else {
+                        slideInVertically { height -> -height } + fadeIn() togetherWith
+                                slideOutVertically { height -> height } + fadeOut()
+                    }.using(
+                        SizeTransform(clip = false)
+                    )
+                }) { targetTotalPLPercentage ->
+                    Text(
+                        text = String.format("%+.2f%%", targetTotalPLPercentage),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = totalPlColor
+                    )
+                }
             }
         }
     }

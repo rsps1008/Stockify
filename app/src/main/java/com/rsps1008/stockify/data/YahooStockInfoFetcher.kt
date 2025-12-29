@@ -6,6 +6,8 @@ import io.ktor.client.engine.cio.CIO
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import org.jsoup.Jsoup
@@ -41,7 +43,21 @@ class YahooStockInfoFetcher {
         return isWeekday && isTradingTime
     }
 
+    suspend fun fetchStockInfoList(stockCodes: List<String>): Map<String, RealtimeStockInfo> = withContext(Dispatchers.IO) {
+        stockCodes.map { code ->
+            async {
+                fetchStockInfoInternal(code)?.let { info ->
+                    code to info
+                }
+            }
+        }.awaitAll().filterNotNull().toMap()
+    }
+
     suspend fun fetchStockInfo(stockCode: String): RealtimeStockInfo? = withContext(Dispatchers.IO) {
+        fetchStockInfoInternal(stockCode)
+    }
+
+    private suspend fun fetchStockInfoInternal(stockCode: String): RealtimeStockInfo? {
         val url = "https://tw.stock.yahoo.com/quote/$stockCode"
         //Log.d("YahooStockInfoFetcher", "Fetching stock info for: $stockCode from url: $url")
         try {
@@ -54,7 +70,7 @@ class YahooStockInfoFetcher {
             val ul = soup.selectFirst("section#qsp-overview-realtime-info ul")
             if (ul == null) {
                 Log.e("YahooStockInfoFetcher", "Could not find the target 'ul' element for $stockCode")
-                return@withContext null
+                return null
             }
 
             val kv = mutableMapOf<String, String>()
@@ -85,15 +101,15 @@ class YahooStockInfoFetcher {
                     changePercent = changePercent
                 )
                 Log.d("YahooStockInfoFetcher", "Successfully fetched info for $stockCode: $info")
-                return@withContext info
+                return info
             }
 
             Log.e("YahooStockInfoFetcher", "Failed to parse price or yesterday's price for $stockCode. PriceStr: $priceStr, YesterdayPriceStr: $yesterdayPriceStr")
-            return@withContext null
+            return null
 
         } catch (e: Exception) {
             Log.e("YahooStockInfoFetcher", "Exception while fetching stock info for $stockCode: ${e.message}", e)
-            return@withContext null
+            return null
         }
     }
 }

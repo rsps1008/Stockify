@@ -43,7 +43,7 @@ class RealtimeStockDataService(
 
             if (isMarketOpen) {
                 // Fetch continuously during market hours
-                settingsDataStore.refreshIntervalFlow.collectLatest { interval ->
+                settingsDataStore.yahooFetchIntervalFlow.collectLatest { interval ->
                     while (isMarketOpen()) {
                         fetchAllStockInfo(true)
                         delay(interval * 1000L)
@@ -60,13 +60,14 @@ class RealtimeStockDataService(
 
     private suspend fun fetchAllStockInfo(isContinuous: Boolean, forceSave: Boolean = false) {
         val stocks = stockDao.getHeldStocks().first()
-        val updatedInfos = _realtimeStockInfo.value.toMutableMap()
+        if (stocks.isEmpty()) return
 
-        for (stock in stocks) {
-            yahooStockInfoFetcher.fetchStockInfo(stock.code)?.let {
-                updatedInfos[stock.code] = it
-            }
-        }
+        val stockCodes = stocks.map { it.code }
+        val newInfos = yahooStockInfoFetcher.fetchStockInfoList(stockCodes)
+
+        val updatedInfos = _realtimeStockInfo.value.toMutableMap()
+        updatedInfos.putAll(newInfos)
+
         _realtimeStockInfo.value = updatedInfos
 
         if (isContinuous) {

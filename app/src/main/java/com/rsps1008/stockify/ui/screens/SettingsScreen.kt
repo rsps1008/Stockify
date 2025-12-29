@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,6 +19,10 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -43,6 +48,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen() {
     val application = LocalContext.current.applicationContext as StockifyApplication
@@ -63,6 +69,7 @@ fun SettingsScreen() {
     val minFeeRegular by viewModel.minFeeRegular.collectAsState()
     val minFeeOddLot by viewModel.minFeeOddLot.collectAsState()
     val preDeductSellFees by viewModel.preDeductSellFees.collectAsState()
+    val yahooFetchInterval by viewModel.yahooFetchInterval.collectAsState()
 
     val context = LocalContext.current
 
@@ -136,11 +143,52 @@ fun SettingsScreen() {
                     if (isLoading) {
                         CircularProgressIndicator()
                     }
+                    val updateTimeText = lastUpdateTime?.let {
+                        "(${formatTimestamp(it)})"
+                    } ?: "(預設列表)"
+                    Text(
+                        text = updateTimeText,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
-                Spacer(modifier = Modifier.height(8.dp))
-                lastUpdateTime?.let {
-                    Text("上次更新時間：${formatTimestamp(it)}", style = MaterialTheme.typography.bodySmall)
-                } ?: Text("尚未更新過股票列表", style = MaterialTheme.typography.bodySmall)
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                val intervalOptions = listOf(10, 15, 30, 60)
+                var expanded by remember { mutableStateOf(false) }
+
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = "$yahooFetchInterval 秒",
+                        onValueChange = { },
+                        label = { Text("Yahoo 資料更新頻率") },
+                        readOnly = true,
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                        },
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        intervalOptions.forEach { interval ->
+                            DropdownMenuItem(
+                                text = { Text("$interval 秒") },
+                                onClick = {
+                                    viewModel.setYahooFetchInterval(interval)
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                }
             }
         }
 

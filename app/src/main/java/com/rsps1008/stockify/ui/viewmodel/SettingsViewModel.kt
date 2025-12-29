@@ -44,6 +44,9 @@ class SettingsViewModel(
     val refreshInterval: StateFlow<Int> = settingsDataStore.refreshIntervalFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 5)
 
+    val yahooFetchInterval: StateFlow<Int> = settingsDataStore.yahooFetchIntervalFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 10)
+
     val lastStockListUpdateTime: StateFlow<Long?> = settingsDataStore.lastStockListUpdateTimeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
@@ -130,6 +133,12 @@ class SettingsViewModel(
     fun setRefreshInterval(interval: Int) {
         viewModelScope.launch {
             settingsDataStore.setRefreshInterval(interval)
+        }
+    }
+
+    fun setYahooFetchInterval(interval: Int) {
+        viewModelScope.launch {
+            settingsDataStore.setYahooFetchInterval(interval)
         }
     }
 
