@@ -5,6 +5,7 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -49,6 +51,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.Scope
 import com.google.api.services.drive.DriveScopes
+import com.rsps1008.stockify.R
 import com.rsps1008.stockify.StockifyApplication
 import com.rsps1008.stockify.ui.viewmodel.SettingsViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
@@ -177,6 +180,12 @@ fun SettingsScreen() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        Image(
+            painter = painterResource(id = R.drawable.stockify),
+            contentDescription = "Stockify Logo",
+            modifier = Modifier
+                .fillMaxWidth(0.35f)
+        )
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("外觀", style = MaterialTheme.typography.titleLarge)
@@ -378,7 +387,7 @@ private fun DataManagementSection(
         AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = false },
             title = { Text("確認刪除") },
-            text = { Text("這會刪除所有本地儲存的股票和交易紀錄。此動作無法復原。") },
+            text = { Text("這會刪除所有交易紀錄，但會保留股票基本資料。此動作無法復原。") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -386,7 +395,7 @@ private fun DataManagementSection(
                         showDeleteConfirmDialog = false
                     }
                 ) {
-                    Text("全部刪除")
+                    Text("刪除交易紀錄")
                 }
             },
             dismissButton = {
@@ -455,7 +464,7 @@ private fun DataManagementSection(
             }
             Spacer(modifier = Modifier.height(16.dp))
             Button(onClick = { showDeleteConfirmDialog = true }) {
-                Text("刪除所有資料")
+                Text("刪除所有交易紀錄")
             }
         }
     }

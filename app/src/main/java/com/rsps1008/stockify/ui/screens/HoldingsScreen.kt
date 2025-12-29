@@ -144,8 +144,8 @@ fun SummarySection(uiState: HoldingsUiState) {
 fun HoldingsListHeader() {
     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text(text = "股票/股數", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-        Text(text = "股價", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-        Text(text = "成本均/買均", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+        Text(text = "股價    ", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+        Text(text = "成本均/買均", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
         Text(text = "總損益", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
     }
 }
@@ -177,7 +177,8 @@ fun HoldingCard(holding: HoldingInfo, navController: NavController) {
                 Text(text = holding.stock.name, style = MaterialTheme.typography.bodyLarge)
                 Text(text = "${String.format("%,.0f", holding.shares)}股", style = MaterialTheme.typography.bodySmall)
             }
-            Column(modifier = Modifier.weight(1f)) {
+
+            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
                 AnimatedContent(targetState = holding.currentPrice, transitionSpec = {
                     if (targetState > initialState) {
                         slideInVertically { height -> height } + fadeIn() togetherWith
@@ -192,7 +193,8 @@ fun HoldingCard(holding: HoldingInfo, navController: NavController) {
                     Text(
                         text = String.format("%,.2f", targetPrice),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = dailyChangeColor
+                        color = dailyChangeColor,
+                        textAlign = TextAlign.End // 確保文字本身也靠右
                     )
                 }
                 AnimatedContent(targetState = holding.dailyChange, transitionSpec = {
@@ -209,11 +211,13 @@ fun HoldingCard(holding: HoldingInfo, navController: NavController) {
                     Text(
                         text = "$dailyChangeSymbol${String.format("%.2f", abs(targetChange))} (${String.format("%.2f", abs(holding.dailyChangePercentage))}%)",
                         style = MaterialTheme.typography.bodySmall,
-                        color = dailyChangeColor
+                        color = dailyChangeColor,
+                        textAlign = TextAlign.End
                     )
                 }
             }
-            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+
+            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
                 Text(text = String.format("%,.2f", holding.averageCost), style = MaterialTheme.typography.bodyLarge)
                 Text(text = String.format("%,.2f", holding.buyAverage), style = MaterialTheme.typography.bodySmall)
             }

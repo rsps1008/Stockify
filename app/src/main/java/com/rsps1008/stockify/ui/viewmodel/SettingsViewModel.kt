@@ -324,13 +324,12 @@ class SettingsViewModel(
     fun deleteAllDataAndShowToast() {
         viewModelScope.launch {
             deleteAllData()
-            _message.value = "所有資料已刪除"
+            _message.value = "所有交易紀錄已刪除"
         }
     }
 
     private suspend fun deleteAllData() {
         stockDao.deleteAllTransactions()
-        stockDao.deleteAllStocks()
     }
 
     fun updateStockListFromTwse() {

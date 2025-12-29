@@ -52,7 +52,7 @@ class SettingsDataStore(val context: Context) {
 
     val minFeeRegularFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
-            preferences[minFeeRegularKey] ?: 20
+            preferences[minFeeRegularKey] ?: 1
         }
 
     val minFeeOddLotFlow: Flow<Int> = context.dataStore.data
@@ -62,7 +62,7 @@ class SettingsDataStore(val context: Context) {
     
     val preDeductSellFeesFlow: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
-            preferences[preDeductSellFeesKey] ?: false
+            preferences[preDeductSellFeesKey] ?: true
         }
 
     val realtimeStockInfoCacheFlow: Flow<Map<String, RealtimeStockInfo>> = context.dataStore.data
