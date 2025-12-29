@@ -47,7 +47,18 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "/META-INF/INDEX.LIST"
+            excludes += "/META-INF/DEPENDENCIES"
+            excludes += "/META-INF/license.txt"
+            excludes += "/META-INF/license"
+            excludes += "/META-INF/dependencies"
         }
+    }
+}
+
+configurations.all {
+    resolutionStrategy {
+        force(libs.guava)
     }
 }
 
@@ -95,4 +106,14 @@ dependencies {
 
     // Kotlinx Serialization
     implementation(libs.kotlinx.serialization.json)
+
+    // Google Sign-In & Drive
+    implementation(libs.google.play.services.auth)
+    implementation(libs.google.api.client.android)
+    implementation(libs.google.api.client)
+    implementation(libs.google.api.services.drive)
+    implementation(libs.google.http.client.gson)
+    implementation(libs.google.api.client.android)   // 提供 GoogleAccountCredential
+    implementation(libs.google.api.services.drive)   // 提供 Drive API 服務
+    implementation(libs.google.http.client.android)
 }

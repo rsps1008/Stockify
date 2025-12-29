@@ -1,5 +1,6 @@
 package com.rsps1008.stockify.ui.screens
 
+import android.app.Activity
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -42,10 +43,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.Scope
+import com.google.api.services.drive.DriveScopes
 import com.rsps1008.stockify.StockifyApplication
 import com.rsps1008.stockify.ui.viewmodel.SettingsViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -67,6 +75,7 @@ fun SettingsScreen() {
     val message by viewModel.message.collectAsState()
     val lastUpdateTime by viewModel.lastStockListUpdateTime.collectAsState()
     val showImportConfirmDialog by viewModel.showImportConfirmDialog.collectAsState()
+    val googleSignInAccount by viewModel.googleSignInAccount.collectAsState()
 
     val feeDiscount by viewModel.feeDiscount.collectAsState()
     val minFeeRegular by viewModel.minFeeRegular.collectAsState()
@@ -77,6 +86,30 @@ fun SettingsScreen() {
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    val googleSignInClient = remember {
+        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestEmail()
+            // 建議改用 DRIVE_APPDATA，這樣使用者權限請求比較不敏感
+            .requestScopes(Scope(DriveScopes.DRIVE_APPDATA))
+            .build()
+        GoogleSignIn.getClient(context, gso)
+    }
+
+    // Launcher for Google Sign-In
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+        onResult = { result ->
+            // 加入這行 Log 檢查 resultCode
+            println("GoogleSignInLauncher: resultCode = ${result.resultCode}")
+            if (result.resultCode == Activity.RESULT_OK) {
+                result.data?.let { viewModel.handleSignInResult(it) }
+            } else {
+                // 如果失敗，通常會在這裡印出 resultCode 為 0 (Canceled)
+                println("GoogleSignInLauncher: Sign-in failed or canceled")
+            }
+        }
+    )
 
     // Launcher for CSV export (create file)
     val exportCsvLauncher = rememberLauncherForActivityResult(
@@ -119,6 +152,14 @@ fun SettingsScreen() {
                 }
             }
         )
+    }
+
+    LaunchedEffect(key1 = viewModel) {
+        viewModel.onSignOut.collectLatest {
+            googleSignInClient.signOut().addOnCompleteListener {
+                viewModel.onSignOutComplete()
+            }
+        }
     }
 
     LaunchedEffect(message) {
@@ -311,29 +352,77 @@ fun SettingsScreen() {
             }
         }
 
-        // Data Management Section
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("資料管理", style = MaterialTheme.typography.titleLarge)
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
-                        val sdf = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-                        val fileName = "stockify_backup_${sdf.format(Date())}.csv"
-                        exportCsvLauncher.launch(fileName)
-                    }, enabled = !isLoading) {
-                        Text("匯出 CSV")
-                    }
-                    Button(onClick = {
-                        importCsvLauncher.launch("*/*")
-                    }, enabled = !isLoading) {
-                        Text("匯入 CSV")
-                    }
+        DataManagementSection(
+            viewModel = viewModel,
+            isLoading = isLoading,
+            exportCsvLauncher = exportCsvLauncher,
+            importCsvLauncher = importCsvLauncher,
+            googleSignInAccount = googleSignInAccount,
+            onSignInClick = { googleSignInLauncher.launch(googleSignInClient.signInIntent) }
+        )
+    }
+}
+
+@Composable
+private fun DataManagementSection(
+    viewModel: SettingsViewModel,
+    isLoading: Boolean,
+    exportCsvLauncher: androidx.activity.result.ActivityResultLauncher<String>,
+    importCsvLauncher: androidx.activity.result.ActivityResultLauncher<String>,
+    googleSignInAccount: GoogleSignInAccount?,
+    onSignInClick: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("資料管理", style = MaterialTheme.typography.titleLarge)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (googleSignInAccount == null) {
+                Button(onClick = onSignInClick) {
+                    Text("登入 Google 帳號")
                 }
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(onClick = { viewModel.deleteAllData() }) {
-                    Text("刪除所有資料")
+            } else {
+                Text("已登入: ${googleSignInAccount.email}", style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(onClick = { viewModel.signOut() }) {
+                    Text("登出")
                 }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = {
+                    val sdf = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+                    val fileName = "stockify_backup_${sdf.format(Date())}.csv"
+                    exportCsvLauncher.launch(fileName)
+                }, enabled = !isLoading) {
+                    Text("匯出 CSV")
+                }
+                Button(onClick = {
+                    importCsvLauncher.launch("*/*")
+                }, enabled = !isLoading) {
+                    Text("匯入 CSV")
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { viewModel.backupToGoogleDrive() }, 
+                    enabled = !isLoading && googleSignInAccount != null
+                ) {
+                    Text("備份到 Google Drive")
+                }
+                Button(
+                    onClick = { viewModel.restoreFromGoogleDrive() }, 
+                    enabled = !isLoading && googleSignInAccount != null
+                ) {
+                    Text("從 Google Drive 還原")
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(onClick = { viewModel.deleteAllData() }) {
+                Text("刪除所有資料")
             }
         }
     }
