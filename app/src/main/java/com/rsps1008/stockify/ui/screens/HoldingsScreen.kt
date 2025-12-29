@@ -7,10 +7,13 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -40,6 +43,10 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import com.rsps1008.stockify.R
 import com.rsps1008.stockify.StockifyApplication
 import com.rsps1008.stockify.ui.navigation.Screen
@@ -48,6 +55,8 @@ import com.rsps1008.stockify.ui.viewmodel.HoldingsViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import kotlin.math.abs
 
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HoldingsScreen(navController: NavController) {
     val application = LocalContext.current.applicationContext as StockifyApplication
@@ -60,21 +69,59 @@ fun HoldingsScreen(navController: NavController) {
     )
     val uiState by viewModel.uiState.collectAsState()
 
-    Column(
-        modifier = Modifier.padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Image(
-            painter = painterResource(id = R.drawable.stockify),
-            contentDescription = "Stockify Logo",
+    Column(modifier = Modifier.fillMaxSize()) {
+
+        // ★★★★★ 這裡是固定最上方的圖片，不會滑動 ★★★★★
+        Column(
             modifier = Modifier
-                .fillMaxWidth(0.35f)
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        SummarySection(uiState)
-        Spacer(modifier = Modifier.height(16.dp))
-        HoldingsListHeader()
-        HoldingsList(uiState.holdings, navController)
+                .fillMaxWidth()
+                .padding(top = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.stockify),
+                contentDescription = "Stockify Logo",
+                modifier = Modifier.fillMaxWidth(0.35f)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // ★ LazyColumn 會在圖片下方滑動
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp)
+        ) {
+            item {
+                SummarySection(uiState)
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // ★ sticky header
+            stickyHeader {
+                HoldingsListHeaderSticky()
+            }
+
+            // ★ 列表
+            items(uiState.holdings) { holding ->
+                HoldingCard(holding, navController)
+            }
+        }
+    }
+}
+
+@Composable
+fun HoldingsListHeaderSticky() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background) // ★ 必加，避免透明
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Text("股票/股數", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+        Text("股價", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+        Text("成本均/買均", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+        Text("總損益", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
     }
 }
 
@@ -160,6 +207,33 @@ fun HoldingsList(holdings: List<HoldingInfo>, navController: NavController) {
 }
 
 @Composable
+fun AutoResizeText(
+    text: String,
+    modifier: Modifier = Modifier,
+    maxLines: Int = 2,
+    maxTextSize: Float = 18f,
+    minTextSize: Float = 10f
+) {
+    var textSize by remember { mutableStateOf(maxTextSize) }
+
+    BoxWithConstraints(modifier) {
+        val constraints = this.constraints
+
+        Text(
+            text = text,
+            fontSize = textSize.sp,
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { textLayoutResult ->
+                if (textLayoutResult.didOverflowHeight && textSize > minTextSize) {
+                    textSize -= 1f   // 字體太大 → 縮小
+                }
+            }
+        )
+    }
+}
+
+@Composable
 fun HoldingCard(holding: HoldingInfo, navController: NavController) {
     val dailyChangeColor = if (holding.dailyChange >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
     val totalPlColor = if (holding.totalPL >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
@@ -174,7 +248,12 @@ fun HoldingCard(holding: HoldingInfo, navController: NavController) {
     ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = holding.stock.name, style = MaterialTheme.typography.bodyLarge)
+                AutoResizeText(
+                    text = holding.stock.name,
+                    maxLines = 2,
+                    maxTextSize = 14f,   // 第一圈嘗試字體
+                    minTextSize = 8f    // 最縮到 10sp
+                )
                 Text(text = "${String.format("%,.0f", holding.shares)}股", style = MaterialTheme.typography.bodySmall)
             }
 
