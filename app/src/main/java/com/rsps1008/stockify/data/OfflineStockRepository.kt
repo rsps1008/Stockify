@@ -28,6 +28,7 @@ class OfflineStockRepository(
             // Aggregate data for the summary
             val cumulativePL = holdingInfos.sumOf { it.totalPL }
             val marketValue = holdingInfos.sumOf { it.marketValue }
+            val totalCost = holdingInfos.sumOf { it.averageCost * it.shares }
             val totalInvestment = holdingInfos.sumOf { it.averageCost * it.shares } // Simplified
             val cumulativePLPercentage = if (totalInvestment > 0) (cumulativePL / totalInvestment) * 100 else 0.0
             val dividendIncome = holdingInfos.sumOf { it.dividendIncome }
@@ -37,6 +38,7 @@ class OfflineStockRepository(
                 holdings = holdingInfos.filter { it.shares > 0 }, // Only show stocks currently held
                 cumulativePL = cumulativePL,
                 marketValue = marketValue,
+                totalCost = totalCost,
                 cumulativePLPercentage = cumulativePLPercentage,
                 dividendIncome = dividendIncome,
                 dailyPL = dailyPL

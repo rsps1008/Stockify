@@ -7,6 +7,7 @@ data class HoldingsUiState(
     val cumulativePLPercentage: Double = 0.0,
     val dailyPL: Double = 0.0,
     val marketValue: Double = 0.0,
+    val totalCost: Double = 0.0,
     val dividendIncome: Double = 0.0,
     val holdings: List<HoldingInfo> = emptyList()
 )

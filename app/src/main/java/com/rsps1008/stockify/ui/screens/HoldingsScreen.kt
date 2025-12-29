@@ -24,12 +24,19 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -74,6 +81,7 @@ fun HoldingsScreen(navController: NavController) {
 fun SummarySection(uiState: HoldingsUiState) {
     val dailyPlColor = if (uiState.dailyPL >= 0) Color.Red else Color.Green
     val cumulativePlColor = if (uiState.cumulativePL >= 0) Color.Red else Color.Green
+    var showMarketValue by remember { mutableStateOf(true) }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -99,9 +107,25 @@ fun SummarySection(uiState: HoldingsUiState) {
                     Text(text = "持股日損益", style = MaterialTheme.typography.bodySmall)
                     Text(text = String.format("%,.0f", abs(uiState.dailyPL)), style = MaterialTheme.typography.bodyLarge, color = dailyPlColor)
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "持股市值", style = MaterialTheme.typography.bodySmall)
-                    Text(text = String.format("%,.0f", uiState.marketValue), style = MaterialTheme.typography.bodyLarge)
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { showMarketValue = !showMarketValue }
+                ) {
+                    Text(
+                        text = buildAnnotatedString {
+                            withStyle(style = SpanStyle(fontWeight = if (showMarketValue) FontWeight.Bold else FontWeight.Normal)) {
+                                append("持股市值")
+                            }
+                            append("/")
+                            withStyle(style = SpanStyle(fontWeight = if (!showMarketValue) FontWeight.Bold else FontWeight.Normal)) {
+                                append("成本")
+                            }
+                        },
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    val valueToShow = if (showMarketValue) uiState.marketValue else uiState.totalCost
+                    Text(text = String.format("%,.0f", valueToShow), style = MaterialTheme.typography.bodyLarge)
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = "股息收入", style = MaterialTheme.typography.bodySmall)
