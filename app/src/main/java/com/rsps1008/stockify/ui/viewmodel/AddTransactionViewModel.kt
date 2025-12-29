@@ -250,4 +250,20 @@ class AddTransactionViewModel(
             stockDao.updateTransaction(updatedTransaction)
         }
     }
+
+    fun resetCalculatedValues() {
+        _fee.value = 0.0
+        _tax.value = 0.0
+        _expense.value = 0.0
+        _income.value = 0.0
+    }
+
+    fun resetEditState() {
+        _transactionToEdit.value = null
+    }
+
+    fun resetForm() {
+        resetEditState()
+        resetCalculatedValues()
+    }
 }

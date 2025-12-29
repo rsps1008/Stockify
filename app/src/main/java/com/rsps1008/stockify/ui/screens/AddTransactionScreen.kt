@@ -16,7 +16,6 @@ import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -36,13 +35,18 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import com.rsps1008.stockify.StockifyApplication
 import com.rsps1008.stockify.ui.navigation.Screen
+import androidx.compose.ui.window.PopupProperties
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.DropdownMenu
 import com.rsps1008.stockify.ui.viewmodel.AddTransactionViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -86,6 +90,10 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
             "買進" -> viewModel.calculateBuyCosts(price.toDoubleOrNull() ?: 0.0, shares.toDoubleOrNull() ?: 0.0)
             "賣出" -> viewModel.calculateSellCosts(price.toDoubleOrNull() ?: 0.0, shares.toDoubleOrNull() ?: 0.0)
         }
+    }
+
+    LaunchedEffect(stockName) {
+        expanded = stockName.isNotBlank() && stockCode.isBlank()
     }
 
     // Load data when editing an existing transaction
@@ -210,19 +218,30 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
         if (transactionId == null) {
             Text(text = "股票名稱或代號", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(4.dp))
-            ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+            Box {
                 OutlinedTextField(
                     value = stockName,
-                    onValueChange = { stockName = it },
+                    onValueChange = {
+                        stockName = it
+                        stockCode = ""
+                    },
                     placeholder = { Text("輸入股票名稱或代號搜尋") },
-                    modifier = Modifier.fillMaxWidth().menuAnchor(),
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                    colors = ExposedDropdownMenuDefaults.textFieldColors(),
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                    },
+                    colors = ExposedDropdownMenuDefaults.textFieldColors()
                 )
-                ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    for (selectionOption in filteredStocks.take(5)) {
+
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                    modifier = Modifier.fillMaxWidth(),
+                    properties = PopupProperties(focusable = false)  // ✅ 讓選單不要搶焦點
+                ) {
+                    filteredStocks.take(5).forEach { selectionOption ->
                         DropdownMenuItem(
-                            text = { Text(text = "${selectionOption.code} ${selectionOption.name}") },
+                            text = { Text("${selectionOption.code} ${selectionOption.name}") },
                             onClick = {
                                 stockName = selectionOption.name
                                 stockCode = selectionOption.code
@@ -308,9 +327,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
         Button(
             onClick = {
                 onAddOrUpdateTransaction()
-                navController.navigate(Screen.Transactions.route) {
-                    popUpTo(Screen.Transactions.route) { inclusive = true }
-                }
+                viewModel.resetForm()
+                navController.popBackStack()
             },
             enabled = isFormValid,
             modifier = Modifier.fillMaxWidth()
