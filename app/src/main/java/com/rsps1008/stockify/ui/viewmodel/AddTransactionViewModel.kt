@@ -125,12 +125,18 @@ class AddTransactionViewModel(
         stockDividend: Double = 0.0,
         exRightsShares: Double = 0.0,
         dividendShares: Double = 0.0,
+        dividendFee: Double = 0.0,
         note: String = ""
     ) {
         viewModelScope.launch {
+            val finalFee = when (type) {
+                "配息" -> dividendFee
+                else -> _fee.value
+            }
+
             val finalIncome = when (type) {
                 "賣出" -> _income.value
-                "配息" -> price
+                "配息" -> price - finalFee
                 else -> 0.0
             }
 
@@ -142,15 +148,20 @@ class AddTransactionViewModel(
 
             if (transactionId == null) {
                 addTransaction(
-                    stockName, stockCode, date, type, price, finalShares, _fee.value, finalTax, finalIncome, finalExpense,
-                    cashDividend, exDividendShares, stockDividend, finalDividendShares, exRightsShares,
+                    stockName, stockCode, date, type,
+                    price, finalShares,
+                    finalFee, finalTax, finalIncome, finalExpense,
+                    cashDividend, exDividendShares, stockDividend,
+                    finalDividendShares, exRightsShares,
                     note, finalDividendIncome
                 )
             } else {
                 updateTransaction(
-                    stockCode,
-                    date, type, price, finalShares, _fee.value, finalTax, finalIncome, finalExpense, cashDividend,
-                    exDividendShares, stockDividend, finalDividendShares, exRightsShares,
+                    stockCode, date, type,
+                    price, finalShares,
+                    finalFee, finalTax, finalIncome, finalExpense,
+                    cashDividend, exDividendShares, stockDividend,
+                    finalDividendShares, exRightsShares,
                     note, finalDividendIncome
                 )
             }
