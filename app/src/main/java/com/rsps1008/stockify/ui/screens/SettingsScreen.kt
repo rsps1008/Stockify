@@ -70,7 +70,8 @@ fun SettingsScreen() {
         factory = ViewModelFactory(
             stockDao = application.database.stockDao(),
             settingsDataStore = application.settingsDataStore,
-            application = application
+            application = application,
+            realtimeStockDataService = application.realtimeStockDataService
         )
     )
 

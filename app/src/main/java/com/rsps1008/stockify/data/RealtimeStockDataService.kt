@@ -29,7 +29,7 @@ class RealtimeStockDataService(
         startFetching()
     }
 
-    private fun startFetching() {
+    fun startFetching() {
         fetchJob?.cancel()
         fetchJob = scope.launch {
             // 1. Load from cache first
@@ -58,7 +58,7 @@ class RealtimeStockDataService(
         }
     }
 
-    private suspend fun fetchAllStockInfo(isContinuous: Boolean, forceSave: Boolean = false) {
+    suspend fun fetchAllStockInfo(isContinuous: Boolean, forceSave: Boolean = false) {
         val stocks = stockDao.getHeldStocks().first()
         if (stocks.isEmpty()) return
 
@@ -77,6 +77,16 @@ class RealtimeStockDataService(
                 fetchCount = 0
             }
         } else {
+            settingsDataStore.setRealtimeStockInfoCache(updatedInfos)
+        }
+    }
+
+    suspend fun refreshStock(stockCode: String) {
+        val newInfo = yahooStockInfoFetcher.fetchStockInfoList(listOf(stockCode))
+        if (newInfo.isNotEmpty()) {
+            val updatedInfos = _realtimeStockInfo.value.toMutableMap()
+            updatedInfos.putAll(newInfo)
+            _realtimeStockInfo.value = updatedInfos
             settingsDataStore.setRealtimeStockInfoCache(updatedInfos)
         }
     }

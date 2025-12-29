@@ -35,9 +35,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import com.rsps1008.stockify.StockifyApplication
-import com.rsps1008.stockify.ui.navigation.Screen
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.DropdownMenu
@@ -56,7 +54,9 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
         factory = ViewModelFactory(
             stockDao = application.database.stockDao(),
             settingsDataStore = application.settingsDataStore,
-            transactionId = transactionId
+            transactionId = transactionId,
+            application = application,
+            realtimeStockDataService = application.realtimeStockDataService
         )
     )
     val context = LocalContext.current

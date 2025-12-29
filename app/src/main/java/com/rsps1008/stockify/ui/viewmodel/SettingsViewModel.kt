@@ -13,6 +13,7 @@ import com.google.api.services.drive.DriveScopes
 import com.rsps1008.stockify.data.CsvService
 import com.rsps1008.stockify.data.CsvTransaction
 import com.rsps1008.stockify.data.GoogleDriveService
+import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.StockDao
@@ -35,7 +36,8 @@ import java.io.ByteArrayOutputStream
 class SettingsViewModel(
     private val stockDao: StockDao,
     private val settingsDataStore: SettingsDataStore,
-    application: Application
+    application: Application,
+    private val realtimeStockDataService: RealtimeStockDataService
 ) : AndroidViewModel(application) {
 
     private val stockDataFetcher = StockDataFetcher()
@@ -276,6 +278,7 @@ class SettingsViewModel(
             }
             stockDao.insertTransaction(csvTransaction.transaction)
         }
+        realtimeStockDataService.startFetching()
         _message.value = "匯入成功，共 ${transactions.size} 筆紀錄"
     }
 

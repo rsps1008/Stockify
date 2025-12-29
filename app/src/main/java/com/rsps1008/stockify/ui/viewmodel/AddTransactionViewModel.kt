@@ -2,6 +2,7 @@ package com.rsps1008.stockify.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.StockDao
@@ -20,7 +21,8 @@ import kotlin.math.roundToInt
 class AddTransactionViewModel(
     private val stockDao: StockDao,
     private val settingsDataStore: SettingsDataStore,
-    private val transactionId: Int?
+    private val transactionId: Int?,
+    private val realtimeStockDataService: RealtimeStockDataService
 ) : ViewModel() {
 
     private val _transactionToEdit = MutableStateFlow<StockTransaction?>(null)
@@ -205,6 +207,8 @@ class AddTransactionViewModel(
                 dividendIncome = dividendIncome
             )
             stockDao.insertTransaction(transaction)
+            realtimeStockDataService.refreshStock(stockCode)
+
         }
     }
 
@@ -248,6 +252,7 @@ class AddTransactionViewModel(
                 dividendIncome = dividendIncome
             )
             stockDao.updateTransaction(updatedTransaction)
+            realtimeStockDataService.refreshStock(stockCode)
         }
     }
 
