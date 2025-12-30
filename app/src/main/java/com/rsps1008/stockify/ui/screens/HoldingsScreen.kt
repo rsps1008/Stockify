@@ -224,6 +224,7 @@ fun AutoResizeText(
             fontSize = textSize.sp,
             maxLines = maxLines,
             overflow = TextOverflow.Ellipsis,
+            lineHeight = (textSize * 1.05f).sp,
             onTextLayout = { textLayoutResult ->
                 if (textLayoutResult.didOverflowHeight && textSize > minTextSize) {
                     textSize -= 1f   // 字體太大 → 縮小
@@ -248,6 +249,12 @@ fun HoldingCard(holding: HoldingInfo, navController: NavController) {
     ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
+                // ★ 股票代號（小小一行）
+                Text(
+                    text = holding.stock.code,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 AutoResizeText(
                     text = holding.stock.name,
                     maxLines = 2,

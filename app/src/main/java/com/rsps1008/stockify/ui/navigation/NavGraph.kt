@@ -57,5 +57,31 @@ fun NavGraph(
             val transactionId = backStackEntry.arguments?.getInt("transactionId") ?: 0
             TransactionDetailScreen(transactionId = transactionId, navController = navController)
         }
+
+        composable(
+            route = Screen.AddTransaction.route,
+            arguments = listOf(
+                navArgument("transactionId") {
+                    type = NavType.StringType
+                    nullable = true
+                },
+                navArgument("stockCode") {
+                    type = NavType.StringType
+                    nullable = true
+                }
+            )
+        ) { backStackEntry ->
+
+            val transactionIdArg = backStackEntry.arguments?.getString("transactionId")
+            val transactionId = transactionIdArg?.toIntOrNull()
+
+            val prefillStockCode = backStackEntry.arguments?.getString("stockCode")
+
+            AddTransactionScreen(
+                navController = navController,
+                transactionId = transactionId,
+                prefillStockCode = prefillStockCode
+            )
+        }
     }
 }

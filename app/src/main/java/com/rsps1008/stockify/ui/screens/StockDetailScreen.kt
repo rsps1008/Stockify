@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -93,6 +94,16 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
                     }
                 },
                 actions = {
+                    // 新增交易
+                    IconButton(onClick = {
+                        navController.navigate(
+                            Screen.AddTransaction.createRoute(null, stockCode)
+                        )
+                    }) {
+                        Icon(Icons.Default.Add, contentDescription = "Add transaction")
+                    }
+
+                    // 刪除全部交易
                     IconButton(onClick = { viewModel.onDeleteTransactionsClicked() }) {
                         Icon(Icons.Default.Delete, contentDescription = "Delete all transactions")
                     }
@@ -195,7 +206,7 @@ private fun TransactionList(transactions: List<TransactionUiState>, navControlle
 private fun TransactionRow(transaction: TransactionUiState, navController: NavController) {
     val amountColor = when (transaction.transaction.type) {
         "買進" -> StockifyAppTheme.stockColors.loss
-        "賣出", "配息" -> StockifyAppTheme.stockColors.gain
+        "賣出", "配息", "配股" -> StockifyAppTheme.stockColors.gain
         else -> Color.Unspecified
     }
 
@@ -212,8 +223,8 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
         val transactionText = when(transaction.transaction.type) {
             "買進" -> "買${transaction.transaction.buyShares.toInt()}股"
             "賣出" -> "賣${transaction.transaction.sellShares.toInt()}股"
-            "配息" -> "配息${transaction.transaction.income.toInt()}元"
-            "配股" -> "配股${transaction.transaction.dividendShares.toInt()}股"
+            "配息" -> "配息"
+            "配股" -> "配股"
             else -> transaction.transaction.type
         }
         Text(text = transactionText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1.5f), textAlign = TextAlign.Center)
@@ -225,13 +236,13 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
         }
         Text(text = priceText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
 
-        val amount = when (transaction.transaction.type) {
-            "買進" -> -transaction.transaction.expense
-            "賣出" -> transaction.transaction.income
-            "配息" -> transaction.transaction.income
-            "配股" -> 0.0
-            else -> 0.0
+        val amountText = when (transaction.transaction.type) {
+            "買進" -> String.format("%,.0f", -transaction.transaction.expense)
+            "賣出" -> String.format("%,.0f", transaction.transaction.income)
+            "配息" -> String.format("%,.0f", transaction.transaction.income)
+            "配股" -> "${transaction.transaction.dividendShares.toInt()}股"
+            else -> ""
         }
-        Text(text = String.format("%,.0f", amount), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), color = amountColor, textAlign = TextAlign.End)
+        Text(text = amountText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), color = amountColor, textAlign = TextAlign.End)
     }
 }

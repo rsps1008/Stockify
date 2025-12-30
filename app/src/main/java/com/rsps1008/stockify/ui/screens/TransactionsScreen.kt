@@ -59,7 +59,7 @@ fun TransactionsScreen(navController: NavController) {
         )
         Spacer(modifier = Modifier.height(16.dp))
         TransactionsListHeader()
-        LazyColumn(modifier = Modifier.padding(horizontal = 16.dp)) {
+        LazyColumn {
             groupedTransactions.forEach { (date, transactionsOnDate) ->
                 item {
                     Text(
@@ -68,7 +68,7 @@ fun TransactionsScreen(navController: NavController) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .padding(horizontal = 2.dp, vertical = 8.dp)
                     )
                 }
                 items(transactionsOnDate) { transaction ->

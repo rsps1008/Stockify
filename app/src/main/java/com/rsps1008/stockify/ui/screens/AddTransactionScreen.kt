@@ -49,7 +49,7 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
+fun AddTransactionScreen(navController: NavController, transactionId: Int?, prefillStockCode: String? = null) {
     val application = LocalContext.current.applicationContext as StockifyApplication
     val viewModel: AddTransactionViewModel = viewModel(
         factory = ViewModelFactory(
@@ -87,6 +87,17 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
     var stockDividendRate by remember { mutableStateOf("") }
     var exRightsShares by remember { mutableStateOf("") }
 
+    LaunchedEffect(prefillStockCode, allStocks) {
+        if (transactionId == null && prefillStockCode != null) {
+            val stock = allStocks.find { it.code == prefillStockCode }
+            if (stock != null) {
+                stockName = stock.name
+                stockCode = stock.code
+                expanded = false
+            }
+        }
+    }
+
     LaunchedEffect(price, shares, transactionType) {
         when (transactionType) {
             "買進" -> viewModel.calculateBuyCosts(price.toDoubleOrNull() ?: 0.0, shares.toDoubleOrNull() ?: 0.0)
@@ -118,14 +129,14 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
                     shares = it.sellShares.toInt().toString()
                 }
                 "配息" -> {
-                    cashDividend = it.cashDividend.toString()
-                    exDividendShares = it.exDividendShares.toInt().toString()
+                    cashDividend = if (it.cashDividend != 0.0) it.cashDividend.toString() else ""
+                    exDividendShares = if (it.exDividendShares != 0.0) it.exDividendShares.toInt().toString() else ""
                     price = it.income.toInt().toString()
-                    dividendFee = it.fee.toInt().toString()
+                    dividendFee = it.fee.toString()
                 }
                 "配股" -> {
-                    stockDividendRate = it.stockDividend.toString()
-                    exRightsShares = it.exRightsShares.toInt().toString()
+                    stockDividendRate = if (it.stockDividend != 0.0) it.stockDividend.toString() else ""
+                    exRightsShares = if (it.exRightsShares != 0.0) it.exRightsShares.toInt().toString() else ""
                     shares = it.dividendShares.toInt().toString()
                 }
             }
@@ -454,14 +465,12 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
                         )
                         androidx.compose.material3.HorizontalDivider()
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text("股息總額", style = MaterialTheme.typography.bodyLarge)
-                        val amount = price.toIntOrNull() ?: 0
-                        Text(
-                            text = if (amount > 0) amount.toString() else "-",
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.padding(bottom = 12.dp)
+                        LabeledOutlinedTextField(
+                            label = "股息總額",
+                            value = price,
+                            onValueChange = { price = it },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                         )
-                        androidx.compose.material3.HorizontalDivider()
                     }
                 }
 

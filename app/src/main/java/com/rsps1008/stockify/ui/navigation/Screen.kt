@@ -5,9 +5,15 @@ sealed class Screen(val route: String) {
     object Transactions : Screen("transactions")
     object Settings : Screen("settings")
 
-    object AddTransaction : Screen("add_transaction?transactionId={transactionId}") {
-        fun createRoute(transactionId: Int? = null): String {
-            return transactionId?.let { "add_transaction?transactionId=$it" } ?: "add_transaction"
+    object AddTransaction :
+        Screen("add_transaction?transactionId={transactionId}&stockCode={stockCode}") {
+        fun createRoute(
+            transactionId: Int? = null,
+            stockCode: String? = null
+        ): String {
+            val idPart = transactionId?.let { "transactionId=$it" } ?: "transactionId=null"
+            val codePart = stockCode?.let { "stockCode=$it" } ?: "stockCode=null"
+            return "add_transaction?$idPart&$codePart"
         }
     }
 
