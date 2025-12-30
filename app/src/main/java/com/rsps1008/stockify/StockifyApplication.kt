@@ -4,7 +4,6 @@ import android.app.Application
 import com.rsps1008.stockify.data.AppDatabase
 import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.SettingsDataStore
-import com.rsps1008.stockify.data.YahooStockInfoFetcher
 
 class StockifyApplication : Application() {
     lateinit var database: AppDatabase
@@ -18,7 +17,7 @@ class StockifyApplication : Application() {
         realtimeStockDataService = RealtimeStockDataService(
             stockDao = database.stockDao(),
             settingsDataStore = settingsDataStore,
-            yahooStockInfoFetcher = YahooStockInfoFetcher()
+            applicationContext = this
         )
     }
 }

@@ -86,6 +86,12 @@ class SettingsViewModel(
     val theme: StateFlow<String> = settingsDataStore.themeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), "System")
 
+    val stockDataSource: StateFlow<String> = settingsDataStore.stockDataSourceFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), "TWSE")
+
+    val notifyFallbackRepeatedly: StateFlow<Boolean> = settingsDataStore.notifyFallbackRepeatedlyFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), false)
+
     init {
         val account = GoogleSignIn.getLastSignedInAccount(getApplication())
         // 在 init 和 handleSignInResult 中
@@ -297,6 +303,25 @@ class SettingsViewModel(
     fun setTheme(theme: String) {
         viewModelScope.launch {
             settingsDataStore.setTheme(theme)
+        }
+    }
+
+    fun setStockDataSource(source: String) {
+        viewModelScope.launch {
+            settingsDataStore.setStockDataSource(source)
+        }
+    }
+
+    fun setNotifyFallbackRepeatedly(shouldNotifyRepeatedly: Boolean) {
+        viewModelScope.launch {
+            settingsDataStore.setNotifyFallbackRepeatedly(shouldNotifyRepeatedly)
+        }
+    }
+
+    fun clearRealtimeStockInfoCache() {
+        viewModelScope.launch {
+            settingsDataStore.clearRealtimeStockInfoCache()
+            _message.value = "股價快取已清除"
         }
     }
 

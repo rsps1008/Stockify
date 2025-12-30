@@ -89,6 +89,8 @@ fun SettingsScreen() {
     val preDeductSellFees by viewModel.preDeductSellFees.collectAsState()
     val yahooFetchInterval by viewModel.yahooFetchInterval.collectAsState()
     val theme by viewModel.theme.collectAsState()
+    val stockDataSource by viewModel.stockDataSource.collectAsState()
+    val notifyFallbackRepeatedly by viewModel.notifyFallbackRepeatedly.collectAsState()
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -241,28 +243,95 @@ fun SettingsScreen() {
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        val intervalOptions = listOf(10, 15, 30, 60)
-                        var expanded by remember { mutableStateOf(false) }
+                        val dataSourceOptions = remember {
+                            mapOf("TWSE" to "台灣證券交易所(推薦)", "Yahoo" to "Yahoo!奇摩股市(爬蟲)")
+                        }
+                        var expandedDataSource by remember { mutableStateOf(false) }
 
                         ExposedDropdownMenuBox(
-                            expanded = expanded,
-                            onExpandedChange = { expanded = !expanded },
+                            expanded = expandedDataSource,
+                            onExpandedChange = { expandedDataSource = !expandedDataSource },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             OutlinedTextField(
-                                value = "$yahooFetchInterval 秒",
+                                value = dataSourceOptions[stockDataSource] ?: stockDataSource,
                                 onValueChange = { },
-                                label = { Text("Yahoo 資料更新頻率") },
+                                label = { Text("即時資料來源") },
                                 readOnly = true,
                                 trailingIcon = {
-                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedDataSource)
                                 },
                                 modifier = Modifier.menuAnchor().fillMaxWidth(),
                                 colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
                             )
                             ExposedDropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false },
+                                expanded = expandedDataSource,
+                                onDismissRequest = { expandedDataSource = false },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                dataSourceOptions.forEach { (key, value) ->
+                                    DropdownMenuItem(
+                                        text = { Text(value) },
+                                        onClick = {
+                                            viewModel.setStockDataSource(key)
+                                            expandedDataSource = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        Text(
+                            text = "*如果選擇的來源不可用，將自動採用另一個作為備用機制。",
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f, fill = false)) {
+                                Text("重複提示備援來源", style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    "當主要資料來源失效時，持續顯示通知",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = notifyFallbackRepeatedly,
+                                onCheckedChange = viewModel::setNotifyFallbackRepeatedly
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        val intervalOptions = listOf(10, 15, 30, 60)
+                        var expandedInterval by remember { mutableStateOf(false) }
+
+                        ExposedDropdownMenuBox(
+                            expanded = expandedInterval,
+                            onExpandedChange = { expandedInterval = !expandedInterval },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = "$yahooFetchInterval 秒",
+                                onValueChange = { },
+                                label = { Text("股價更新頻率(開盤刷新)") },
+                                readOnly = true,
+                                trailingIcon = {
+                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedInterval)
+                                },
+                                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = expandedInterval,
+                                onDismissRequest = { expandedInterval = false },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 intervalOptions.forEach { interval ->
@@ -270,7 +339,7 @@ fun SettingsScreen() {
                                         text = { Text("$interval 秒") },
                                         onClick = {
                                             viewModel.setYahooFetchInterval(interval)
-                                            expanded = false
+                                            expandedInterval = false
                                         }
                                     )
                                 }
@@ -375,6 +444,7 @@ private fun DataManagementSection(
     onSignInClick: () -> Unit
 ) {
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var showClearCacheConfirmDialog by remember { mutableStateOf(false) }
 
     if (showDeleteConfirmDialog) {
         AlertDialog(
@@ -393,6 +463,29 @@ private fun DataManagementSection(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    if (showClearCacheConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearCacheConfirmDialog = false },
+            title = { Text("確認清除") },
+            text = { Text("這會刪除本地儲存的即時股價快取，下次開啟 App 時將會重新抓取。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.clearRealtimeStockInfoCache()
+                        showClearCacheConfirmDialog = false
+                    }
+                ) {
+                    Text("清除")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearCacheConfirmDialog = false }) {
                     Text("取消")
                 }
             }
@@ -439,7 +532,7 @@ private fun DataManagementSection(
             Spacer(modifier = Modifier.height(16.dp))
 
             // 手機儲存
-            Text("手機儲存", style = MaterialTheme.typography.titleMedium)
+            Text("手機本地資料", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = {
@@ -456,6 +549,10 @@ private fun DataManagementSection(
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
+            Button(onClick = { showClearCacheConfirmDialog = true }) {
+                Text("清除股價快取")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = { showDeleteConfirmDialog = true }) {
                 Text("刪除所有交易紀錄")
             }

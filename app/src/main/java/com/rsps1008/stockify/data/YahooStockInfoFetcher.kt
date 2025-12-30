@@ -9,21 +9,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
 import org.jsoup.Jsoup
 import java.time.DayOfWeek
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
-@Serializable
-data class RealtimeStockInfo(
-    val currentPrice: Double,
-    val change: Double,
-    val changePercent: Double
-)
-
-class YahooStockInfoFetcher {
+class YahooStockInfoFetcher : StockInfoFetcher {
 
     private val client = HttpClient(CIO) {
         engine {
@@ -31,19 +23,19 @@ class YahooStockInfoFetcher {
         }
     }
 
-    fun isMarketOpen(): Boolean {
+    override fun isMarketOpen(): Boolean {
         val taipeiZone = ZoneId.of("Asia/Taipei")
         val now = ZonedDateTime.now(taipeiZone)
         val dayOfWeek = now.dayOfWeek
         val currentTime = now.toLocalTime()
 
         val isWeekday = dayOfWeek in DayOfWeek.MONDAY..DayOfWeek.FRIDAY
-        val isTradingTime = currentTime.isAfter(LocalTime.of(9, 0)) && currentTime.isBefore(LocalTime.of(13, 30))
+        val isTradingTime = currentTime.isAfter(LocalTime.of(13, 0)) && currentTime.isBefore(LocalTime.of(13, 30))
 
         return isWeekday && isTradingTime
     }
 
-    suspend fun fetchStockInfoList(stockCodes: List<String>): Map<String, RealtimeStockInfo> = withContext(Dispatchers.IO) {
+    override suspend fun fetchStockInfoList(stockCodes: List<String>): Map<String, RealtimeStockInfo> = withContext(Dispatchers.IO) {
         stockCodes.map { code ->
             async {
                 fetchStockInfoInternal(code)?.let { info ->
@@ -53,13 +45,12 @@ class YahooStockInfoFetcher {
         }.awaitAll().filterNotNull().toMap()
     }
 
-    suspend fun fetchStockInfo(stockCode: String): RealtimeStockInfo? = withContext(Dispatchers.IO) {
+    override suspend fun fetchStockInfo(stockCode: String): RealtimeStockInfo? = withContext(Dispatchers.IO) {
         fetchStockInfoInternal(stockCode)
     }
 
     private suspend fun fetchStockInfoInternal(stockCode: String): RealtimeStockInfo? {
         val url = "https://tw.stock.yahoo.com/quote/$stockCode"
-        //Log.d("YahooStockInfoFetcher", "Fetching stock info for: $stockCode from url: $url")
         try {
             val responseText = client.get(url) {
                 headers.append("User-Agent", "Mozilla/5.0")
@@ -84,7 +75,6 @@ class YahooStockInfoFetcher {
                     kv[key] = valueText
                 }
             }
-            //Log.d("YahooStockInfoFetcher", "Parsed key-values for $stockCode: $kv")
 
             val priceStr = kv["成交"]
             val yesterdayPriceStr = kv["昨收"]
@@ -92,9 +82,9 @@ class YahooStockInfoFetcher {
             val price = priceStr?.toDoubleOrNull()
             val yesterdayPrice = yesterdayPriceStr?.toDoubleOrNull()
 
-            if (price != null && yesterdayPrice != null) {
+            if (price != null && yesterdayPrice != null && yesterdayPrice != 0.0) {
                 val change = price - yesterdayPrice
-                val changePercent = if (yesterdayPrice != 0.0) (change / yesterdayPrice) * 100 else 0.0
+                val changePercent = (change / yesterdayPrice) * 100
                 val info = RealtimeStockInfo(
                     currentPrice = price,
                     change = change,
@@ -102,10 +92,10 @@ class YahooStockInfoFetcher {
                 )
                 Log.d("YahooStockInfoFetcher", "Successfully fetched info for $stockCode: $info")
                 return info
+            } else {
+                Log.e("YahooStockInfoFetcher", "Failed to parse price or yesterday's price for $stockCode. PriceStr: $priceStr, YesterdayPriceStr: $yesterdayPriceStr")
+                return null
             }
-
-            Log.e("YahooStockInfoFetcher", "Failed to parse price or yesterday's price for $stockCode. PriceStr: $priceStr, YesterdayPriceStr: $yesterdayPriceStr")
-            return null
 
         } catch (e: Exception) {
             Log.e("YahooStockInfoFetcher", "Exception while fetching stock info for $stockCode: ${e.message}", e)

@@ -29,6 +29,8 @@ class SettingsDataStore(val context: Context) {
     private val preDeductSellFeesKey = booleanPreferencesKey("pre_deduct_sell_fees")
     private val realtimeStockInfoCacheKey = stringPreferencesKey("realtime_stock_info_cache")
     private val themeKey = stringPreferencesKey("theme")
+    private val stockDataSourceKey = stringPreferencesKey("stock_data_source")
+    private val notifyFallbackRepeatedlyKey = booleanPreferencesKey("notify_fallback_repeatedly")
 
     val refreshIntervalFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
@@ -75,6 +77,16 @@ class SettingsDataStore(val context: Context) {
     val themeFlow: Flow<String> = context.dataStore.data
         .map { preferences ->
             preferences[themeKey] ?: "System"
+        }
+
+    val stockDataSourceFlow: Flow<String> = context.dataStore.data
+        .map { preferences ->
+            preferences[stockDataSourceKey] ?: "TWSE"
+        }
+
+    val notifyFallbackRepeatedlyFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[notifyFallbackRepeatedlyKey] ?: false
         }
 
     suspend fun setRefreshInterval(interval: Int) {
@@ -125,9 +137,27 @@ class SettingsDataStore(val context: Context) {
         }
     }
 
+    suspend fun clearRealtimeStockInfoCache() {
+        context.dataStore.edit {
+            it.remove(realtimeStockInfoCacheKey)
+        }
+    }
+
     suspend fun setTheme(theme: String) {
         context.dataStore.edit {
             it[themeKey] = theme
+        }
+    }
+
+    suspend fun setStockDataSource(source: String) {
+        context.dataStore.edit {
+            it[stockDataSourceKey] = source
+        }
+    }
+
+    suspend fun setNotifyFallbackRepeatedly(shouldNotifyRepeatedly: Boolean) {
+        context.dataStore.edit {
+            it[notifyFallbackRepeatedlyKey] = shouldNotifyRepeatedly
         }
     }
 }
