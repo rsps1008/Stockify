@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -94,45 +96,31 @@ fun SettingsScreen() {
     val googleSignInClient = remember {
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestEmail()
-            // 建議改用 DRIVE_APPDATA，這樣使用者權限請求比較不敏感
             .requestScopes(Scope(DriveScopes.DRIVE_APPDATA))
             .build()
         GoogleSignIn.getClient(context, gso)
     }
 
-    // Launcher for Google Sign-In
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult(),
         onResult = { result ->
-            // 加入這行 Log 檢查 resultCode
             println("GoogleSignInLauncher: resultCode = ${result.resultCode}")
             if (result.resultCode == Activity.RESULT_OK) {
                 result.data?.let { viewModel.handleSignInResult(it) }
             } else {
-                // 如果失敗，通常會在這裡印出 resultCode 為 0 (Canceled)
                 println("GoogleSignInLauncher: Sign-in failed or canceled")
             }
         }
     )
 
-    // Launcher for CSV export (create file)
     val exportCsvLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/csv"),
-        onResult = { uri: Uri? ->
-            uri?.let {
-                viewModel.exportTransactions(it)
-            }
-        }
+        onResult = { uri: Uri? -> uri?.let { viewModel.exportTransactions(it) } }
     )
 
-    // Launcher for CSV import (pick file)
     val importCsvLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
-        onResult = { uri: Uri? ->
-            uri?.let {
-                viewModel.onImportRequest(it)
-            }
-        }
+        onResult = { uri: Uri? -> uri?.let { viewModel.onImportRequest(it) } }
     )
 
     if (showImportConfirmDialog) {
@@ -141,18 +129,12 @@ fun SettingsScreen() {
             title = { Text("匯入確認") },
             text = { Text("匯入新資料前，是否要先刪除所有現有交易紀錄？") },
             confirmButton = {
-                TextButton(onClick = { viewModel.onImportConfirm(true) }) {
-                    Text("是，刪除並匯入")
-                }
+                TextButton(onClick = { viewModel.onImportConfirm(true) }) { Text("是，刪除並匯入") }
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = { viewModel.onImportConfirm(false) }) {
-                        Text("否，直接匯入")
-                    }
-                    TextButton(onClick = { viewModel.onImportCancel() }) {
-                        Text("取消")
-                    }
+                    TextButton(onClick = { viewModel.onImportConfirm(false) }) { Text("否，直接匯入") }
+                    TextButton(onClick = { viewModel.onImportCancel() }) { Text("取消") }
                 }
             }
         )
@@ -160,216 +142,226 @@ fun SettingsScreen() {
 
     LaunchedEffect(key1 = viewModel) {
         viewModel.onSignOut.collectLatest {
-            googleSignInClient.signOut().addOnCompleteListener {
-                viewModel.onSignOutComplete()
-            }
+            googleSignInClient.signOut().addOnCompleteListener { viewModel.onSignOutComplete() }
         }
     }
 
     LaunchedEffect(message) {
         message?.let {
             Toast.makeText(context, it, Toast.LENGTH_LONG).show()
-            viewModel.onMessageShown() // Reset message after showing
+            viewModel.onMessageShown()
         }
     }
 
+    // ===== 版面：上方固定 Logo，下面才捲動 =====
     Column(
         modifier = Modifier
-            .padding(16.dp)
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Image(
             painter = painterResource(id = R.drawable.stockify),
             contentDescription = "Stockify Logo",
-            modifier = Modifier
-                .fillMaxWidth(0.35f)
+            modifier = Modifier.fillMaxWidth(0.35f)
         )
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("外觀", style = MaterialTheme.typography.titleLarge)
-                Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-                val themeOptions = remember { mapOf("System" to "系統預設", "Light" to "淺色", "Dark" to "深色") }
-                var expanded by remember { mutableStateOf(false) }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("外觀", style = MaterialTheme.typography.titleLarge)
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                ExposedDropdownMenuBox(
-                    expanded = expanded,
-                    onExpandedChange = { expanded = !expanded },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    OutlinedTextField(
-                        value = themeOptions[theme] ?: theme,
-                        onValueChange = { },
-                        label = { Text("主題") },
-                        readOnly = true,
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
-                        },
-                        modifier = Modifier.menuAnchor().fillMaxWidth(),
-                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        themeOptions.forEach { (key, value) ->
-                            DropdownMenuItem(
-                                text = { Text(value) },
-                                onClick = {
-                                    scope.launch {
-                                        delay(300) // Delay to allow dropdown to close
-                                        viewModel.setTheme(key)
-                                    }
-                                    expanded = false
+                        val themeOptions = remember {
+                            mapOf("System" to "系統預設", "Light" to "淺色", "Dark" to "深色")
+                        }
+                        var expanded by remember { mutableStateOf(false) }
+
+                        ExposedDropdownMenuBox(
+                            expanded = expanded,
+                            onExpandedChange = { expanded = !expanded },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = themeOptions[theme] ?: theme,
+                                onValueChange = { },
+                                label = { Text("主題") },
+                                readOnly = true,
+                                trailingIcon = {
+                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                                },
+                                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = expanded,
+                                onDismissRequest = { expanded = false },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                themeOptions.forEach { (key, value) ->
+                                    DropdownMenuItem(
+                                        text = { Text(value) },
+                                        onClick = {
+                                            scope.launch {
+                                                delay(300)
+                                                viewModel.setTheme(key)
+                                            }
+                                            expanded = false
+                                        }
+                                    )
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("股票資料更新", style = MaterialTheme.typography.titleLarge)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(onClick = { viewModel.updateStockListFromTwse() }, enabled = !isLoading) {
+                                Text("更新股票列表")
+                            }
+                            if (isLoading) CircularProgressIndicator()
+
+                            val updateTimeText = lastUpdateTime?.let { "(${formatTimestamp(it)})" } ?: "(預設列表)"
+                            Text(text = updateTimeText, style = MaterialTheme.typography.bodySmall)
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        val intervalOptions = listOf(10, 15, 30, 60)
+                        var expanded by remember { mutableStateOf(false) }
+
+                        ExposedDropdownMenuBox(
+                            expanded = expanded,
+                            onExpandedChange = { expanded = !expanded },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = "$yahooFetchInterval 秒",
+                                onValueChange = { },
+                                label = { Text("Yahoo 資料更新頻率") },
+                                readOnly = true,
+                                trailingIcon = {
+                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                                },
+                                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = expanded,
+                                onDismissRequest = { expanded = false },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                intervalOptions.forEach { interval ->
+                                    DropdownMenuItem(
+                                        text = { Text("$interval 秒") },
+                                        onClick = {
+                                            viewModel.setYahooFetchInterval(interval)
+                                            expanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("損益計算設定", style = MaterialTheme.typography.titleLarge)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("預先扣除賣出費用與稅金", modifier = Modifier.weight(1f))
+                            Switch(
+                                checked = preDeductSellFees,
+                                onCheckedChange = { viewModel.setPreDeductSellFees(it) }
                             )
                         }
                     }
                 }
             }
-        }
-        // Stock Data Update Section
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("股票資料更新", style = MaterialTheme.typography.titleLarge)
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { viewModel.updateStockListFromTwse() }, enabled = !isLoading) {
-                        Text("更新股票列表")
-                    }
-                    if (isLoading) {
-                        CircularProgressIndicator()
-                    }
-                    val updateTimeText = lastUpdateTime?.let {
-                        "(${formatTimestamp(it)})"
-                    } ?: "(預設列表)"
-                    Text(
-                        text = updateTimeText,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
 
-                Spacer(modifier = Modifier.height(16.dp))
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("手續費設定", style = MaterialTheme.typography.titleLarge)
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                val intervalOptions = listOf(10, 15, 30, 60)
-                var expanded by remember { mutableStateOf(false) }
+                        var feeDiscountText by remember { mutableStateOf(feeDiscount.toString()) }
+                        LaunchedEffect(feeDiscount) { feeDiscountText = feeDiscount.toString() }
+                        OutlinedTextField(
+                            value = feeDiscountText,
+                            onValueChange = {
+                                feeDiscountText = it
+                                it.toDoubleOrNull()?.let { discount -> viewModel.setFeeDiscount(discount) }
+                            },
+                            label = { Text("手續費折數 (例如 0.28)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth()
+                        )
 
-                ExposedDropdownMenuBox(
-                    expanded = expanded,
-                    onExpandedChange = { expanded = !expanded },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    OutlinedTextField(
-                        value = "$yahooFetchInterval 秒",
-                        onValueChange = { },
-                        label = { Text("Yahoo 資料更新頻率") },
-                        readOnly = true,
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
-                        },
-                        modifier = Modifier.menuAnchor().fillMaxWidth(),
-                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        intervalOptions.forEach { interval ->
-                            DropdownMenuItem(
-                                text = { Text("$interval 秒") },
-                                onClick = {
-                                    viewModel.setYahooFetchInterval(interval)
-                                    expanded = false
-                                }
-                            )
-                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        var minFeeRegularText by remember { mutableStateOf(minFeeRegular.toString()) }
+                        LaunchedEffect(minFeeRegular) { minFeeRegularText = minFeeRegular.toString() }
+                        OutlinedTextField(
+                            value = minFeeRegularText,
+                            onValueChange = {
+                                minFeeRegularText = it
+                                it.toIntOrNull()?.let { fee -> viewModel.setMinFeeRegular(fee) }
+                            },
+                            label = { Text("整股最低手續費 (元)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        var minFeeOddLotText by remember { mutableStateOf(minFeeOddLot.toString()) }
+                        LaunchedEffect(minFeeOddLot) { minFeeOddLotText = minFeeOddLot.toString() }
+                        OutlinedTextField(
+                            value = minFeeOddLotText,
+                            onValueChange = {
+                                minFeeOddLotText = it
+                                it.toIntOrNull()?.let { fee -> viewModel.setMinFeeOddLot(fee) }
+                            },
+                            label = { Text("零股最低手續費 (元)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }
-        }
 
-        // P&L Calculation Settings Section
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("損益計算設定", style = MaterialTheme.typography.titleLarge)
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("預先扣除賣出費用與稅金", modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = preDeductSellFees,
-                        onCheckedChange = { viewModel.setPreDeductSellFees(it) }
-                    )
-                }
-            }
-        }
-
-        // Fee Settings Section
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("手續費設定", style = MaterialTheme.typography.titleLarge)
-                Spacer(modifier = Modifier.height(16.dp))
-
-                var feeDiscountText by remember { mutableStateOf(feeDiscount.toString()) }
-                LaunchedEffect(feeDiscount) { feeDiscountText = feeDiscount.toString() }
-                OutlinedTextField(
-                    value = feeDiscountText,
-                    onValueChange = {
-                        feeDiscountText = it
-                        it.toDoubleOrNull()?.let { discount -> viewModel.setFeeDiscount(discount) }
-                    },
-                    label = { Text("手續費折數 (例如 0.28)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                var minFeeRegularText by remember { mutableStateOf(minFeeRegular.toString()) }
-                LaunchedEffect(minFeeRegular) { minFeeRegularText = minFeeRegular.toString() }
-                OutlinedTextField(
-                    value = minFeeRegularText,
-                    onValueChange = {
-                        minFeeRegularText = it
-                        it.toIntOrNull()?.let { fee -> viewModel.setMinFeeRegular(fee) }
-                    },
-                    label = { Text("整股最低手續費 (元)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                var minFeeOddLotText by remember { mutableStateOf(minFeeOddLot.toString()) }
-                LaunchedEffect(minFeeOddLot) { minFeeOddLotText = minFeeOddLot.toString() }
-                OutlinedTextField(
-                    value = minFeeOddLotText,
-                    onValueChange = {
-                        minFeeOddLotText = it
-                        it.toIntOrNull()?.let { fee -> viewModel.setMinFeeOddLot(fee) }
-                    },
-                    label = { Text("零股最低手續費 (元)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
+            item {
+                DataManagementSection(
+                    viewModel = viewModel,
+                    isLoading = isLoading,
+                    exportCsvLauncher = exportCsvLauncher,
+                    importCsvLauncher = importCsvLauncher,
+                    googleSignInAccount = googleSignInAccount,
+                    onSignInClick = { googleSignInLauncher.launch(googleSignInClient.signInIntent) }
                 )
             }
         }
-
-        DataManagementSection(
-            viewModel = viewModel,
-            isLoading = isLoading,
-            exportCsvLauncher = exportCsvLauncher,
-            importCsvLauncher = importCsvLauncher,
-            googleSignInAccount = googleSignInAccount,
-            onSignInClick = { googleSignInLauncher.launch(googleSignInClient.signInIntent) }
-        )
     }
 }
 
