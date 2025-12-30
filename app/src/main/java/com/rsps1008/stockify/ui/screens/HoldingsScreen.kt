@@ -81,7 +81,7 @@ fun HoldingsScreen(navController: NavController) {
             Image(
                 painter = painterResource(id = R.drawable.stockify),
                 contentDescription = "Stockify Logo",
-                modifier = Modifier.fillMaxWidth(0.35f)
+                modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(0.35f)
             )
             Spacer(modifier = Modifier.height(16.dp))
         }

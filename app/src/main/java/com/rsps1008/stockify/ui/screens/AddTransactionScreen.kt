@@ -190,12 +190,6 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
         it.name.contains(stockName, ignoreCase = true) || it.code.contains(stockName, ignoreCase = true)
     }
 
-    fun clearForm() {
-        stockName = ""
-        stockCode = ""
-        transactionType = "買進" // This will trigger the LaunchedEffect to reset other fields
-    }
-
     val onAddOrUpdateTransaction: () -> Unit = {
         viewModel.addOrUpdateTransaction(
             stockName = stockName,
@@ -293,25 +287,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
 
         when (transactionType) {
             "買進" -> {
-                LabeledOutlinedTextField(
-                    label = "買進價格",
-                    value = price,
-                    onValueChange = { price = it },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                LabeledOutlinedTextField(
-                    label = "買進股數",
-                    value = shares,
-                    onValueChange = { shares = it.filter { c -> c.isDigit() } },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // ★ 卡牌 UI（手續費 + 支出金額）
+                // 買進上面
                 androidx.compose.material3.Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.medium,
@@ -320,54 +296,59 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
                     )
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-
+                        LabeledOutlinedTextField(
+                            label = "買進價格",
+                            value = price,
+                            onValueChange = { price = it },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LabeledOutlinedTextField(
+                            label = "買進股數",
+                            value = shares,
+                            onValueChange = { shares = it.filter { c -> c.isDigit() } },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                // 買進下面
+                androidx.compose.material3.Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         // 手續費
                         Text(
                             text = "手續費",
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyLarge
                         )
                         Text(
                             text = if (fee > 0) fee.toInt().toString() else "-",
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
-
-                        androidx.compose.material3.Divider()
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
+                        androidx.compose.material3.HorizontalDivider()
+                        Spacer(modifier = Modifier.height(8.dp))
                         // 支出金額
                         Text(
                             text = "支出金額",
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyLarge
                         )
                         Text(
                             text = if (expense > 0) expense.toInt().toString() else "-",
-                            style = MaterialTheme.typography.bodyLarge
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(bottom = 12.dp)
                         )
+                        androidx.compose.material3.Divider()
                     }
                 }
             }
             "賣出" -> {
-                LabeledOutlinedTextField(
-                    label = "賣出價格",
-                    value = price,
-                    onValueChange = { price = it },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                LabeledOutlinedTextField(
-                    label = "賣出股數",
-                    value = shares,
-                    onValueChange = { shares = it.filter { c -> c.isDigit() } },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // ★ 賣出的手續費 + 稅 + 收入金額 卡牌
+                // 賣出上面
                 androidx.compose.material3.Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.medium,
@@ -376,43 +357,87 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
                     )
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-
+                        LabeledOutlinedTextField(
+                            label = "賣出價格",
+                            value = price,
+                            onValueChange = { price = it },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LabeledOutlinedTextField(
+                            label = "賣出股數",
+                            value = shares,
+                            onValueChange = { shares = it.filter { c -> c.isDigit() } },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                // ★ 賣出下面，賣出的手續費 + 稅 + 收入金額 卡牌
+                androidx.compose.material3.Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         // 手續費
-                        Text("手續費", style = MaterialTheme.typography.bodyMedium)
+                        Text("手續費", style = MaterialTheme.typography.bodyLarge)
                         Text(
                             text = if (fee > 0) fee.toInt().toString() else "-",
-                            style = MaterialTheme.typography.bodyLarge
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(bottom = 12.dp)
                         )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-                        androidx.compose.material3.Divider()
-                        Spacer(modifier = Modifier.height(12.dp))
-
+                        androidx.compose.material3.HorizontalDivider()
+                        Spacer(modifier = Modifier.height(8.dp))
                         // 交易稅
-                        Text("交易稅", style = MaterialTheme.typography.bodyMedium)
+                        Text("交易稅", style = MaterialTheme.typography.bodyLarge)
                         Text(
                             text = if (tax > 0) tax.toInt().toString() else "-",
-                            style = MaterialTheme.typography.bodyLarge
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(bottom = 12.dp)
                         )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-                        androidx.compose.material3.Divider()
-                        Spacer(modifier = Modifier.height(12.dp))
-
+                        androidx.compose.material3.HorizontalDivider()
+                        Spacer(modifier = Modifier.height(8.dp))
                         // 收入金額
-                        Text("收入金額", style = MaterialTheme.typography.bodyMedium)
+                        Text("收入金額", style = MaterialTheme.typography.bodyLarge)
                         Text(
                             text = if (income > 0) income.toInt().toString() else "-",
-                            style = MaterialTheme.typography.bodyLarge
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(bottom = 12.dp)
                         )
+                        androidx.compose.material3.HorizontalDivider()
                     }
                 }
             }
             "配息" -> {
-                LabeledOutlinedTextField(label = "每股股息(可省略)", value = cashDividend, onValueChange = { cashDividend = it }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                Spacer(modifier = Modifier.height(8.dp))
-                LabeledOutlinedTextField(label = "除息股數(可省略)", value = exDividendShares, onValueChange = { exDividendShares = it }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                Spacer(modifier = Modifier.height(8.dp))
+                //配息上面
+                androidx.compose.material3.Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        LabeledOutlinedTextField(
+                            label = "每股股息(可省略)",
+                            value = cashDividend,
+                            onValueChange = { cashDividend = it },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LabeledOutlinedTextField(
+                            label = "除息股數(可省略)",
+                            value = exDividendShares,
+                            onValueChange = { exDividendShares = it },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                //配息下面
                 androidx.compose.material3.Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.medium,
@@ -425,33 +450,49 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?) {
                             label = "配息手續費",
                             value = dividendFee,
                             onValueChange = { dividendFee = it },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         )
-                        LabeledOutlinedTextField(
-                            label = "股息總額",
-                            value = price,
-                            onValueChange = { price = it },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        androidx.compose.material3.HorizontalDivider()
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("股息總額", style = MaterialTheme.typography.bodyLarge)
+                        val amount = price.toIntOrNull() ?: 0
+                        Text(
+                            text = if (amount > 0) amount.toString() else "-",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(bottom = 12.dp)
                         )
+                        androidx.compose.material3.HorizontalDivider()
                     }
                 }
 
             }
             "配股" -> {
-                LabeledOutlinedTextField(
-                    label = "每股股票股利(可省略)",
-                    value = stockDividendRate,
-                    onValueChange = { stockDividendRate = it },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                LabeledOutlinedTextField(
-                    label = "除權股數(可省略)",
-                    value = exRightsShares,
-                    onValueChange = { exRightsShares = it },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+                //配股上面
+                androidx.compose.material3.Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        LabeledOutlinedTextField(
+                            label = "每股股票股利(可省略)",
+                            value = stockDividendRate,
+                            onValueChange = { stockDividendRate = it },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LabeledOutlinedTextField(
+                            label = "除權股數(可省略)",
+                            value = exRightsShares,
+                            onValueChange = { exRightsShares = it },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                //配股下面
                 androidx.compose.material3.Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.medium,
@@ -504,6 +545,30 @@ fun LabeledOutlinedTextField(
             modifier = Modifier.fillMaxWidth(),
             readOnly = readOnly,
             keyboardOptions = keyboardOptions
+        )
+    }
+}
+
+@Composable
+fun LabeledOutlinedTextFieldStyled(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    textStyle: androidx.compose.ui.text.TextStyle,
+    modifier: Modifier = Modifier,
+    readOnly: Boolean = false,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(text = label, style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(4.dp))
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+            readOnly = readOnly,
+            keyboardOptions = keyboardOptions,
+            textStyle = textStyle     // ★ 控制字體
         )
     }
 }
