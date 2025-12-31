@@ -70,6 +70,8 @@ class RealtimeStockDataService(
     }
 
     suspend fun fetchAllStockInfo(isContinuous: Boolean, forceSave: Boolean = false) {
+        var successCount = 0
+        var fallbackCount = 0
         val stocks = stockDao.getHeldStocks().first()
         if (stocks.isEmpty()) return
 
@@ -81,16 +83,15 @@ class RealtimeStockDataService(
         var needToast = false
 
         for (code in stockCodes) {
-            // 先抓主要來源
             var info = primaryFetcher.fetchStockInfo(code)
 
-            // 單一檔 TWSE 失敗 → fallback Yahoo
             if (info == null) {
-                needToast = true
+                fallbackCount++
                 Log.e("RealtimeStockDataService", "Primary failed for $code → fallback")
                 info = secondaryFetcher.fetchStockInfo(code)
 
                 if (info != null) {
+                    successCount++
                     Log.d(
                         "RealtimeStockDataService",
                         "Fallback succeeded for $code using ${secondaryFetcher.javaClass.simpleName}"
@@ -98,29 +99,39 @@ class RealtimeStockDataService(
                 } else {
                     Log.e("RealtimeStockDataService", "Fallback also failed for $code")
                 }
+            } else {
+                successCount++
             }
 
-            // 更新到 map
             info?.let { updatedInfos[code] = it }
         }
 
-        if (needToast) {
-            val shouldNotifyRepeatedly = settingsDataStore.notifyFallbackRepeatedlyFlow.first()
+        val total = stockCodes.size
 
-            val shouldShowNotification = if (shouldNotifyRepeatedly) {
-                true
-            } else {
-                !hasNotifiedAboutFallback
-            }
+        if (fallbackCount > 0) {
+            val shouldNotifyRepeatedly = settingsDataStore.notifyFallbackRepeatedlyFlow.first()
+            val shouldShowNotification = shouldNotifyRepeatedly || !hasNotifiedAboutFallback
 
             if (shouldShowNotification) {
+                val message = when {
+                    successCount == 0 ->
+                        "主要來源與備援來源皆無法取得資料"
+
+                    fallbackCount == total ->
+                        "主要來源無法取得資料，已全部改用備援來源"
+
+                    else ->
+                        "部分股票主要來源無法取得資料，已自動使用備援來源"
+                }
+
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
                     Toast.makeText(
                         applicationContext,
-                        "部分股票主要來源無法取得資料，已自動使用備援來源",
+                        message,
                         Toast.LENGTH_SHORT
                     ).show()
                 }
+
                 if (!shouldNotifyRepeatedly) {
                     hasNotifiedAboutFallback = true
                 }
