@@ -15,4 +15,4 @@ val StockGain = Color(0xFFD32F2F) // A clearer Red for gains
 val StockLoss = Color(0xFF388E3C) // A clearer Green for losses
 
 val StockGainDark = Color(0xFFFF1234) // Lighter Red for dark theme
-val StockLossDark = Color(0xFF00FF00) // Lighter Green for dark theme
+val StockLossDark = Color(0xFF4CAF50) // Lighter Green for dark theme

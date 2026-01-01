@@ -8,6 +8,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.rsps1008.stockify.ui.screens.AddTransactionScreen
+import com.rsps1008.stockify.ui.screens.DataManagementScreen
 import com.rsps1008.stockify.ui.screens.HoldingsScreen
 import com.rsps1008.stockify.ui.screens.SettingsScreen
 import com.rsps1008.stockify.ui.screens.StockDetailScreen
@@ -42,6 +43,9 @@ fun NavGraph(
         }
         composable(Screen.Settings.route) {
             SettingsScreen()
+        }
+        composable(Screen.DataManagement.route) {
+            DataManagementScreen()
         }
         composable(
             route = Screen.StockDetail.route,
