@@ -116,4 +116,10 @@ dependencies {
     implementation(libs.google.api.client.android)   // 提供 GoogleAccountCredential
     implementation(libs.google.api.services.drive)   // 提供 Drive API 服務
     implementation(libs.google.http.client.android)
+
+    //http-client
+    implementation("io.ktor:ktor-client-core:2.3.7")
+    implementation("io.ktor:ktor-client-cio:2.3.7")
+    implementation("io.ktor:ktor-client-content-negotiation:2.3.7")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.7")
 }

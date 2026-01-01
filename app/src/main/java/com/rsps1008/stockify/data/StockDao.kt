@@ -66,4 +66,21 @@ interface StockDao {
 
     @Query("DELETE FROM stock_transactions WHERE 股號 = :stockCode")
     suspend fun deleteTransactionsByStockCode(stockCode: String)
+
+    @Query("""
+    SELECT IFNULL(
+        CAST(SUM(
+            CASE
+                WHEN 交易 = '買進' THEN 買進股數
+                WHEN 交易 = '賣出' THEN -賣出股數
+                WHEN 交易 = '配股' THEN 配發股數
+                ELSE 0
+            END
+        ) AS REAL),
+        0
+    )
+    FROM stock_transactions
+    WHERE 股號 = :stockCode
+""")
+    suspend fun getHoldingShares(stockCode: String): Double
 }

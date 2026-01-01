@@ -1,5 +1,6 @@
 package com.rsps1008.stockify.ui.screens
 
+import android.util.Log
 import android.widget.Toast
 import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.Arrangement
@@ -40,8 +41,10 @@ import com.rsps1008.stockify.StockifyApplication
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.ui.Alignment
 import com.rsps1008.stockify.ui.viewmodel.AddTransactionViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
+import com.rsps1008.stockify.data.dividend.YahooDividendRepository
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -57,7 +60,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             settingsDataStore = application.settingsDataStore,
             transactionId = transactionId,
             application = application,
-            realtimeStockDataService = application.realtimeStockDataService
+            realtimeStockDataService = application.realtimeStockDataService,
+            dividendRepository = YahooDividendRepository(application.httpClient)
         )
     )
     val context = LocalContext.current
@@ -423,6 +427,31 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                 }
             }
             "配息" -> {
+                val context = LocalContext.current
+
+                Box(
+                    modifier = Modifier.fillMaxWidth()   // 外層滿版才能置中
+                ) {
+                    Button(
+                        onClick = {
+                            if (stockCode.isBlank()) {
+                                Toast.makeText(context, "沒有股票代號", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
+
+                            viewModel.autoFillDividendCashFromYahooUsingHolding(stockCode) { perShare, holdingShares ->
+                                cashDividend = perShare.toString()
+                                exDividendShares = holdingShares.roundToInt().toString()
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth(0.6f) // 寬度 60%
+                            .align(Alignment.Center)     // ★ 置中
+                    ) {
+                        Text("自動帶入最近一次配息")
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
                 //配息上面
                 androidx.compose.material3.Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -476,6 +505,23 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
 
             }
             "配股" -> {
+                Button(
+                    onClick = {
+                        if (stockCode.isBlank()) {
+                            Toast.makeText(context, "沒有股票代號", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+
+                        viewModel.autoFillDividendStockFromYahooUsingHolding(stockCode) { rate, holding->
+                            stockDividendRate = rate.toString()
+                            exRightsShares = holding.roundToInt().toString()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(0.6f).align(Alignment.CenterHorizontally)
+                ) {
+                    Text("自動帶入最近一次配股")
+                }
+                Spacer(modifier = Modifier.height(10.dp))
                 //配股上面
                 androidx.compose.material3.Card(
                     modifier = Modifier.fillMaxWidth(),

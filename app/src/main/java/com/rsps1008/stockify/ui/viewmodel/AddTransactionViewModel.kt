@@ -1,12 +1,15 @@
 package com.rsps1008.stockify.ui.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.firstOrNull
 import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.StockDao
 import com.rsps1008.stockify.data.StockTransaction
+import com.rsps1008.stockify.data.dividend.YahooDividendRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -15,6 +18,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -22,7 +27,8 @@ class AddTransactionViewModel(
     private val stockDao: StockDao,
     private val settingsDataStore: SettingsDataStore,
     private val transactionId: Int?,
-    private val realtimeStockDataService: RealtimeStockDataService
+    private val realtimeStockDataService: RealtimeStockDataService,
+    private val dividendRepository: YahooDividendRepository
 ) : ViewModel() {
 
     private val _transactionToEdit = MutableStateFlow<StockTransaction?>(null)
@@ -52,6 +58,64 @@ class AddTransactionViewModel(
                     _income.value = tx.income
                 }
             }
+        }
+    }
+
+    //除息
+    fun autoFillDividendCashFromYahooUsingHolding(
+        stockCode: String,
+        onResult: (cashDividend: Double, holdingShares: Double) -> Unit
+    ) {
+        Log.d("DividendAutoFill", "enter, stockCode=$stockCode")
+
+        viewModelScope.launch {
+            Log.d("DividendAutoFill", "coroutine launched")
+
+            try {
+                val holdingShares = stockDao.getHoldingShares(stockCode)
+                Log.d("DividendAutoFill", "holdingShares=$holdingShares")
+                if (holdingShares <= 0) {
+                    Log.d("DividendAutoFill", "holdingShares <= 0, return")
+                    return@launch
+                }
+
+                val dividendPerShare = dividendRepository.fetchLatestCashDividend(stockCode)
+                Log.d("DividendAutoFill", "dividendPerShare=$dividendPerShare")
+                if (dividendPerShare == null) {
+                    Log.d("DividendAutoFill", "dividendPerShare is null, return")
+                    return@launch
+                }
+
+                onResult(dividendPerShare, holdingShares)
+            } catch (e: Exception) {
+                Log.e("DividendAutoFill", "autoFill failed", e)
+            }
+        }
+    }
+
+    //除權
+    fun autoFillDividendStockFromYahooUsingHolding(
+        stockCode: String,
+        onResult: (stockDividendRate: Double, holdingShares: Double) -> Unit
+    ) {
+        Log.d("DividendAutoFill", "enter, stockCode=$stockCode")
+        viewModelScope.launch {
+
+            val holdingShares = stockDao.getHoldingShares(stockCode)
+            Log.d("DividendAutoFill", "holdingShares=$holdingShares")
+            if (holdingShares <= 0) {
+                Log.d("DividendAutoFill", "holdingShares <= 0, return")
+                return@launch
+            }
+
+            val dividendRate = dividendRepository.fetchLatestStockDividend(stockCode)
+            Log.d("DividendAutoFill", "dividendRate=$dividendRate")
+            if (dividendRate == null){
+                Log.d("DividendAutoFill", "dividendRate is null, return")
+                return@launch
+            }
+
+            onResult(dividendRate, holdingShares)
         }
     }
 

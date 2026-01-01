@@ -7,6 +7,7 @@ import com.rsps1008.stockify.data.OfflineStockRepository
 import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.StockDao
+import com.rsps1008.stockify.data.dividend.YahooDividendRepository
 
 class ViewModelFactory(
     private val stockDao: StockDao,
@@ -14,7 +15,8 @@ class ViewModelFactory(
     private val realtimeStockDataService: RealtimeStockDataService? = null,
     private val settingsDataStore: SettingsDataStore? = null,
     private val stockCode: String? = null,
-    private val transactionId: Int? = null
+    private val transactionId: Int? = null,
+    private val dividendRepository: YahooDividendRepository? = null
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return when {
@@ -27,8 +29,9 @@ class ViewModelFactory(
             modelClass.isAssignableFrom(AddTransactionViewModel::class.java) -> {
                 requireNotNull(settingsDataStore) { "settingsDataStore is required for AddTransactionViewModel" }
                 requireNotNull(realtimeStockDataService) { "realtimeStockDataService is required for AddTransactionViewModel" }
+                requireNotNull(dividendRepository) { "dividendRepository is required for AddTransactionViewModel" }
                 @Suppress("UNCHECKED_CAST")
-                AddTransactionViewModel(stockDao, settingsDataStore, transactionId, realtimeStockDataService) as T
+                AddTransactionViewModel(stockDao, settingsDataStore, transactionId, realtimeStockDataService, dividendRepository) as T
             }
             modelClass.isAssignableFrom(TransactionsViewModel::class.java) -> {
                 @Suppress("UNCHECKED_CAST")
