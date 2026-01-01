@@ -3,7 +3,6 @@ package com.rsps1008.stockify.ui.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.flow.firstOrNull
 import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.Stock
@@ -45,6 +44,9 @@ class AddTransactionViewModel(
 
     private val _income = MutableStateFlow(0.0)
     val income = _income.asStateFlow()
+
+    val defaultDividendFee: StateFlow<Int> = settingsDataStore.dividendFeeFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 10)
 
     init {
         transactionId?.let {

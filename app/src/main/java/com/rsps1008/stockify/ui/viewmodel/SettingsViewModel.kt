@@ -80,6 +80,9 @@ class SettingsViewModel(
     val minFeeOddLot: StateFlow<Int> = settingsDataStore.minFeeOddLotFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 1)
 
+    val dividendFee: StateFlow<Int> = settingsDataStore.dividendFeeFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 10)
+
     val preDeductSellFees: StateFlow<Boolean> = settingsDataStore.preDeductSellFeesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), true)
 
@@ -340,6 +343,12 @@ class SettingsViewModel(
     fun setMinFeeOddLot(fee: Int) {
         viewModelScope.launch {
             settingsDataStore.setMinFeeOddLot(fee)
+        }
+    }
+
+    fun setDividendFee(fee: Int) {
+        viewModelScope.launch {
+            settingsDataStore.setDividendFee(fee)
         }
     }
 

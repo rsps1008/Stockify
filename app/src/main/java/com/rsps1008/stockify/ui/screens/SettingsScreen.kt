@@ -86,6 +86,7 @@ fun SettingsScreen() {
     val feeDiscount by viewModel.feeDiscount.collectAsState()
     val minFeeRegular by viewModel.minFeeRegular.collectAsState()
     val minFeeOddLot by viewModel.minFeeOddLot.collectAsState()
+    val dividendFee by viewModel.dividendFee.collectAsState()
     val preDeductSellFees by viewModel.preDeductSellFees.collectAsState()
     val yahooFetchInterval by viewModel.yahooFetchInterval.collectAsState()
     val theme by viewModel.theme.collectAsState()
@@ -413,6 +414,21 @@ fun SettingsScreen() {
                                 it.toIntOrNull()?.let { fee -> viewModel.setMinFeeOddLot(fee) }
                             },
                             label = { Text("零股最低手續費 (元)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        var dividendFeeText by remember { mutableStateOf(dividendFee.toString()) }
+                        LaunchedEffect(dividendFee) { dividendFeeText = dividendFee.toString() }
+                        OutlinedTextField(
+                            value = dividendFeeText,
+                            onValueChange = {
+                                dividendFeeText = it
+                                it.toIntOrNull()?.let { fee -> viewModel.setDividendFee(fee) }
+                            },
+                            label = { Text("除息手續費 (元)") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.fillMaxWidth()
                         )

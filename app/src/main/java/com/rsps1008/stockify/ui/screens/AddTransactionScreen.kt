@@ -71,7 +71,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     val tax by viewModel.tax.collectAsState()
     val expense by viewModel.expense.collectAsState()
     val income by viewModel.income.collectAsState()
-    var dividendFee by remember { mutableStateOf("10") }
+    val defaultDividendFee by viewModel.defaultDividendFee.collectAsState()
+    var dividendFee by remember { mutableStateOf("") }
 
     var stockName by remember { mutableStateOf("") }
     var stockCode by remember { mutableStateOf("") }
@@ -148,7 +149,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     }
 
     // Reset fields when transaction type changes for a new transaction
-    LaunchedEffect(transactionType) {
+    LaunchedEffect(transactionType, defaultDividendFee) {
         if (transactionId == null) { // Only for new transactions
             price = ""
             shares = ""
@@ -156,7 +157,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             exDividendShares = ""
             stockDividendRate = ""
             exRightsShares = ""
-            dividendFee = "10"
+            dividendFee = defaultDividendFee.toString()
         }
     }
 

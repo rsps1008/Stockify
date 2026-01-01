@@ -26,6 +26,7 @@ class SettingsDataStore(val context: Context) {
     private val feeDiscountKey = doublePreferencesKey("fee_discount")
     private val minFeeRegularKey = intPreferencesKey("min_fee_regular")
     private val minFeeOddLotKey = intPreferencesKey("min_fee_odd_lot")
+    private val dividendFeeKey = intPreferencesKey("dividend_fee")
     private val preDeductSellFeesKey = booleanPreferencesKey("pre_deduct_sell_fees")
     private val realtimeStockInfoCacheKey = stringPreferencesKey("realtime_stock_info_cache")
     private val themeKey = stringPreferencesKey("theme")
@@ -60,6 +61,10 @@ class SettingsDataStore(val context: Context) {
     val minFeeOddLotFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
             preferences[minFeeOddLotKey] ?: 1
+        }
+    val dividendFeeFlow: Flow<Int> = context.dataStore.data
+        .map { preferences ->
+            preferences[dividendFeeKey] ?: 10
         }
     
     val preDeductSellFeesFlow: Flow<Boolean> = context.dataStore.data
@@ -122,6 +127,12 @@ class SettingsDataStore(val context: Context) {
     suspend fun setMinFeeOddLot(fee: Int) {
         context.dataStore.edit {
             it[minFeeOddLotKey] = fee
+        }
+    }
+    
+    suspend fun setDividendFee(fee: Int) {
+        context.dataStore.edit {
+            it[dividendFeeKey] = fee
         }
     }
 
