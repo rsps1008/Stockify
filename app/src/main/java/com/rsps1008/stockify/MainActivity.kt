@@ -1,12 +1,10 @@
 package com.rsps1008.stockify
 
 import android.os.Bundle
-import android.view.Surface
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -24,8 +21,6 @@ import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.BottomAppBar
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -44,8 +39,6 @@ import androidx.navigation.compose.rememberNavController
 import com.rsps1008.stockify.ui.navigation.NavGraph
 import com.rsps1008.stockify.ui.navigation.Screen
 import com.rsps1008.stockify.ui.theme.StockifyTheme
-import kotlinx.coroutines.flow.collect
-import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
@@ -103,9 +96,9 @@ fun MainScreen() {
                                 imageVector = Icons.Filled.Assessment,
                                 contentDescription = "Holdings",
                                 tint = if (currentDestination?.hierarchy?.any { it.route == Screen.Holdings.route } == true) {
-                                    androidx.compose.material3.MaterialTheme.colorScheme.primary
+                                    MaterialTheme.colorScheme.primary
                                 } else {
-                                    androidx.compose.material3.MaterialTheme.colorScheme.onSurface
+                                    MaterialTheme.colorScheme.onSurface
                                 }
                             )
                         }
@@ -123,9 +116,9 @@ fun MainScreen() {
                                 imageVector = Icons.Filled.History,
                                 contentDescription = "Transactions",
                                 tint = if (currentDestination?.hierarchy?.any { it.route == Screen.Transactions.route } == true) {
-                                    androidx.compose.material3.MaterialTheme.colorScheme.primary
+                                    MaterialTheme.colorScheme.primary
                                 } else {
-                                    androidx.compose.material3.MaterialTheme.colorScheme.onSurface
+                                    MaterialTheme.colorScheme.onSurface
                                 }
                             )
                         }
@@ -159,9 +152,9 @@ fun MainScreen() {
                                 imageVector = Icons.Filled.CloudUpload,
                                 contentDescription = "Data Management",
                                 tint = if (currentDestination?.hierarchy?.any { it.route == Screen.DataManagement.route } == true) {
-                                    androidx.compose.material3.MaterialTheme.colorScheme.primary
+                                    MaterialTheme.colorScheme.primary
                                 } else {
-                                    androidx.compose.material3.MaterialTheme.colorScheme.onSurface
+                                    MaterialTheme.colorScheme.onSurface
                                 }
                             )
                         }
@@ -179,9 +172,9 @@ fun MainScreen() {
                                 imageVector = Icons.Filled.Settings,
                                 contentDescription = "Settings",
                                 tint = if (currentDestination?.hierarchy?.any { it.route == Screen.Settings.route } == true) {
-                                    androidx.compose.material3.MaterialTheme.colorScheme.primary
+                                    MaterialTheme.colorScheme.primary
                                 } else {
-                                    androidx.compose.material3.MaterialTheme.colorScheme.onSurface
+                                    MaterialTheme.colorScheme.onSurface
                                 }
                             )
                         }
