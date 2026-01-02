@@ -440,10 +440,23 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                                 return@Button
                             }
 
-                            viewModel.autoFillDividendCashFromYahooUsingHolding(stockCode) { perShare, holdingShares ->
-                                cashDividend = perShare.toString()
-                                exDividendShares = holdingShares.roundToInt().toString()
-                            }
+                            viewModel.autoFillDividendCashFromYahooUsingHolding(
+                                stockCode,
+                                onResult = { perShare, holdingShares, dateStr ->
+                                    cashDividend = perShare.toString()
+                                    exDividendShares = holdingShares.roundToInt().toString()
+
+                                    dateStr?.let {
+                                        val sdf = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault())
+                                        date = sdf.parse(it)?.time ?: date
+                                    }
+
+                                    Toast.makeText(context, "已帶入最近一次配息（${dateStr ?: "-"}）", Toast.LENGTH_SHORT).show()
+                                },
+                                onFail = {
+                                    Toast.makeText(context, "找不到最近一次配息資料", Toast.LENGTH_SHORT).show()
+                                }
+                            )
                         },
                         modifier = Modifier
                             .fillMaxWidth(0.6f) // 寬度 60%
@@ -513,10 +526,23 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             return@Button
                         }
 
-                        viewModel.autoFillDividendStockFromYahooUsingHolding(stockCode) { rate, holding->
-                            stockDividendRate = rate.toString()
-                            exRightsShares = holding.roundToInt().toString()
-                        }
+                        viewModel.autoFillDividendStockFromYahooUsingHolding(
+                            stockCode,
+                            onResult = { rate, holdingShares, dateStr ->
+                                stockDividendRate = rate.toString()
+                                exRightsShares = holdingShares.roundToInt().toString()
+
+                                dateStr?.let {
+                                    val sdf = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault())
+                                    date = sdf.parse(it)?.time ?: date
+                                }
+
+                                Toast.makeText(context, "已帶入最近一次配股（${dateStr ?: "-"}）", Toast.LENGTH_SHORT).show()
+                            },
+                            onFail = {
+                                Toast.makeText(context, "找不到最近一次配股資料", Toast.LENGTH_SHORT).show()
+                            }
+                        )
                     },
                     modifier = Modifier.fillMaxWidth(0.6f).align(Alignment.CenterHorizontally)
                 ) {

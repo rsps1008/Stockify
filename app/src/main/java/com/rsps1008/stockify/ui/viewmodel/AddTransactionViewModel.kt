@@ -66,31 +66,26 @@ class AddTransactionViewModel(
     //除息
     fun autoFillDividendCashFromYahooUsingHolding(
         stockCode: String,
-        onResult: (cashDividend: Double, holdingShares: Double) -> Unit
+        onResult: (cashDividend: Double, holdingShares: Double, dateStr: String?) -> Unit,
+        onFail: () -> Unit
     ) {
-        Log.d("DividendAutoFill", "enter, stockCode=$stockCode")
-
         viewModelScope.launch {
-            Log.d("DividendAutoFill", "coroutine launched")
-
             try {
                 val holdingShares = stockDao.getHoldingShares(stockCode)
-                Log.d("DividendAutoFill", "holdingShares=$holdingShares")
                 if (holdingShares <= 0) {
-                    Log.d("DividendAutoFill", "holdingShares <= 0, return")
+                    onFail()
                     return@launch
                 }
 
-                val dividendPerShare = dividendRepository.fetchLatestCashDividend(stockCode)
-                Log.d("DividendAutoFill", "dividendPerShare=$dividendPerShare")
-                if (dividendPerShare == null) {
-                    Log.d("DividendAutoFill", "dividendPerShare is null, return")
+                val result = dividendRepository.fetchLatestCashDividend(stockCode)
+                if (result == null) {
+                    onFail()
                     return@launch
                 }
 
-                onResult(dividendPerShare, holdingShares)
+                onResult(result.amount, holdingShares, result.date)
             } catch (e: Exception) {
-                Log.e("DividendAutoFill", "autoFill failed", e)
+                onFail()
             }
         }
     }
@@ -98,28 +93,30 @@ class AddTransactionViewModel(
     //除權
     fun autoFillDividendStockFromYahooUsingHolding(
         stockCode: String,
-        onResult: (stockDividendRate: Double, holdingShares: Double) -> Unit
+        onResult: (rate: Double, holdingShares: Double, dateStr: String?) -> Unit,
+        onFail: () -> Unit
     ) {
-        Log.d("DividendAutoFill", "enter, stockCode=$stockCode")
         viewModelScope.launch {
+            try {
+                val holdingShares = stockDao.getHoldingShares(stockCode)
+                if (holdingShares <= 0) {
+                    onFail()
+                    return@launch
+                }
 
-            val holdingShares = stockDao.getHoldingShares(stockCode)
-            Log.d("DividendAutoFill", "holdingShares=$holdingShares")
-            if (holdingShares <= 0) {
-                Log.d("DividendAutoFill", "holdingShares <= 0, return")
-                return@launch
+                val result = dividendRepository.fetchLatestStockDividend(stockCode)
+                if (result == null) {
+                    onFail()
+                    return@launch
+                }
+
+                onResult(result.amount, holdingShares, result.date)
+            } catch (e: Exception) {
+                onFail()
             }
-
-            val dividendRate = dividendRepository.fetchLatestStockDividend(stockCode)
-            Log.d("DividendAutoFill", "dividendRate=$dividendRate")
-            if (dividendRate == null){
-                Log.d("DividendAutoFill", "dividendRate is null, return")
-                return@launch
-            }
-
-            onResult(dividendRate, holdingShares)
         }
     }
+
 
     val stocks: StateFlow<List<Stock>> = stockDao.getAllStocks()
         .stateIn(

@@ -1,10 +1,15 @@
 package com.rsps1008.stockify.data
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
 import android.os.Handler
 import android.os.Looper
+import io.ktor.client.HttpClient
 import android.widget.Toast
+import io.ktor.client.call.body
+import io.ktor.client.engine.cio.CIO
+import io.ktor.client.request.get
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -13,22 +18,22 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import java.time.DayOfWeek
+import kotlinx.serialization.json.Json
+import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 
 class RealtimeStockDataService(
     private val stockDao: StockDao,
     private val settingsDataStore: SettingsDataStore,
     private val applicationContext: Context,
-    val lastUpdated: Long = System.currentTimeMillis()
 ) {
     private val _realtimeStockInfo = MutableStateFlow<Map<String, RealtimeStockInfo>>(emptyMap())
     val realtimeStockInfo: StateFlow<Map<String, RealtimeStockInfo>> = _realtimeStockInfo.asStateFlow()
@@ -43,6 +48,12 @@ class RealtimeStockDataService(
 
     init {
         startFetching()
+    }
+
+    private val client = HttpClient(CIO) {
+        engine {
+            requestTimeout = 5000
+        }
     }
 
     data class FetchResult(
@@ -193,15 +204,53 @@ class RealtimeStockDataService(
         }
     }
 
-    private fun isTaiwanMarketOpen(): Boolean {
+    private suspend fun isTaiwanMarketOpen(): Boolean {
         val taipeiZone = ZoneId.of("Asia/Taipei")
         val now = ZonedDateTime.now(taipeiZone)
-        val day = now.dayOfWeek
-        val t = now.toLocalTime()
+        val date = now.toLocalDate()
+        val time = now.toLocalTime()
 
-        val weekday = day in DayOfWeek.MONDAY..DayOfWeek.FRIDAY
-        val inTime = t.isAfter(LocalTime.of(8, 45)) && t.isBefore(LocalTime.of(13, 35))
+        // 1. 非交易時間
+        val inTime = time.isAfter(LocalTime.of(9, 0)) && time.isBefore(LocalTime.of(13, 30))
+        if (!inTime) return false
 
-        return weekday && inTime
+        // 2. 檢查是否是假日（讀取 20XX.json）
+        if (isTaiwanHoliday(date)) return false
+
+        return true
     }
+
+    @SuppressLint("UnsafeOptInUsageError")
+    @kotlinx.serialization.Serializable
+    data class TaiwanHolidayItem(
+        val date: String,
+        val week: String,
+        val isHoliday: Boolean,
+        val description: String
+    )
+
+    private suspend fun isTaiwanHoliday(date: LocalDate): Boolean {
+        val year = date.year
+
+        val url = "https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/${year}.json"
+
+        return try {
+            val json = client.get(url).body<String>()
+            val list = Json.decodeFromString<List<TaiwanHolidayItem>>(json)
+            val today = date.format(DateTimeFormatter.ofPattern("yyyyMMdd"))
+            val item = list.find { it.date == today }
+            Log.d(
+                "RealtimeStockDataService",
+                "json假日資料 → ${item?.isHoliday} 假日"
+            )
+            item?.isHoliday == true
+        } catch (e: Exception) {
+            Log.e(
+                "RealtimeStockDataService",
+                "若抓不到假日資料 → 視為非假日"
+            )
+            false   // 若抓不到資料 → 視為非假日（保守作法）
+        }
+    }
+
 }

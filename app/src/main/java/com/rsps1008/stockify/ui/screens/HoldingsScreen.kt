@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -54,6 +53,7 @@ import com.rsps1008.stockify.ui.theme.StockifyAppTheme
 import com.rsps1008.stockify.ui.viewmodel.HoldingsViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import kotlin.math.abs
+import androidx.compose.foundation.layout.Box
 
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -68,6 +68,14 @@ fun HoldingsScreen(navController: NavController) {
         )
     )
     val uiState by viewModel.uiState.collectAsState()
+
+    // ★ 從 application 的 realtimeStockDataService 取得即時股價 Map
+    val realtimeMap by application.realtimeStockDataService.realtimeStockInfo.collectAsState()
+    val firstInfo = realtimeMap.values.firstOrNull()
+    val lastUpdatedText = firstInfo?.lastUpdated?.let {
+        java.text.SimpleDateFormat("MM/dd HH:mm:ss", java.util.Locale.getDefault())
+            .format(java.util.Date(it))
+    } ?: "--:--"
 
     Column(modifier = Modifier.fillMaxSize()) {
 
@@ -93,16 +101,15 @@ fun HoldingsScreen(navController: NavController) {
                 .padding(horizontal = 16.dp)
         ) {
             item {
-                SummarySection(uiState)
+                // ★ 改成傳時間字串，不再把 viewModel 丟進去
+                SummarySection(uiState, lastUpdatedText)
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // ★ sticky header
             stickyHeader {
                 HoldingsListHeaderSticky()
             }
 
-            // ★ 列表
             items(uiState.holdings) { holding ->
                 HoldingCard(holding, navController)
             }
@@ -126,66 +133,121 @@ fun HoldingsListHeaderSticky() {
 }
 
 @Composable
-fun SummarySection(uiState: HoldingsUiState) {
-    val dailyPlColor = if (uiState.dailyPL >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
-    val cumulativePlColor = if (uiState.cumulativePL >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
+fun SummarySection(uiState: HoldingsUiState, lastUpdatedText: String) {
+
     var showMarketValue by remember { mutableStateOf(true) }
 
+    val dailyPlColor =
+        if (uiState.dailyPL >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
+
+    val cumulativePlColor =
+        if (uiState.cumulativePL >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
+
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("累積損益", style = MaterialTheme.typography.bodySmall)
-            Row {
-                Text(
-                    text = String.format("%,.0f", uiState.cumulativePL),
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = cumulativePlColor,
-                    modifier = Modifier.alignByBaseline()
-                )
-                Spacer(modifier = Modifier.padding(horizontal = 4.dp))
-                Text(
-                    text = String.format("%+.2f%%", uiState.cumulativePLPercentage),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = cumulativePlColor,
-                    modifier = Modifier.alignByBaseline()
-                )
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            Row {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "持股日損益", style = MaterialTheme.typography.bodySmall)
-                    Text(text = String.format("%,.0f", abs(uiState.dailyPL)), style = MaterialTheme.typography.bodyLarge, color = dailyPlColor)
-                }
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) { showMarketValue = !showMarketValue }
-                ) {
+        Box(Modifier.fillMaxWidth()) {
+
+            // 右上角顯示更新時間
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+            ) {
+                AnimatedContent(
+                    targetState = lastUpdatedText,
+                    transitionSpec = {
+                        fadeIn() togetherWith fadeOut()
+                    }
+                ) { time ->
                     Text(
-                        text = buildAnnotatedString {
-                            withStyle(style = SpanStyle(fontWeight = if (showMarketValue) FontWeight.Bold else FontWeight.Normal)) {
-                                append("持股市值")
-                            }
-                            append("/")
-                            withStyle(style = SpanStyle(fontWeight = if (!showMarketValue) FontWeight.Bold else FontWeight.Normal)) {
-                                append("成本")
-                            }
-                        },
-                        style = MaterialTheme.typography.bodySmall
+                        text = time,
+                        fontSize = 9.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    val valueToShow = if (showMarketValue) uiState.marketValue else uiState.totalCost
-                    Text(text = String.format("%,.0f", valueToShow), style = MaterialTheme.typography.bodyLarge)
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "股息收入", style = MaterialTheme.typography.bodySmall)
-                    Text(text = String.format("%,.0f", uiState.dividendIncome), style = MaterialTheme.typography.bodyLarge)
+            }
+
+            Column(Modifier.padding(16.dp)) {
+
+                Text("累積損益", style = MaterialTheme.typography.bodySmall)
+
+                Row {
+                    Text(
+                        text = String.format("%,.0f", uiState.cumulativePL),
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = cumulativePlColor,
+                        modifier = Modifier.alignByBaseline()
+                    )
+
+                    Spacer(modifier = Modifier.padding(horizontal = 4.dp))
+
+                    Text(
+                        text = String.format("%+.2f%%", uiState.cumulativePLPercentage),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = cumulativePlColor,
+                        modifier = Modifier.alignByBaseline()
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row {
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("持股日損益", style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            String.format("%,.0f", kotlin.math.abs(uiState.dailyPL)),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = dailyPlColor
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { showMarketValue = !showMarketValue }
+                    ) {
+                        Text(
+                            text = buildAnnotatedString {
+                                withStyle(
+                                    style = SpanStyle(
+                                        fontWeight = if (showMarketValue) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                ) { append("持股市值") }
+
+                                append("/")
+
+                                withStyle(
+                                    style = SpanStyle(
+                                        fontWeight = if (!showMarketValue) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                ) { append("成本") }
+                            },
+                            style = MaterialTheme.typography.bodySmall
+                        )
+
+                        val value = if (showMarketValue) uiState.marketValue else uiState.totalCost
+                        Text(
+                            String.format("%,.0f", value),
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("股息收入", style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            String.format("%,.0f", uiState.dividendIncome),
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
                 }
             }
         }
     }
 }
+
 
 @Composable
 fun HoldingsListHeader() {
