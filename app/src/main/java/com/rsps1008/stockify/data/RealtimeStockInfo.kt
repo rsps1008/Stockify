@@ -8,5 +8,6 @@ import kotlinx.serialization.Serializable
 data class RealtimeStockInfo(
     val currentPrice: Double,
     val change: Double,
-    val changePercent: Double
+    val changePercent: Double,
+    val lastUpdated: Long = System.currentTimeMillis()
 )

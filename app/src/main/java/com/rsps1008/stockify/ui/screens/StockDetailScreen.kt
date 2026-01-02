@@ -1,5 +1,14 @@
 package com.rsps1008.stockify.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.layout.FirstBaseline
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -17,6 +27,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -29,9 +41,12 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -119,6 +134,8 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
         ) {
             holdingInfo?.let { StockDetailSummary(it) }
             Spacer(modifier = Modifier.height(16.dp))
+            RealtimePriceRow(stockCode, viewModel)
+            Spacer(modifier = Modifier.height(8.dp))
             TransactionListHeader()
             TransactionList(transactions, navController)
         }
@@ -133,19 +150,23 @@ private fun StockDetailSummary(holdingInfo: HoldingInfo) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("累積損益", style = MaterialTheme.typography.bodySmall)
-            Row {
-                Text(
+            Row(verticalAlignment = Alignment.Bottom) {
+
+                // 大字（累積損益）
+                AnimatedNumberText(
                     text = String.format("%,.0f", holdingInfo.totalPL),
-                    style = MaterialTheme.typography.headlineLarge,
                     color = totalPlColor,
-                    modifier = Modifier.alignByBaseline()
+                    style = MaterialTheme.typography.headlineLarge
                 )
-                Spacer(modifier = Modifier.padding(horizontal = 4.dp))
-                Text(
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                // 小字（%）→ 用 padding 調整
+                AnimatedNumberText(
                     text = String.format("%+.2f%%", holdingInfo.totalPLPercentage),
-                    style = MaterialTheme.typography.bodyLarge,
                     color = totalPlColor,
-                    modifier = Modifier.alignByBaseline()
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(bottom = 4.dp)   // ★ 微調這裡
                 )
             }
             Spacer(modifier = Modifier.height(16.dp))
@@ -167,7 +188,11 @@ private fun StockDetailSummary(holdingInfo: HoldingInfo) {
             Row {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = "持股日損益", style = MaterialTheme.typography.bodySmall)
-                    Text(text = String.format("%,.0f", abs(holdingInfo.dailyChange * holdingInfo.shares)), style = MaterialTheme.typography.bodyLarge, color = dailyPlColor)
+                    AnimatedNumberText(
+                        text = String.format("%,.0f", kotlin.math.abs(holdingInfo.dailyChange * holdingInfo.shares)),
+                        color = dailyPlColor,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = "持股市值", style = MaterialTheme.typography.bodySmall)
@@ -199,6 +224,135 @@ private fun TransactionList(transactions: List<TransactionUiState>, navControlle
             TransactionRow(transaction, navController)
             Divider()
         }
+    }
+}
+
+@Composable
+private fun RealtimePriceRow(stockCode: String, viewModel: StockDetailViewModel) {
+    val realtimeMap by viewModel.realtimeStockInfo.collectAsState()
+    val info = realtimeMap[stockCode]
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+
+        if (info != null) {
+            val isUp = info.change > 0
+            val isDown = info.change < 0
+            val arrow = when {
+                isUp -> "▴"
+                isDown -> "▾"
+                else -> ""
+            }
+
+            val color = when {
+                isUp -> StockifyAppTheme.stockColors.gain
+                isDown -> StockifyAppTheme.stockColors.loss
+                else -> Color.Unspecified
+            }
+
+            // 使用絕對值，不要有 + -
+            val absChange = kotlin.math.abs(info.change)
+            val absPercent = kotlin.math.abs(info.changePercent)
+
+            // 左側：價格 + 上下漲幅
+            AnimatedPriceText(
+                text = if (arrow.isNotEmpty()) {
+                    String.format(
+                        Locale.US,
+                        "%,.2f %s%.2f (%.2f%%)",
+                        info.currentPrice,
+                        arrow,
+                        absChange,
+                        absPercent
+                    )
+                } else {
+                    // 平盤
+                    String.format(Locale.US, "%,.2f 0.00 (0.00%%)", info.currentPrice)
+                },
+                color = color
+            )
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // 右側：更新時間
+            val timeText = info.lastUpdated?.let {
+                SimpleDateFormat("MM/dd HH:mm:ss", Locale.US).format(Date(it))
+            } ?: "--:--"
+
+            AnimatedTimeText(
+                text = timeText,
+                color = Color.Gray
+            )
+        } else {
+            Text(
+                text = "更新中…",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.Gray
+            )
+        }
+    }
+}
+
+@Composable
+fun AnimatedNumberText(
+    text: String,
+    color: Color,
+    style: androidx.compose.ui.text.TextStyle,
+    modifier: Modifier = Modifier
+) {
+    AnimatedContent(
+        targetState = text,
+        transitionSpec = {
+            slideInVertically { it } + fadeIn() togetherWith
+                    slideOutVertically { -it } + fadeOut()
+        },
+        label = "AnimatedNumberText"
+    ) { targetText ->
+        Text(
+            text = targetText,
+            color = color,
+            style = style,
+            modifier = modifier
+        )
+    }
+}
+
+
+@Composable
+fun AnimatedPriceText(text: String, color: Color) {
+    AnimatedContent(
+        targetState = text,
+        transitionSpec = {
+            slideInVertically { height -> height } + fadeIn() togetherWith
+                    slideOutVertically { height -> -height / 2 } + fadeOut()
+        }
+    ) { targetText ->
+        Text(
+            text = targetText,
+            color = color,
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
+}
+
+@Composable
+fun AnimatedTimeText(text: String, color: Color) {
+    AnimatedContent(
+        targetState = text,
+        transitionSpec = {
+            slideInVertically { height -> height / 3 } + fadeIn() togetherWith
+                    slideOutVertically { height -> -height / 3 } + fadeOut()
+        }
+    ) { targetText ->
+        Text(
+            text = targetText,
+            color = color,
+            style = MaterialTheme.typography.bodySmall
+        )
     }
 }
 
@@ -245,4 +399,5 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
         }
         Text(text = amountText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), color = amountColor, textAlign = TextAlign.End)
     }
+
 }

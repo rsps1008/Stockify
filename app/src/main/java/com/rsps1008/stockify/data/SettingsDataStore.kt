@@ -19,10 +19,8 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "se
 
 class SettingsDataStore(val context: Context) {
 
-    private val refreshIntervalKey = intPreferencesKey("refresh_interval")
-    private val yahooFetchIntervalKey = intPreferencesKey("yahoo_fetch_interval")
+    private val fetchIntervalKey = intPreferencesKey("refresh_interval")
     private val lastStockListUpdateTimeKey = longPreferencesKey("last_stock_list_update_time")
-
     private val feeDiscountKey = doublePreferencesKey("fee_discount")
     private val minFeeRegularKey = intPreferencesKey("min_fee_regular")
     private val minFeeOddLotKey = intPreferencesKey("min_fee_odd_lot")
@@ -33,14 +31,9 @@ class SettingsDataStore(val context: Context) {
     private val stockDataSourceKey = stringPreferencesKey("stock_data_source")
     private val notifyFallbackRepeatedlyKey = booleanPreferencesKey("notify_fallback_repeatedly")
 
-    val refreshIntervalFlow: Flow<Int> = context.dataStore.data
+    val fetchIntervalFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
-            preferences[refreshIntervalKey] ?: 5
-        }
-
-    val yahooFetchIntervalFlow: Flow<Int> = context.dataStore.data
-        .map { preferences ->
-            preferences[yahooFetchIntervalKey] ?: 10
+            preferences[fetchIntervalKey] ?: 10
         }
 
     val lastStockListUpdateTimeFlow: Flow<Long?> = context.dataStore.data
@@ -94,15 +87,9 @@ class SettingsDataStore(val context: Context) {
             preferences[notifyFallbackRepeatedlyKey] ?: false
         }
 
-    suspend fun setRefreshInterval(interval: Int) {
+    suspend fun setFetchInterval(interval: Int) {
         context.dataStore.edit {
-            it[refreshIntervalKey] = interval
-        }
-    }
-
-    suspend fun setYahooFetchInterval(interval: Int) {
-        context.dataStore.edit {
-            it[yahooFetchIntervalKey] = interval
+            it[fetchIntervalKey] = interval
         }
     }
 

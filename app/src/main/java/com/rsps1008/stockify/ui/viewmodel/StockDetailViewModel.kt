@@ -2,6 +2,7 @@ package com.rsps1008.stockify.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.StockDao
 import com.rsps1008.stockify.data.StockRepository
 import com.rsps1008.stockify.ui.screens.HoldingInfo
@@ -13,13 +14,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class StockDetailViewModel(private val stockCode: String, private val stockDao: StockDao, stockRepository: StockRepository) : ViewModel() {
+class StockDetailViewModel(
+    private val stockCode: String,
+    private val stockDao: StockDao,
+    stockRepository: StockRepository,
+    val realtimeStockDataService: RealtimeStockDataService
+) : ViewModel() {
 
     val holdingInfo: StateFlow<HoldingInfo?> = stockRepository.getHoldingInfo(stockCode)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
     val transactions: StateFlow<List<TransactionUiState>> = stockRepository.getTransactionsForStock(stockCode)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
+    val realtimeStockInfo = realtimeStockDataService.realtimeStockInfo
 
     private val _showDeleteConfirmDialog = MutableStateFlow(false)
     val showDeleteConfirmDialog: StateFlow<Boolean> = _showDeleteConfirmDialog.asStateFlow()

@@ -62,11 +62,8 @@ class SettingsViewModel(
     private val _onSignOut = MutableSharedFlow<Unit>()
     val onSignOut = _onSignOut.asSharedFlow()
 
-    val refreshInterval: StateFlow<Int> = settingsDataStore.refreshIntervalFlow
+    val fetchInterval: StateFlow<Int> = settingsDataStore.fetchIntervalFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 5)
-
-    val yahooFetchInterval: StateFlow<Int> = settingsDataStore.yahooFetchIntervalFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 10)
 
     val lastStockListUpdateTime: StateFlow<Long?> = settingsDataStore.lastStockListUpdateTimeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
@@ -291,15 +288,9 @@ class SettingsViewModel(
         _message.value = "匯入成功，共 ${transactions.size} 筆紀錄"
     }
 
-    fun setRefreshInterval(interval: Int) {
+    fun setFetchInterval(interval: Int) {
         viewModelScope.launch {
-            settingsDataStore.setRefreshInterval(interval)
-        }
-    }
-
-    fun setYahooFetchInterval(interval: Int) {
-        viewModelScope.launch {
-            settingsDataStore.setYahooFetchInterval(interval)
+            settingsDataStore.setFetchInterval(interval)
         }
     }
 

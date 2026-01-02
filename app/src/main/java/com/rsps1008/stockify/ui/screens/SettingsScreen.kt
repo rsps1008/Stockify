@@ -70,7 +70,7 @@ fun SettingsScreen() {
     val minFeeOddLot by viewModel.minFeeOddLot.collectAsState()
     val dividendFee by viewModel.dividendFee.collectAsState()
     val preDeductSellFees by viewModel.preDeductSellFees.collectAsState()
-    val yahooFetchInterval by viewModel.yahooFetchInterval.collectAsState()
+    val fetchInterval by viewModel.fetchInterval.collectAsState()
     val theme by viewModel.theme.collectAsState()
     val stockDataSource by viewModel.stockDataSource.collectAsState()
     val notifyFallbackRepeatedly by viewModel.notifyFallbackRepeatedly.collectAsState()
@@ -249,7 +249,7 @@ fun SettingsScreen() {
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             OutlinedTextField(
-                                value = "$yahooFetchInterval 秒",
+                                value = "$fetchInterval 秒",
                                 onValueChange = { },
                                 label = { Text("股價更新頻率(開盤刷新)") },
                                 readOnly = true,
@@ -268,7 +268,7 @@ fun SettingsScreen() {
                                     DropdownMenuItem(
                                         text = { Text("$interval 秒") },
                                         onClick = {
-                                            viewModel.setYahooFetchInterval(interval)
+                                            viewModel.setFetchInterval(interval)
                                             expandedInterval = false
                                         }
                                     )

@@ -13,16 +13,22 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import java.time.DayOfWeek
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
 
 class RealtimeStockDataService(
     private val stockDao: StockDao,
     private val settingsDataStore: SettingsDataStore,
-    private val applicationContext: Context
+    private val applicationContext: Context,
+    val lastUpdated: Long = System.currentTimeMillis()
 ) {
     private val _realtimeStockInfo = MutableStateFlow<Map<String, RealtimeStockInfo>>(emptyMap())
     val realtimeStockInfo: StateFlow<Map<String, RealtimeStockInfo>> = _realtimeStockInfo.asStateFlow()
@@ -57,18 +63,14 @@ class RealtimeStockDataService(
     fun startFetching() {
         fetchJob?.cancel()
         fetchJob = scope.launch {
-            val (primaryFetcher, _) = getFetchers()
-
             val cachedData = settingsDataStore.realtimeStockInfoCacheFlow.first()
             if (cachedData.isNotEmpty()) {
                 _realtimeStockInfo.value = cachedData
             }
 
-            val isMarketOpen = primaryFetcher.isMarketOpen()
-
-            if (isMarketOpen) {
-                settingsDataStore.yahooFetchIntervalFlow.collectLatest { interval ->
-                    while (getFetchers().first.isMarketOpen()) {
+            if (isTaiwanMarketOpen()) {
+                settingsDataStore.fetchIntervalFlow.collectLatest { interval ->
+                    while (isTaiwanMarketOpen()) {
                         fetchAllStockInfo(true)
                         delay(interval * 1000L)
                     }
@@ -191,5 +193,15 @@ class RealtimeStockDataService(
         }
     }
 
+    private fun isTaiwanMarketOpen(): Boolean {
+        val taipeiZone = ZoneId.of("Asia/Taipei")
+        val now = ZonedDateTime.now(taipeiZone)
+        val day = now.dayOfWeek
+        val t = now.toLocalTime()
 
+        val weekday = day in DayOfWeek.MONDAY..DayOfWeek.FRIDAY
+        val inTime = t.isAfter(LocalTime.of(8, 45)) && t.isBefore(LocalTime.of(13, 35))
+
+        return weekday && inTime
+    }
 }
