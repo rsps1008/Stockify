@@ -2,6 +2,8 @@ package com.rsps1008.stockify.data
 
 import android.content.Context
 import android.util.Log
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -13,6 +15,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 
 class RealtimeStockDataService(
     private val stockDao: StockDao,
@@ -33,6 +38,12 @@ class RealtimeStockDataService(
     init {
         startFetching()
     }
+
+    data class FetchResult(
+        val code: String,
+        val info: RealtimeStockInfo?,
+        val fallbackUsed: Boolean
+    )
 
     private suspend fun getFetchers(): Pair<StockInfoFetcher, StockInfoFetcher> {
         val preferredSource = settingsDataStore.stockDataSourceFlow.first()
@@ -70,8 +81,6 @@ class RealtimeStockDataService(
     }
 
     suspend fun fetchAllStockInfo(isContinuous: Boolean, forceSave: Boolean = false) {
-        var successCount = 0
-        var fallbackCount = 0
         val stocks = stockDao.getHeldStocks().first()
         if (stocks.isEmpty()) return
 
@@ -80,56 +89,50 @@ class RealtimeStockDataService(
 
         val updatedInfos = _realtimeStockInfo.value.toMutableMap()
 
-        var needToast = false
+        // ★★★ 並發 ★★★
+        val results = coroutineScope {
+            stockCodes.map { code ->
+                async(Dispatchers.IO) {
+                    var info = primaryFetcher.fetchStockInfo(code)
 
-        for (code in stockCodes) {
-            var info = primaryFetcher.fetchStockInfo(code)
+                    var usedFallback = false
+                    if (info == null) {
+                        usedFallback = true
+                        info = secondaryFetcher.fetchStockInfo(code)
+                    }
 
-            if (info == null) {
-                fallbackCount++
-                Log.e("RealtimeStockDataService", "Primary failed for $code → fallback")
-                info = secondaryFetcher.fetchStockInfo(code)
-
-                if (info != null) {
-                    successCount++
-                    Log.d(
-                        "RealtimeStockDataService",
-                        "Fallback succeeded for $code using ${secondaryFetcher.javaClass.simpleName}"
+                    FetchResult(
+                        code = code,
+                        info = info,
+                        fallbackUsed = usedFallback
                     )
-                } else {
-                    Log.e("RealtimeStockDataService", "Fallback also failed for $code")
                 }
-            } else {
-                successCount++
-            }
-
-            info?.let { updatedInfos[code] = it }
+            }.awaitAll()
         }
 
-        val total = stockCodes.size
+        // 統計 fallback
+        val fallbackCount = results.count { it.fallbackUsed }
+        val successCount = results.count { it.info != null }
 
+        // 更新資料
+        results.forEach { r ->
+            r.info?.let { updatedInfos[r.code] = it }
+        }
+
+        // fallback 提示邏輯（保持不變）
         if (fallbackCount > 0) {
             val shouldNotifyRepeatedly = settingsDataStore.notifyFallbackRepeatedlyFlow.first()
             val shouldShowNotification = shouldNotifyRepeatedly || !hasNotifiedAboutFallback
 
             if (shouldShowNotification) {
                 val message = when {
-                    successCount == 0 ->
-                        "主要來源與備援來源皆無法取得資料"
-
-                    fallbackCount == total ->
-                        "主要來源無法取得資料，已全部改用備援來源"
-
-                    else ->
-                        "部分股票主要來源無法取得資料，已自動使用備援來源"
+                    successCount == 0 -> "主要與備援來源皆無法取得資料"
+                    fallbackCount == stockCodes.size -> "主要來源無法取得所有資料，全部改用備用來源"
+                    else -> "部分股票主要來源異常，部分改用備用來源"
                 }
 
-                android.os.Handler(android.os.Looper.getMainLooper()).post {
-                    Toast.makeText(
-                        applicationContext,
-                        message,
-                        Toast.LENGTH_SHORT
-                    ).show()
+                Handler(Looper.getMainLooper()).post {
+                    Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show()
                 }
 
                 if (!shouldNotifyRepeatedly) {

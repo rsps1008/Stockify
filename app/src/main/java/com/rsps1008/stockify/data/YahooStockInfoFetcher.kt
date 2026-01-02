@@ -90,7 +90,7 @@ class YahooStockInfoFetcher : StockInfoFetcher {
                     change = change,
                     changePercent = changePercent
                 )
-                Log.d("YahooStockInfoFetcher", "Successfully fetched info for $stockCode: $info")
+                Log.d("YahooStockInfoFetcher", "Yahoo Fetched $stockCode → $info from $url")
                 return info
             } else {
                 Log.e("YahooStockInfoFetcher", "Failed to parse price or yesterday's price for $stockCode. PriceStr: $priceStr, YesterdayPriceStr: $yesterdayPriceStr")

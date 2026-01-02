@@ -62,28 +62,49 @@ class TwseStockInfoFetcher : StockInfoFetcher {
     private suspend fun fetchStockInfoInternal(stockCode: String): RealtimeStockInfo? {
         val code = if (stockCode.contains(".")) stockCode else "$stockCode.tw"
         val urls = listOf(
-            "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_$code",
-            "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=otc_$code"
+            "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_$code&json=1&delay=0",
+            "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=otc_$code&json=1&delay=0"
         )
 
         for (url in urls) {
             try {
                 val responseText = client.get(url) {
                     headers.append("User-Agent", "Mozilla/5.0")
-                    headers.append("Referer", "https://mis.twse.com.tw/stock/fibest.jsp")
                 }.bodyAsText()
 
-                val root = Json.parseToJsonElement(responseText).jsonObject
-                val msgArray = root["msgArray"]?.jsonArray
-                if (msgArray == null || msgArray.isEmpty()) {
-                    continue // Try next URL if this one has no data
+                if (responseText.isBlank() ||
+                    !responseText.trim().startsWith("{") ||
+                    !responseText.trim().endsWith("}")
+                ) {
+                    continue
                 }
+
+                val root = Json.parseToJsonElement(responseText).jsonObject
+                val msgArray = root["msgArray"]?.jsonArray ?: continue
+                if (msgArray.isEmpty()) continue
 
                 val obj = msgArray[0].jsonObject
 
-                val price = obj["z"]?.jsonPrimitive?.content?.toDoubleOrNull()
-                val yesterday = obj["y"]?.jsonPrimitive?.content?.toDoubleOrNull()
+                // -------- 新增：買賣一，用來補 z="-" 的情況 --------
+                fun getA1(): Double? =
+                    obj["a"]?.jsonPrimitive?.content
+                        ?.split("_")?.firstOrNull()?.toDoubleOrNull()
 
+                fun getB1(): Double? =
+                    obj["b"]?.jsonPrimitive?.content
+                        ?.split("_")?.firstOrNull()?.toDoubleOrNull()
+
+                val zRaw = obj["z"]?.jsonPrimitive?.content
+                val price: Double? =
+                    if (zRaw != null && zRaw != "-") {
+                        zRaw.toDoubleOrNull()
+                    } else {
+                        val a1 = getA1()
+                        val b1 = getB1()
+                        if (a1 != null && b1 != null) (a1 + b1) / 2 else null
+                    }
+
+                val yesterday = obj["y"]?.jsonPrimitive?.content?.toDoubleOrNull()
                 if (price != null && yesterday != null && yesterday != 0.0) {
                     val change = price - yesterday
                     val changePercent = (change / yesterday) * 100
@@ -94,21 +115,18 @@ class TwseStockInfoFetcher : StockInfoFetcher {
                         changePercent = changePercent
                     )
 
-                    Log.d("TwseStockInfoFetcher", "Fetched $stockCode → $info from $url")
+                    Log.d("TwseStockInfoFetcher", "TWSE Fetched $stockCode → $info from $url")
                     return info
                 }
 
             } catch (e: Exception) {
-                Log.e(
-                    "TwseStockInfoFetcher",
-                    "Exception while fetching TWSE data for $stockCode from $url: ${e.message}",
-                    e
+                Log.e("TwseStockInfoFetcher",
+                    "Exception for $stockCode from $url: ${e.javaClass.simpleName} ${e.message}"
                 )
-                // Continue to the next URL on exception
             }
         }
 
         Log.e("TwseStockInfoFetcher", "Failed to fetch price data for $stockCode from all TWSE URLs")
-        return null // Return null if all URLs fail
+        return null
     }
 }
