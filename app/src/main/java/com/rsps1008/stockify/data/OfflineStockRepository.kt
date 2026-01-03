@@ -35,7 +35,7 @@ class OfflineStockRepository(
             val dailyPL = holdingInfos.sumOf { it.dailyChange * it.shares }
 
             HoldingsUiState(
-                holdings = holdingInfos.filter { it.shares > 0 }, // Only show stocks currently held
+                holdings = holdingInfos, // Only show stocks currently held
                 cumulativePL = cumulativePL,
                 marketValue = marketValue,
                 totalCost = totalCost,
@@ -82,6 +82,9 @@ class OfflineStockRepository(
         var shares = 0.0
         var totalBuyExpense = 0.0
         var totalSellIncome = 0.0
+        var sellSharesTotal = 0.0
+        var sellAmountBeforeFee = 0.0   // 成交金額（未扣費）
+        var sellIncomeTotal = 0.0
         var totalDividendIncome = 0.0
         var buySharesTotal = 0.0
         var buyCostTotal = 0.0
@@ -98,6 +101,8 @@ class OfflineStockRepository(
                 }
                 "賣出" -> {
                     shares -= it.sellShares
+                    sellSharesTotal += it.sellShares
+                    sellAmountBeforeFee += it.sellPrice * it.sellShares
                     totalSellIncome += it.income
                 }
                 "配股" -> {
@@ -110,7 +115,7 @@ class OfflineStockRepository(
         }
 
         if (shares < 0) shares = 0.0
-
+        val sellAverage = if (sellSharesTotal > 0) sellAmountBeforeFee / sellSharesTotal else 0.0
         val costBasis = totalBuyExpense - totalSellIncome - totalDividendIncome
         val averageCost = if (shares > 0) costBasis / shares else 0.0
         val buyAverage = if (buySharesTotal > 0) buyCostTotal / buySharesTotal else 0.0
@@ -133,6 +138,7 @@ class OfflineStockRepository(
             shares = shares,
             averageCost = averageCost,
             buyAverage = buyAverage,
+            sellAverage = sellAverage,
             dividendIncome = totalDividendIncome,
             currentPrice = currentPrice,
             marketValue = marketValue,

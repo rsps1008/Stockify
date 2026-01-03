@@ -54,6 +54,8 @@ import com.rsps1008.stockify.ui.viewmodel.HoldingsViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import kotlin.math.abs
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
 
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -68,6 +70,12 @@ fun HoldingsScreen(navController: NavController) {
         )
     )
     val uiState by viewModel.uiState.collectAsState()
+    val activeHoldings = uiState.holdings.filter { it.shares > 1e-6 }
+    val unrealizedCount = activeHoldings.size
+    val unrealizedPL = activeHoldings.sumOf { it.totalPL }
+    val zeroHoldings = uiState.holdings.filter { kotlin.math.abs(it.shares) < 1e-6 }
+    val clearedCount = zeroHoldings.size
+    val realizedPL = zeroHoldings.sumOf { it.totalPL }
 
     // ★ 從 application 的 realtimeStockDataService 取得即時股價 Map
     val realtimeMap by application.realtimeStockDataService.realtimeStockInfo.collectAsState()
@@ -106,13 +114,58 @@ fun HoldingsScreen(navController: NavController) {
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
+            item {
+                HoldingsHeader(
+                    count = unrealizedCount,
+                    unrealizedPL = unrealizedPL
+                )
+            }
+
             stickyHeader {
                 HoldingsListHeaderSticky()
             }
 
-            items(uiState.holdings) { holding ->
+            items(activeHoldings) { holding ->
                 HoldingCard(holding, navController)
             }
+
+            if (zeroHoldings.isNotEmpty()) {
+                item {
+                    ClearedHoldingsHeader(
+                        count = clearedCount,
+                        realizedPL = realizedPL
+                    )
+                }
+                stickyHeader {
+                    HoldingsListHeaderStickySells()
+                }
+                item {
+                    ZeroHoldingsSection(zeroHoldings, navController)
+                }
+            }
+
+//            item {
+//                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+//                    Text(
+//                        text = "===== DEBUG SHARES =====",
+//                        fontSize = 12.sp,
+//                        color = MaterialTheme.colorScheme.error
+//                    )
+//
+//                    uiState.holdings.forEach {
+//                        Text(
+//                            text = "DEBUG ${it.stock.code} shares=${it.shares}",
+//                            fontSize = 10.sp
+//                        )
+//                    }
+//
+//                    Text(
+//                        text = "DEBUG active=${activeHoldings.size}, zero=${zeroHoldings.size}",
+//                        fontSize = 10.sp
+//                    )
+//                }
+//                Spacer(modifier = Modifier.height(1600.dp))
+//            }
         }
     }
 }
@@ -128,6 +181,21 @@ fun HoldingsListHeaderSticky() {
         Text("股票/股數", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
         Text("股價", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
         Text("成本均/買均", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+        Text("總損益", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+    }
+}
+
+@Composable
+fun HoldingsListHeaderStickySells() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background) // ★ 必加，避免透明
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Text("股票/股數", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+        Text("股價", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+        Text("賣均/買均", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
         Text("總損益", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
     }
 }
@@ -269,61 +337,69 @@ fun HoldingsList(holdings: List<HoldingInfo>, navController: NavController) {
 }
 
 @Composable
-fun AutoResizeText(
+fun AutoResizeNameText(
     text: String,
     modifier: Modifier = Modifier,
     maxLines: Int = 2,
-    maxTextSize: Float = 18f,
-    minTextSize: Float = 10f
+    maxTextSize: Float = 14f,
+    minTextSize: Float = 11f
 ) {
     var textSize by remember { mutableStateOf(maxTextSize) }
 
-    BoxWithConstraints(modifier) {
-        val constraints = this.constraints
-
-        Text(
-            text = text,
-            fontSize = textSize.sp,
-            maxLines = maxLines,
-            overflow = TextOverflow.Ellipsis,
-            lineHeight = (textSize * 1.05f).sp,
-            onTextLayout = { textLayoutResult ->
-                if (textLayoutResult.didOverflowHeight && textSize > minTextSize) {
-                    textSize -= 1f   // 字體太大 → 縮小
-                }
+    Text(
+        text = text,
+        fontSize = textSize.sp,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+        lineHeight = (textSize + 2).sp,
+        modifier = modifier,
+        onTextLayout = { result ->
+            if (result.didOverflowHeight && textSize > minTextSize) {
+                textSize -= 0.5f
             }
-        )
-    }
+        }
+    )
 }
 
 @Composable
 fun HoldingCard(holding: HoldingInfo, navController: NavController) {
     val dailyChangeColor = if (holding.dailyChange >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
     val totalPlColor = if (holding.totalPL >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
-
     val dailyChangeSymbol = if (holding.dailyChange >= 0) "▴" else "▾"
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .padding(vertical = 2.5.dp)
             .clickable { navController.navigate(Screen.StockDetail.createRoute(holding.stock.code)) }
     ) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                // ★ 股票代號（小小一行）
-                Text(
-                    text = holding.stock.code,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                AutoResizeText(
-                    text = holding.stock.name,
-                    maxLines = 2,
-                    maxTextSize = 14f,   // 第一圈嘗試字體
-                    minTextSize = 8f    // 最縮到 10sp
-                )
-                Text(text = "${String.format("%,.0f", holding.shares)}股", style = MaterialTheme.typography.bodySmall)
+        Row(modifier = Modifier.padding(16.dp, 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 68.dp),
+                contentAlignment = Alignment.CenterStart   // ★ 垂直置中，水平靠左
+            ) {
+                Column {
+
+                    Text(
+                        text = holding.stock.code,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    AutoResizeNameText(
+                        text = holding.stock.name,
+                        maxLines = 2,
+                        maxTextSize = 14f,
+                        minTextSize = 11f
+                    )
+
+                    Text(
+                        text = "${String.format("%,.0f", holding.shares)}股",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
 
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
@@ -407,5 +483,254 @@ fun HoldingCard(holding: HoldingInfo, navController: NavController) {
                 }
             }
         }
+    }
+}
+
+@Composable
+fun ZeroHoldingsSection(
+    holdings: List<HoldingInfo>,
+    navController: NavController
+) {
+    Column {
+        holdings.forEach { holding ->
+            ZeroHoldingCard(holding, navController)
+        }
+    }
+}
+
+@Composable
+fun ZeroHoldingCard(
+    holding: HoldingInfo,
+    navController: NavController
+) {
+    val dailyChangeColor = if (holding.dailyChange >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
+    val totalPlColor = if (holding.totalPL >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
+    val dailyChangeSymbol = if (holding.dailyChange >= 0) "▴" else "▾"
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.5.dp)
+            .clickable { navController.navigate(Screen.StockDetail.createRoute(holding.stock.code)) }
+    ) {
+        Row(modifier = Modifier.padding(16.dp, 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 68.dp),
+                contentAlignment = Alignment.CenterStart   // ★ 垂直置中，水平靠左
+            ) {
+                Column {
+
+                    Text(
+                        text = holding.stock.code,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    AutoResizeNameText(
+                        text = holding.stock.name,
+                        maxLines = 2,
+                        maxTextSize = 14f,
+                        minTextSize = 11f
+                    )
+
+                    Text(
+                        text = "${String.format("%,.0f", holding.shares)}股",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+
+            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                AnimatedContent(targetState = holding.currentPrice, transitionSpec = {
+                    if (targetState > initialState) {
+                        slideInVertically { height -> height } + fadeIn() togetherWith
+                                slideOutVertically { height -> -height } + fadeOut()
+                    } else {
+                        slideInVertically { height -> -height } + fadeIn() togetherWith
+                                slideOutVertically { height -> height } + fadeOut()
+                    }.using(
+                        SizeTransform(clip = false)
+                    )
+                }) { targetPrice ->
+                    Text(
+                        text = String.format("%,.2f", targetPrice),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = dailyChangeColor,
+                        textAlign = TextAlign.End // 確保文字本身也靠右
+                    )
+                }
+                AnimatedContent(targetState = holding.dailyChange, transitionSpec = {
+                    if (targetState > initialState) {
+                        slideInVertically { height -> height } + fadeIn() togetherWith
+                                slideOutVertically { height -> -height } + fadeOut()
+                    } else {
+                        slideInVertically { height -> -height } + fadeIn() togetherWith
+                                slideOutVertically { height -> height } + fadeOut()
+                    }.using(
+                        SizeTransform(clip = false)
+                    )
+                }) { targetChange ->
+                    Text(
+                        text = "$dailyChangeSymbol${String.format("%.2f", abs(targetChange))} (${String.format("%.2f", abs(holding.dailyChangePercentage))}%)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = dailyChangeColor,
+                        textAlign = TextAlign.End
+                    )
+                }
+            }
+
+            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                Text(text = String.format("%,.2f", holding.sellAverage), style = MaterialTheme.typography.bodyLarge)
+                Text(text = String.format("%,.2f", holding.buyAverage), style = MaterialTheme.typography.bodySmall)
+            }
+            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                AnimatedContent(targetState = holding.totalPL, transitionSpec = {
+                    if (targetState > initialState) {
+                        slideInVertically { height -> height } + fadeIn() togetherWith
+                                slideOutVertically { height -> -height } + fadeOut()
+                    } else {
+                        slideInVertically { height -> -height } + fadeIn() togetherWith
+                                slideOutVertically { height -> height } + fadeOut()
+                    }.using(
+                        SizeTransform(clip = false)
+                    )
+                }) { targetTotalPL ->
+                    Text(
+                        text = String.format("%,.0f", targetTotalPL),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = totalPlColor
+                    )
+                }
+
+                AnimatedContent(targetState = holding.totalPLPercentage, transitionSpec = {
+                    if (targetState > initialState) {
+                        slideInVertically { height -> height } + fadeIn() togetherWith
+                                slideOutVertically { height -> -height } + fadeOut()
+                    } else {
+                        slideInVertically { height -> -height } + fadeIn() togetherWith
+                                slideOutVertically { height -> height } + fadeOut()
+                    }.using(
+                        SizeTransform(clip = false)
+                    )
+                }) { targetTotalPLPercentage ->
+                    Text(
+                        text = String.format("%+.2f%%", targetTotalPLPercentage),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = totalPlColor
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HoldingsHeader(
+    count: Int,
+    unrealizedPL: Double
+) {
+    val plColor =
+        if (unrealizedPL >= 0)
+            StockifyAppTheme.stockColors.gain
+        else
+            StockifyAppTheme.stockColors.loss
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp, bottom = 4.dp)
+            .background(
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            )
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(14.dp)
+                .background(
+                    MaterialTheme.colorScheme.outline,
+                    shape = MaterialTheme.shapes.small
+                )
+        )
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        // 標題 + 數量
+        Text(
+            text = "未實現 ($count)",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        // 未實現總計
+        Text(
+            text = "總計: ",
+            style = MaterialTheme.typography.bodySmall
+        )
+        Text(
+            text = "${String.format("%,.0f", kotlin.math.abs(unrealizedPL))}",
+            style = MaterialTheme.typography.bodySmall,
+            color = plColor
+        )
+    }
+}
+
+@Composable
+fun ClearedHoldingsHeader
+(
+    count: Int,
+    realizedPL: Double
+) {
+    val plColor =
+        if (realizedPL >= 0)
+            StockifyAppTheme.stockColors.gain
+        else
+            StockifyAppTheme.stockColors.loss
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp, bottom = 4.dp)
+            .background(
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            )
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // 左側細條
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(14.dp)
+                .background(
+                    MaterialTheme.colorScheme.outline,
+                    shape = MaterialTheme.shapes.small
+                )
+        )
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        // 標題+數量
+        Text(
+            text = "已實現 ($count)",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        // 已實現損益
+        Text(
+            text = "總計: ",
+            style = MaterialTheme.typography.bodySmall
+        )
+        Text(
+            text = "${String.format("%,.0f", kotlin.math.abs(realizedPL))}",
+            style = MaterialTheme.typography.bodySmall,
+            color = plColor
+        )
     }
 }
