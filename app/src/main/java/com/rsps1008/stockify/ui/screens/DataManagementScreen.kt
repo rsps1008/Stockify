@@ -123,7 +123,7 @@ fun DataManagementScreen() {
             contentDescription = "Stockify Logo",
             modifier = Modifier.fillMaxWidth(0.35f)
         )
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
         // 主體可捲動 LazyColumn
         LazyColumn(

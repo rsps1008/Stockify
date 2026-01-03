@@ -99,7 +99,7 @@ fun HoldingsScreen(navController: NavController) {
                 contentDescription = "Stockify Logo",
                 modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(0.35f)
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(6.dp))
         }
 
         // ★ LazyColumn 會在圖片下方滑動
@@ -111,7 +111,6 @@ fun HoldingsScreen(navController: NavController) {
             item {
                 // ★ 改成傳時間字串，不再把 viewModel 丟進去
                 SummarySection(uiState, lastUpdatedText)
-                Spacer(modifier = Modifier.height(16.dp))
             }
 
             item {

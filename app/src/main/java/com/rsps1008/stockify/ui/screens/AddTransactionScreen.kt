@@ -40,6 +40,7 @@ import androidx.navigation.NavController
 import com.rsps1008.stockify.StockifyApplication
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.ui.Alignment
 import com.rsps1008.stockify.ui.viewmodel.AddTransactionViewModel
@@ -319,11 +320,10 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        LabeledOutlinedTextField(
+                        ShareInputWithStepper(
                             label = "買進股數",
                             value = shares,
-                            onValueChange = { shares = it.filter { c -> c.isDigit() } },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            onValueChange = { shares = it }
                         )
                     }
                 }
@@ -380,11 +380,10 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        LabeledOutlinedTextField(
+                        ShareInputWithStepper(
                             label = "賣出股數",
                             value = shares,
-                            onValueChange = { shares = it.filter { c -> c.isDigit() } },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            onValueChange = { shares = it }
                         )
                     }
                 }
@@ -482,11 +481,10 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        LabeledOutlinedTextField(
+                        ShareInputWithStepper(
                             label = "除息股數(可省略)",
                             value = exDividendShares,
-                            onValueChange = { exDividendShares = it },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            onValueChange = { exDividendShares = it }
                         )
                     }
                 }
@@ -565,11 +563,10 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        LabeledOutlinedTextField(
+                        ShareInputWithStepper(
                             label = "除權股數(可省略)",
                             value = exRightsShares,
-                            onValueChange = { exRightsShares = it },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            onValueChange = { exRightsShares = it }
                         )
                     }
                 }
@@ -652,5 +649,52 @@ fun LabeledOutlinedTextFieldStyled(
             keyboardOptions = keyboardOptions,
             textStyle = textStyle     // ★ 控制字體
         )
+    }
+}
+
+@Composable
+fun ShareInputWithStepper(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    step: Int = 1000
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(text = label, style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = value,
+                onValueChange = { input ->
+                    onValueChange(input.filter { it.isDigit() })
+                },
+                modifier = Modifier.weight(1f),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            // +1000
+            Button(
+                onClick = {
+                    val current = value.toIntOrNull() ?: 0
+                    onValueChange((current + step).toString())
+                }
+            ) {
+                Text("+")
+            }
+            Spacer(modifier = Modifier.width(2.dp))
+            // -1000
+            Button(
+                onClick = {
+                    val current = value.toIntOrNull() ?: 0
+                    val next = (current - step).coerceAtLeast(0)
+                    onValueChange(next.toString())
+                }
+            ) {
+                Text("-")
+            }
+        }
     }
 }

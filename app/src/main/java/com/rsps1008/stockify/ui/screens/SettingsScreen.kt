@@ -97,7 +97,7 @@ fun SettingsScreen() {
             contentDescription = "Stockify Logo",
             modifier = Modifier.fillMaxWidth(0.35f)
         )
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -170,6 +170,11 @@ fun SettingsScreen() {
                             val updateTimeText = lastUpdateTime?.let { "(${formatTimestamp(it)})" } ?: "(預設列表)"
                             Text(text = updateTimeText, style = MaterialTheme.typography.bodySmall)
                         }
+                        Text(
+                            text = "*如果有新上市的股票可以自動新增。",
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
 
                         Spacer(modifier = Modifier.height(16.dp))
 
@@ -228,7 +233,7 @@ fun SettingsScreen() {
                                 Text("重複提示備援來源", style = MaterialTheme.typography.bodyLarge)
                                 Text(
                                     "當主要資料來源失效時，持續顯示通知",
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
