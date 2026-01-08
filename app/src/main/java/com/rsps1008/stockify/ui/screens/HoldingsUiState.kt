@@ -1,5 +1,6 @@
 package com.rsps1008.stockify.ui.screens
 
+import com.rsps1008.stockify.data.LimitState
 import com.rsps1008.stockify.data.Stock
 
 data class HoldingsUiState(
@@ -25,5 +26,6 @@ data class HoldingInfo(
     val dailyChange: Double = 0.0,
     val dailyChangePercentage: Double = 0.0,
     val dividendIncome: Double = 0.0,
-    val marketValue: Double = 0.0
+    val marketValue: Double = 0.0,
+    val limitState: LimitState = LimitState.NONE
 )

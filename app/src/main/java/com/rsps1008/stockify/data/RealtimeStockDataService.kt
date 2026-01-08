@@ -74,24 +74,34 @@ class RealtimeStockDataService(
     fun startFetching() {
         fetchJob?.cancel()
         fetchJob = scope.launch {
+
+            // 1️⃣ 先載入快取
             val cachedData = settingsDataStore.realtimeStockInfoCacheFlow.first()
             if (cachedData.isNotEmpty()) {
                 _realtimeStockInfo.value = cachedData
             }
 
-            if (isTaiwanMarketOpen()) {
-                settingsDataStore.fetchIntervalFlow.collectLatest { interval ->
-                    while (isTaiwanMarketOpen()) {
-                        fetchAllStockInfo(true)
-                        delay(interval * 1000L)
+            // 2️⃣ 盤前只抓一次
+            if (!isTaiwanMarketOpen()) {
+                fetchAllStockInfo(isContinuous = false)
+            }
+
+            // 3️⃣ 永遠 loop，等待開盤
+            settingsDataStore.fetchIntervalFlow.collectLatest { interval ->
+                while (true) {
+                    if (!isTaiwanMarketOpen()) {
+                        delay(30_000L)   // 每分鐘檢查一次是否開盤
+                        continue
                     }
-                    fetchAllStockInfo(true, forceSave = true)
+
+                    // === 盤中 ===
+                    fetchAllStockInfo(isContinuous = true)
+                    delay(interval * 1000L)
                 }
-            } else {
-                fetchAllStockInfo(false)
             }
         }
     }
+
 
     suspend fun fetchAllStockInfo(isContinuous: Boolean, forceSave: Boolean = false) {
         val stocks = stockDao.getHeldStocks().first()

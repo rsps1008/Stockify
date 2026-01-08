@@ -18,11 +18,13 @@ class OfflineStockRepository(
         // Combine held stocks, all transactions, and real-time data to calculate holdings state
         return combine(stockDao.getHeldStocks(), stockDao.getAllTransactions(), realtimeStockDataService.realtimeStockInfo, settingsDataStore.preDeductSellFeesFlow) { stocks, transactions, realTimeData, preDeductSellFees ->
             val holdingInfos = stocks.map { stock ->
+                val realtime = realTimeData[stock.code]
                 val stockTransactions = transactions.filter { it.stockCode == stock.code }
                 val currentPrice = realTimeData[stock.code]?.currentPrice ?: 0.0
                 val dailyChange = realTimeData[stock.code]?.change ?: 0.0
                 val dailyChangePercentage = realTimeData[stock.code]?.changePercent ?: 0.0
-                calculateHoldingInfo(stock, stockTransactions, currentPrice, dailyChange, dailyChangePercentage, preDeductSellFees)
+                val limitState = realtime?.limitState ?: LimitState.NONE
+                calculateHoldingInfo(stock, stockTransactions, currentPrice, dailyChange, dailyChangePercentage, limitState, preDeductSellFees)
             }
 
             // Aggregate data for the summary
@@ -52,10 +54,12 @@ class OfflineStockRepository(
 
         return combine(stockFlow, transactionsFlow, realtimeStockDataService.realtimeStockInfo, settingsDataStore.preDeductSellFeesFlow) { stock, transactions, realTimeData, preDeductSellFees ->
             stock?.let {
+                val realtime = realTimeData[stock.code]
                 val currentPrice = realTimeData[it.code]?.currentPrice ?: 0.0
                 val dailyChange = realTimeData[it.code]?.change ?: 0.0
                 val dailyChangePercentage = realTimeData[it.code]?.changePercent ?: 0.0
-                calculateHoldingInfo(it, transactions, currentPrice, dailyChange, dailyChangePercentage, preDeductSellFees)
+                val limitState = realtime?.limitState ?: LimitState.NONE
+                calculateHoldingInfo(it, transactions, currentPrice, dailyChange, dailyChangePercentage, limitState, preDeductSellFees)
             }
         }
     }
@@ -77,6 +81,7 @@ class OfflineStockRepository(
         currentPrice: Double,
         dailyChange: Double,
         dailyChangePercentage: Double,
+        limitState: LimitState,
         preDeductSellFees: Boolean
     ): HoldingInfo {
         var shares = 0.0
@@ -145,7 +150,8 @@ class OfflineStockRepository(
             totalPL = totalPL,
             totalPLPercentage = totalPLPercentage,
             dailyChange = dailyChange,
-            dailyChangePercentage = dailyChangePercentage
+            dailyChangePercentage = dailyChangePercentage,
+            limitState = limitState
         )
     }
 }

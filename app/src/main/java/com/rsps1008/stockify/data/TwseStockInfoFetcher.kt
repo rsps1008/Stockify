@@ -86,33 +86,32 @@ class TwseStockInfoFetcher : StockInfoFetcher {
                 val obj = msgArray[0].jsonObject
 
                 // -------- 新增：買賣一，用來補 z="-" 的情況 --------
-                fun getA1(): Double? =
-                    obj["a"]?.jsonPrimitive?.content
-                        ?.split("_")?.firstOrNull()?.toDoubleOrNull()
-
-                fun getB1(): Double? =
-                    obj["b"]?.jsonPrimitive?.content
-                        ?.split("_")?.firstOrNull()?.toDoubleOrNull()
-
                 val zRaw = obj["z"]?.jsonPrimitive?.content
                 val price: Double? =
-                    if (zRaw != null && zRaw != "-") {
-                        zRaw.toDoubleOrNull()
-                    } else {
-                        val a1 = getA1()
-                        val b1 = getB1()
-                        if (a1 != null && b1 != null) (a1 + b1) / 2 else null
-                    }
+                    zRaw?.takeIf { it != "-" }?.toDoubleOrNull()
+                        ?: firstValidPrice(obj["a"]?.jsonPrimitive?.content)
+                        ?: firstValidPrice(obj["b"]?.jsonPrimitive?.content)
 
                 val yesterday = obj["y"]?.jsonPrimitive?.content?.toDoubleOrNull()
                 if (price != null && yesterday != null && yesterday != 0.0) {
                     val change = price - yesterday
                     val changePercent = (change / yesterday) * 100
 
+                    val z = zRaw?.takeIf { it != "-" }?.toDoubleOrNull()
+                    val up = obj["u"]?.jsonPrimitive?.content?.toDoubleOrNull()
+                    val down = obj["w"]?.jsonPrimitive?.content?.toDoubleOrNull()
+                    val limitState =
+                        when {
+                            up != null && price == up -> LimitState.LIMIT_UP
+                            down != null && price == down -> LimitState.LIMIT_DOWN
+                            else -> LimitState.NONE
+                        }
+
                     val info = RealtimeStockInfo(
                         currentPrice = price,
                         change = change,
-                        changePercent = changePercent
+                        changePercent = changePercent,
+                        limitState = limitState
                     )
 
                     Log.d("TwseStockInfoFetcher", "TWSE Fetched $stockCode → $info from $url")
@@ -129,4 +128,9 @@ class TwseStockInfoFetcher : StockInfoFetcher {
         Log.e("TwseStockInfoFetcher", "Failed to fetch price data for $stockCode from all TWSE URLs")
         return null
     }
+
+    fun firstValidPrice(raw: String?): Double? =
+        raw?.split("_")
+            ?.mapNotNull { it.toDoubleOrNull() }
+            ?.firstOrNull { it > 0.0 }
 }

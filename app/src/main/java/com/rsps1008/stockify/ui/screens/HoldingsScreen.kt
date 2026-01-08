@@ -1,5 +1,6 @@
 package com.rsps1008.stockify.ui.screens
 
+import android.util.Log
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
@@ -56,6 +57,12 @@ import kotlin.math.abs
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.CardDefaults
+import androidx.compose.ui.graphics.Color
+import com.rsps1008.stockify.data.LimitState
+import com.rsps1008.stockify.data.RealtimeStockInfo
+import com.rsps1008.stockify.ui.theme.StockGain
+import com.rsps1008.stockify.ui.theme.StockLoss
 
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -141,6 +148,9 @@ fun HoldingsScreen(navController: NavController) {
                 item {
                     ZeroHoldingsSection(zeroHoldings, navController)
                 }
+            }
+            item {
+                Spacer(modifier = Modifier.height(10.dp))
             }
 
 //            item {
@@ -416,8 +426,18 @@ fun HoldingCard(holding: HoldingInfo, navController: NavController) {
                     Text(
                         text = String.format("%,.2f", targetPrice),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = dailyChangeColor,
-                        textAlign = TextAlign.End // 確保文字本身也靠右
+                        color = when (holding.limitState) {
+                            LimitState.LIMIT_UP,
+                            LimitState.LIMIT_DOWN -> Color.White   // ★ 漲跌停白字
+                            LimitState.NONE -> dailyChangeColor    // ★ 平常維持原本紅綠
+                        },
+                        textAlign = TextAlign.End,
+                        modifier = Modifier
+                            .background(
+                                color = limitBackgroundColor(holding.limitState),
+                                shape = MaterialTheme.shapes.small
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
                 AnimatedContent(targetState = holding.dailyChange, transitionSpec = {
@@ -555,8 +575,18 @@ fun ZeroHoldingCard(
                     Text(
                         text = String.format("%,.2f", targetPrice),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = dailyChangeColor,
-                        textAlign = TextAlign.End // 確保文字本身也靠右
+                        color = when (holding.limitState) {
+                            LimitState.LIMIT_UP,
+                            LimitState.LIMIT_DOWN -> Color.White   // ★ 漲跌停白字
+                            LimitState.NONE -> dailyChangeColor    // ★ 平常維持原本紅綠
+                        },
+                        textAlign = TextAlign.End,
+                        modifier = Modifier
+                            .background(
+                                color = limitBackgroundColor(holding.limitState),
+                                shape = MaterialTheme.shapes.small
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
                 AnimatedContent(targetState = holding.dailyChange, transitionSpec = {
@@ -733,3 +763,14 @@ fun ClearedHoldingsHeader
         )
     }
 }
+
+@Composable
+fun limitBackgroundColor(limitState: LimitState) =
+    when (limitState) {
+        LimitState.LIMIT_UP ->
+            StockGain.copy(alpha = 0.95f)
+        LimitState.LIMIT_DOWN ->
+            StockLoss.copy(alpha = 0.95f)
+        LimitState.NONE ->
+            StockLoss.copy(alpha = 0f)
+    }

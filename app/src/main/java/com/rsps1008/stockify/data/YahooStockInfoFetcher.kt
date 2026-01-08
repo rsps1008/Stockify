@@ -85,10 +85,17 @@ class YahooStockInfoFetcher : StockInfoFetcher {
             if (price != null && yesterdayPrice != null && yesterdayPrice != 0.0) {
                 val change = price - yesterdayPrice
                 val changePercent = (change / yesterdayPrice) * 100
+                val limitState =
+                    when {
+                        changePercent >= 9.9 -> LimitState.LIMIT_UP
+                        changePercent <= -9.9 -> LimitState.LIMIT_DOWN
+                        else -> LimitState.NONE
+                    }
                 val info = RealtimeStockInfo(
                     currentPrice = price,
                     change = change,
-                    changePercent = changePercent
+                    changePercent = changePercent,
+                    limitState = limitState
                 )
                 Log.d("YahooStockInfoFetcher", "Yahoo Fetched $stockCode → $info from $url")
                 return info
