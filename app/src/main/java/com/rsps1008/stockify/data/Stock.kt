@@ -18,5 +18,6 @@ data class Stock(
     val name: String,
     val code: String,
     val market: String = "",
-    val industry: String = ""
+    val industry: String = "",
+    val stockType: String = ""
 )

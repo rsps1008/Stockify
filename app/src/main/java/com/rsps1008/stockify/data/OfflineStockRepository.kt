@@ -176,7 +176,8 @@ class OfflineStockRepository(
             val minFeeRegular = settingsDataStore.minFeeRegularFlow.first()
 
             val sellFee = (marketValue * 0.001425 * feeDiscount).coerceAtLeast(minFeeRegular.toDouble())
-            val sellTax = marketValue * 0.003
+            val taxRate = if (stock.stockType == "ETF") 0.001 else 0.003
+            val sellTax = marketValue * taxRate
             totalPL -= (sellFee + sellTax)
         }
 

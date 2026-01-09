@@ -132,10 +132,13 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         }
     }
 
-    LaunchedEffect(price, shares, transactionType) {
+    LaunchedEffect(price, shares, transactionType, stockCode) {
         when (transactionType) {
             "買進" -> viewModel.calculateBuyCosts(price.toDoubleOrNull() ?: 0.0, shares.toDoubleOrNull() ?: 0.0)
-            "賣出" -> viewModel.calculateSellCosts(price.toDoubleOrNull() ?: 0.0, shares.toDoubleOrNull() ?: 0.0)
+            "賣出" -> {
+                val stock = allStocks.find { it.code == stockCode }
+                viewModel.calculateSellCosts(price.toDoubleOrNull() ?: 0.0, shares.toDoubleOrNull() ?: 0.0, stock?.stockType ?: "")
+            }
         }
     }
 

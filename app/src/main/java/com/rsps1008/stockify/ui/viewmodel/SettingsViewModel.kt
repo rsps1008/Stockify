@@ -368,6 +368,7 @@ class SettingsViewModel(
                 // Save to json file
                 stockListRepository.saveStocks(stocks)
                 // And also save to Room database
+                stockDao.deleteAllStocks()
                 stockDao.insertStocks(stocks)
                 settingsDataStore.setLastStockListUpdateTime(System.currentTimeMillis())
                 _message.value = "股票列表更新成功！共 ${stocks.size} 筆"

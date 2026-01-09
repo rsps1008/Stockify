@@ -151,7 +151,7 @@ class AddTransactionViewModel(
         _expense.value = (transactionValue + finalFee).roundToInt().toDouble()
     }
 
-    fun calculateSellCosts(price: Double, shares: Double) {
+    fun calculateSellCosts(price: Double, shares: Double, stockType: String) {
         if (price <= 0 || shares <= 0) {
             _fee.value = 0.0
             _tax.value = 0.0
@@ -168,7 +168,8 @@ class AddTransactionViewModel(
         _fee.value = finalFee
 
         // Tax calculation for sell
-        val finalTax = (transactionValue * 0.003).roundToInt().toDouble()
+        val taxRate = if (stockType == "ETF") 0.001 else 0.003
+        val finalTax = (transactionValue * taxRate).roundToInt().toDouble()
         _tax.value = finalTax
 
         // Net income calculation
