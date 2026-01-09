@@ -93,6 +93,20 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     var stockDividendRate by remember { mutableStateOf("") }
     var exRightsShares by remember { mutableStateOf("") }
 
+    // Capital Reduction fields
+    var capitalReductionRatio by remember { mutableStateOf("") }
+    var sharesBeforeReduction by remember { mutableStateOf("") }
+    val sharesAfterReduction = remember(sharesBeforeReduction, capitalReductionRatio) {
+        val before = sharesBeforeReduction.toDoubleOrNull() ?: 0.0
+        val ratio = capitalReductionRatio.toDoubleOrNull() ?: 0.0
+        if (before > 0 && ratio > 0) {
+            (before * (1 - ratio / 100)).toString()
+        } else {
+            ""
+        }
+    }
+    var cashReturned by remember { mutableStateOf("") }
+
     LaunchedEffect(prefillStockCode, allStocks) {
         if (transactionId == null && prefillStockCode != null) {
             val stock = allStocks.find { it.code == prefillStockCode }
@@ -145,6 +159,11 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                     exRightsShares = if (it.exRightsShares != 0.0) it.exRightsShares.toInt().toString() else ""
                     shares = it.dividendShares.toInt().toString()
                 }
+                "減資" -> {
+                    capitalReductionRatio = it.capitalReductionRatio.toString()
+                    sharesBeforeReduction = it.sharesBeforeReduction.toString()
+                    cashReturned = it.cashReturned.toString()
+                }
             }
         }
     }
@@ -159,6 +178,9 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             stockDividendRate = ""
             exRightsShares = ""
             dividendFee = defaultDividendFee.toString()
+            capitalReductionRatio = ""
+            sharesBeforeReduction = ""
+            cashReturned = ""
         }
     }
 
@@ -200,6 +222,12 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             stockName.isNotBlank() &&
             stockCode.isNotBlank() &&
             (shares.toLongOrNull() ?: 0L) > 0L
+        "減資" ->
+            stockName.isNotBlank() &&
+            stockCode.isNotBlank() &&
+            (capitalReductionRatio.toDoubleOrNull() ?: 0.0) > 0.0 &&
+            (sharesBeforeReduction.toDoubleOrNull() ?: 0.0) > 0.0 &&
+            (cashReturned.toDoubleOrNull() ?: 0.0) >= 0.0
         else -> false
     }
 
@@ -220,7 +248,11 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             stockDividend = stockDividendRate.toDoubleOrNull() ?: 0.0,
             exRightsShares = exRightsShares.toDoubleOrNull() ?: 0.0,
             dividendShares = shares.toDoubleOrNull() ?: 0.0,
-            dividendFee = dividendFee.toDoubleOrNull() ?: 0.0
+            dividendFee = dividendFee.toDoubleOrNull() ?: 0.0,
+            capitalReductionRatio = capitalReductionRatio.toDoubleOrNull() ?: 0.0,
+            sharesBeforeReduction = sharesBeforeReduction.toDoubleOrNull() ?: 0.0,
+            sharesAfterReduction = sharesAfterReduction.toDoubleOrNull() ?: 0.0,
+            cashReturned = cashReturned.toDoubleOrNull() ?: 0.0
         )
         val message = if (transactionId == null) "新增成功" else "更新成功"
         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
@@ -299,6 +331,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             Button(onClick = { transactionType = "賣出" }, enabled = transactionType != "賣出") { Text("賣出") }
             Button(onClick = { transactionType = "配息" }, enabled = transactionType != "配息") { Text("配息") }
             Button(onClick = { transactionType = "配股" }, enabled = transactionType != "配股") { Text("配股") }
+            Button(onClick = { transactionType = "減資" }, enabled = transactionType != "減資") { Text("減資") }
         }
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -589,6 +622,44 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                     }
                 }
             }
+            "減資" -> {
+                androidx.compose.material3.Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        LabeledOutlinedTextField(
+                            label = "減資比例 (%)",
+                            value = capitalReductionRatio,
+                            onValueChange = { capitalReductionRatio = it },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        ShareInputWithStepper(
+                            label = "減資前股數",
+                            value = sharesBeforeReduction,
+                            onValueChange = { sharesBeforeReduction = it }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LabeledOutlinedTextField(
+                            label = "減資後股數",
+                            value = sharesAfterReduction,
+                            onValueChange = { /* Read-only */ },
+                            readOnly = true
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LabeledOutlinedTextField(
+                            label = "退還股款",
+                            value = cashReturned,
+                            onValueChange = { cashReturned = it },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                    }
+                }
+            }
         }
         Spacer(modifier = Modifier.height(32.dp))
         Button(
@@ -657,9 +728,10 @@ fun ShareInputWithStepper(
     label: String,
     value: String,
     onValueChange: (String) -> Unit,
-    step: Int = 1000
+    step: Int = 1000,
+    modifier: Modifier = Modifier
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = modifier.fillMaxWidth()) {
         Text(text = label, style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(4.dp))
 

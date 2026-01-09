@@ -116,6 +116,10 @@ class OfflineStockRepository(
                 "配息" -> {
                     totalDividendIncome += it.income
                 }
+                "減資" -> {
+                    shares += it.sharesAfterReduction - it.sharesBeforeReduction
+                    totalSellIncome += it.cashReturned
+                }
             }
         }
 

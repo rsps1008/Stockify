@@ -360,7 +360,7 @@ fun AnimatedTimeText(text: String, color: Color) {
 private fun TransactionRow(transaction: TransactionUiState, navController: NavController) {
     val amountColor = when (transaction.transaction.type) {
         "買進" -> StockifyAppTheme.stockColors.loss
-        "賣出", "配息", "配股" -> StockifyAppTheme.stockColors.gain
+        "賣出", "配息", "配股", "減資" -> StockifyAppTheme.stockColors.gain
         else -> Color.Unspecified
     }
 
@@ -379,6 +379,7 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
             "賣出" -> "賣${transaction.transaction.sellShares.toInt()}股"
             "配息" -> "配息"
             "配股" -> "配股"
+            "減資" -> "減資${String.format("%.1f", transaction.transaction.capitalReductionRatio)}%"
             else -> transaction.transaction.type
         }
         Text(text = transactionText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1.5f), textAlign = TextAlign.Center)
@@ -395,6 +396,7 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
             "賣出" -> String.format("%,.0f", transaction.transaction.income)
             "配息" -> String.format("%,.0f", transaction.transaction.income)
             "配股" -> "${transaction.transaction.dividendShares.toInt()}股"
+            "減資" -> String.format("%,.1f", transaction.transaction.cashReturned)
             else -> ""
         }
         Text(text = amountText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), color = amountColor, textAlign = TextAlign.End)

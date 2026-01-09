@@ -189,7 +189,11 @@ class AddTransactionViewModel(
         exRightsShares: Double = 0.0,
         dividendShares: Double = 0.0,
         dividendFee: Double = 0.0,
-        note: String = ""
+        note: String = "",
+        capitalReductionRatio: Double = 0.0,
+        sharesBeforeReduction: Double = 0.0,
+        sharesAfterReduction: Double = 0.0,
+        cashReturned: Double = 0.0
     ) {
         viewModelScope.launch {
             val finalFee = when (type) {
@@ -200,6 +204,7 @@ class AddTransactionViewModel(
             val finalIncome = when (type) {
                 "賣出" -> _income.value
                 "配息" -> price - finalFee
+                "減資" -> cashReturned
                 else -> 0.0
             }
 
@@ -216,7 +221,8 @@ class AddTransactionViewModel(
                     finalFee, finalTax, finalIncome, finalExpense,
                     cashDividend, exDividendShares, stockDividend,
                     finalDividendShares, exRightsShares,
-                    note, finalDividendIncome
+                    note, finalDividendIncome, capitalReductionRatio,
+                    sharesBeforeReduction, sharesAfterReduction, cashReturned
                 )
             } else {
                 updateTransaction(
@@ -225,7 +231,8 @@ class AddTransactionViewModel(
                     finalFee, finalTax, finalIncome, finalExpense,
                     cashDividend, exDividendShares, stockDividend,
                     finalDividendShares, exRightsShares,
-                    note, finalDividendIncome
+                    note, finalDividendIncome, capitalReductionRatio,
+                    sharesBeforeReduction, sharesAfterReduction, cashReturned
                 )
             }
         }
@@ -248,7 +255,11 @@ class AddTransactionViewModel(
         dividendShares: Double,
         exRightsShares: Double,
         note: String,
-        dividendIncome: Double
+        dividendIncome: Double,
+        capitalReductionRatio: Double,
+        sharesBeforeReduction: Double,
+        sharesAfterReduction: Double,
+        cashReturned: Double
     ) {
         var stock = stockDao.getStockByCode(stockCode)
 
@@ -278,7 +289,11 @@ class AddTransactionViewModel(
                 dividendShares = dividendShares,
                 exRightsShares = exRightsShares,
                 note = note,
-                dividendIncome = dividendIncome
+                dividendIncome = dividendIncome,
+                capitalReductionRatio = capitalReductionRatio,
+                sharesBeforeReduction = sharesBeforeReduction,
+                sharesAfterReduction = sharesAfterReduction,
+                cashReturned = cashReturned
             )
             stockDao.insertTransaction(transaction)
             realtimeStockDataService.refreshStock(stockCode)
@@ -302,7 +317,11 @@ class AddTransactionViewModel(
         dividendShares: Double,
         exRightsShares: Double,
         note: String,
-        dividendIncome: Double
+        dividendIncome: Double,
+        capitalReductionRatio: Double,
+        sharesBeforeReduction: Double,
+        sharesAfterReduction: Double,
+        cashReturned: Double
     ) {
         _transactionToEdit.value?.let {
             val updatedTransaction = it.copy(
@@ -323,7 +342,11 @@ class AddTransactionViewModel(
                 dividendShares = dividendShares,
                 exRightsShares = exRightsShares,
                 note = note,
-                dividendIncome = dividendIncome
+                dividendIncome = dividendIncome,
+                capitalReductionRatio = capitalReductionRatio,
+                sharesBeforeReduction = sharesBeforeReduction,
+                sharesAfterReduction = sharesAfterReduction,
+                cashReturned = cashReturned
             )
             stockDao.updateTransaction(updatedTransaction)
             realtimeStockDataService.refreshStock(stockCode)

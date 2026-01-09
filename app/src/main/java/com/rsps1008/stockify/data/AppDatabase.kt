@@ -4,15 +4,10 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.rsps1008.stockify.R
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
-import java.io.BufferedReader
 
-@Database(entities = [Stock::class, StockTransaction::class], version = 3, exportSchema = false) // Bumped version
+@Database(entities = [Stock::class, StockTransaction::class], version = 4, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun stockDao(): StockDao
@@ -28,28 +23,19 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "stock_database"
                 )
-                .fallbackToDestructiveMigration() // Handle migrations destructively
-                .addCallback(object : RoomDatabase.Callback() {
-                    override fun onCreate(db: SupportSQLiteDatabase) {
-                        super.onCreate(db)
-                        CoroutineScope(Dispatchers.IO).launch {
-                            prepopulateDatabase(context, getDatabase(context).stockDao())
-                        }
-                    }
-                })
+                .addMigrations(MIGRATION_3_4) // Add migration
                 .build()
                 INSTANCE = instance
                 instance
             }
         }
 
-        private suspend fun prepopulateDatabase(context: Context, stockDao: StockDao) {
-            try {
-                val jsonString = context.assets.open("stocks.json").bufferedReader().use(BufferedReader::readText)
-                val stocks = Json.decodeFromString<List<Stock>>(jsonString)
-                stockDao.insertStocks(stocks)
-            } catch (e: Exception) {
-                // Handle exception, e.g. file not found
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE stock_transactions ADD COLUMN `減資比例` REAL NOT NULL DEFAULT 0.0")
+                database.execSQL("ALTER TABLE stock_transactions ADD COLUMN `減資前股數` REAL NOT NULL DEFAULT 0.0")
+                database.execSQL("ALTER TABLE stock_transactions ADD COLUMN `減資後股數` REAL NOT NULL DEFAULT 0.0")
+                database.execSQL("ALTER TABLE stock_transactions ADD COLUMN `退還股款` REAL NOT NULL DEFAULT 0.0")
             }
         }
     }

@@ -70,7 +70,19 @@ data class StockTransaction(
     val exRightsShares: Double = 0.0,
 
     @ColumnInfo(name = "筆記")
-    val note: String = ""
+    val note: String = "",
+
+    @ColumnInfo(name = "減資比例")
+    val capitalReductionRatio: Double = 0.0,
+
+    @ColumnInfo(name = "減資前股數")
+    val sharesBeforeReduction: Double = 0.0,
+
+    @ColumnInfo(name = "減資後股數")
+    val sharesAfterReduction: Double = 0.0,
+
+    @ColumnInfo(name = "退還股款")
+    val cashReturned: Double = 0.0
 )
 
 data class TransactionWithStock(

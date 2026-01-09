@@ -31,6 +31,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.rsps1008.stockify.StockifyApplication
 import com.rsps1008.stockify.ui.navigation.Screen
+import com.rsps1008.stockify.ui.theme.StockifyAppTheme
 import com.rsps1008.stockify.ui.viewmodel.TransactionDetailViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import java.text.SimpleDateFormat
@@ -109,25 +110,31 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                         DetailRow(label = "買進股數", value = String.format("%,.0f", transaction.buyShares))
                         DetailRow(label = "手續費", value = String.format("%,.0f", transaction.fee))
                         DetailRow(label = "交易稅", value = String.format("%,.0f", transaction.tax))
-                        DetailRow(label = "支出", value = String.format("%,.0f", transaction.expense), valueColor = Color.Green)
+                        DetailRow(label = "支出", value = String.format("%,.0f", transaction.expense), valueColor = StockifyAppTheme.stockColors.loss)
                     }
                     "賣出" -> {
                         DetailRow(label = "賣出價格", value = String.format("%,.2f", transaction.sellPrice))
                         DetailRow(label = "賣出股數", value = String.format("%,.0f", transaction.sellShares))
                         DetailRow(label = "手續費", value = String.format("%,.0f", transaction.fee))
                         DetailRow(label = "交易稅", value = String.format("%,.0f", transaction.tax))
-                        DetailRow(label = "收入", value = String.format("%,.0f", transaction.income), valueColor = Color.Red)
+                        DetailRow(label = "收入", value = String.format("%,.0f", transaction.income), valueColor = StockifyAppTheme.stockColors.gain)
                     }
                     "配息" -> {
                         DetailRow(label = "每股股息", value = String.format("%,.4f", transaction.cashDividend))
                         DetailRow(label = "除息股數", value = String.format("%,.0f", transaction.exDividendShares))
-                        DetailRow(label = "股息收入", value = String.format("%,.0f", transaction.income), valueColor = Color.Red)
+                        DetailRow(label = "股息收入", value = String.format("%,.0f", transaction.income), valueColor = StockifyAppTheme.stockColors.gain)
                         DetailRow(label = "手續費", value = String.format("%,.0f", transaction.fee))
                     }
                     "配股" -> {
                         DetailRow(label = "股票股利", value = String.format("%,.4f", transaction.stockDividend))
                         DetailRow(label = "除權股數", value = String.format("%,.0f", transaction.exRightsShares))
                         DetailRow(label = "配發股數", value = String.format("%,.0f", transaction.dividendShares))
+                    }
+                    "減資" -> {
+                        DetailRow(label = "減資比例", value = "${String.format("%.2f", transaction.capitalReductionRatio)}%")
+                        DetailRow(label = "原持股數", value = String.format("%,.0f", transaction.sharesBeforeReduction))
+                        DetailRow(label = "新持股數", value = String.format("%,.0f", transaction.sharesAfterReduction))
+                        DetailRow(label = "退還股款", value = String.format("%,.0f", transaction.cashReturned), valueColor = StockifyAppTheme.stockColors.gain)
                     }
                 }
             }
