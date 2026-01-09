@@ -82,7 +82,16 @@ data class StockTransaction(
     val sharesAfterReduction: Double = 0.0,
 
     @ColumnInfo(name = "退還股款")
-    val cashReturned: Double = 0.0
+    val cashReturned: Double = 0.0,
+
+    @ColumnInfo(name = "每股拆分")
+    val stockSplitRatio: Double = 0.0,
+
+    @ColumnInfo(name = "拆分前股數")
+    val sharesBeforeSplit: Double = 0.0,
+
+    @ColumnInfo(name = "拆分後股數")
+    val sharesAfterSplit: Double = 0.0
 )
 
 data class TransactionWithStock(

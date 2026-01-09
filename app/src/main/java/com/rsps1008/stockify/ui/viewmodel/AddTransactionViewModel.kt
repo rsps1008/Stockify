@@ -193,7 +193,10 @@ class AddTransactionViewModel(
         capitalReductionRatio: Double = 0.0,
         sharesBeforeReduction: Double = 0.0,
         sharesAfterReduction: Double = 0.0,
-        cashReturned: Double = 0.0
+        cashReturned: Double = 0.0,
+        stockSplitRatio: Double = 0.0,
+        sharesBeforeSplit: Double = 0.0,
+        sharesAfterSplit: Double = 0.0
     ) {
         viewModelScope.launch {
             val finalFee = when (type) {
@@ -222,7 +225,8 @@ class AddTransactionViewModel(
                     cashDividend, exDividendShares, stockDividend,
                     finalDividendShares, exRightsShares,
                     note, finalDividendIncome, capitalReductionRatio,
-                    sharesBeforeReduction, sharesAfterReduction, cashReturned
+                    sharesBeforeReduction, sharesAfterReduction, cashReturned,
+                    stockSplitRatio, sharesBeforeSplit, sharesAfterSplit
                 )
             } else {
                 updateTransaction(
@@ -232,7 +236,8 @@ class AddTransactionViewModel(
                     cashDividend, exDividendShares, stockDividend,
                     finalDividendShares, exRightsShares,
                     note, finalDividendIncome, capitalReductionRatio,
-                    sharesBeforeReduction, sharesAfterReduction, cashReturned
+                    sharesBeforeReduction, sharesAfterReduction, cashReturned,
+                    stockSplitRatio, sharesBeforeSplit, sharesAfterSplit
                 )
             }
         }
@@ -259,7 +264,10 @@ class AddTransactionViewModel(
         capitalReductionRatio: Double,
         sharesBeforeReduction: Double,
         sharesAfterReduction: Double,
-        cashReturned: Double
+        cashReturned: Double,
+        stockSplitRatio: Double,
+        sharesBeforeSplit: Double,
+        sharesAfterSplit: Double
     ) {
         var stock = stockDao.getStockByCode(stockCode)
 
@@ -293,7 +301,10 @@ class AddTransactionViewModel(
                 capitalReductionRatio = capitalReductionRatio,
                 sharesBeforeReduction = sharesBeforeReduction,
                 sharesAfterReduction = sharesAfterReduction,
-                cashReturned = cashReturned
+                cashReturned = cashReturned,
+                stockSplitRatio = stockSplitRatio,
+                sharesBeforeSplit = sharesBeforeSplit,
+                sharesAfterSplit = sharesAfterSplit
             )
             stockDao.insertTransaction(transaction)
             realtimeStockDataService.refreshStock(stockCode)
@@ -321,7 +332,10 @@ class AddTransactionViewModel(
         capitalReductionRatio: Double,
         sharesBeforeReduction: Double,
         sharesAfterReduction: Double,
-        cashReturned: Double
+        cashReturned: Double,
+        stockSplitRatio: Double,
+        sharesBeforeSplit: Double,
+        sharesAfterSplit: Double
     ) {
         _transactionToEdit.value?.let {
             val updatedTransaction = it.copy(
@@ -346,7 +360,10 @@ class AddTransactionViewModel(
                 capitalReductionRatio = capitalReductionRatio,
                 sharesBeforeReduction = sharesBeforeReduction,
                 sharesAfterReduction = sharesAfterReduction,
-                cashReturned = cashReturned
+                cashReturned = cashReturned,
+                stockSplitRatio = stockSplitRatio,
+                sharesBeforeSplit = sharesBeforeSplit,
+                sharesAfterSplit = sharesAfterSplit
             )
             stockDao.updateTransaction(updatedTransaction)
             realtimeStockDataService.refreshStock(stockCode)

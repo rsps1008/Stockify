@@ -358,10 +358,20 @@ fun AnimatedTimeText(text: String, color: Color) {
 
 @Composable
 private fun TransactionRow(transaction: TransactionUiState, navController: NavController) {
-    val amountColor = when (transaction.transaction.type) {
-        "買進" -> StockifyAppTheme.stockColors.loss
-        "賣出", "配息", "配股", "減資" -> StockifyAppTheme.stockColors.gain
-        else -> Color.Unspecified
+    val amountText = when (transaction.transaction.type) {
+        "買進" -> String.format("%,.0f", -transaction.transaction.expense)
+        "賣出" -> String.format("%,.0f", transaction.transaction.income)
+        "配息" -> String.format("%,.0f", transaction.transaction.income)
+        "配股" -> "${transaction.transaction.dividendShares.toInt()}股"
+        "減資" -> String.format("%,.1f", transaction.transaction.cashReturned)
+        "分割" -> "-"
+        else -> ""
+    }
+
+    val amountColor = when {
+        amountText == "-" -> Color.Unspecified
+        transaction.transaction.type == "買進" -> StockifyAppTheme.stockColors.loss
+        else -> StockifyAppTheme.stockColors.gain
     }
 
     Row(
@@ -380,6 +390,7 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
             "配息" -> "配息"
             "配股" -> "配股"
             "減資" -> "減資${String.format("%.1f", transaction.transaction.capitalReductionRatio)}%"
+            "分割" -> "分割(1→${transaction.transaction.stockSplitRatio.toInt()})"
             else -> transaction.transaction.type
         }
         Text(text = transactionText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1.5f), textAlign = TextAlign.Center)
@@ -390,15 +401,7 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
             else -> "-"
         }
         Text(text = priceText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-
-        val amountText = when (transaction.transaction.type) {
-            "買進" -> String.format("%,.0f", -transaction.transaction.expense)
-            "賣出" -> String.format("%,.0f", transaction.transaction.income)
-            "配息" -> String.format("%,.0f", transaction.transaction.income)
-            "配股" -> "${transaction.transaction.dividendShares.toInt()}股"
-            "減資" -> String.format("%,.1f", transaction.transaction.cashReturned)
-            else -> ""
-        }
+        
         Text(text = amountText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), color = amountColor, textAlign = TextAlign.End)
     }
 

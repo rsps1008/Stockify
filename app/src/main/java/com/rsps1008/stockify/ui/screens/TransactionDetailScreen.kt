@@ -136,6 +136,11 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                         DetailRow(label = "新持股數", value = String.format("%,.0f", transaction.sharesAfterReduction))
                         DetailRow(label = "退還股款", value = String.format("%,.0f", transaction.cashReturned), valueColor = StockifyAppTheme.stockColors.gain)
                     }
+                    "分割" -> {
+                        DetailRow(label = "每股拆分", value = String.format("%,.0f", transaction.stockSplitRatio))
+                        DetailRow(label = "原持股數", value = String.format("%,.0f", transaction.sharesBeforeSplit))
+                        DetailRow(label = "新持股數", value = String.format("%,.0f", transaction.sharesAfterSplit))
+                    }
                 }
             }
         }

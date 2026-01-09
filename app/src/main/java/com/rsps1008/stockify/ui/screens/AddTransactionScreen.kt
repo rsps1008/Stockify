@@ -2,6 +2,7 @@ package com.rsps1008.stockify.ui.screens
 
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.foundation.horizontalScroll
 import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -107,6 +108,19 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     }
     var cashReturned by remember { mutableStateOf("") }
 
+    // Stock Split fields
+    var stockSplitRatio by remember { mutableStateOf("") }
+    var sharesBeforeSplit by remember { mutableStateOf("") }
+    val sharesAfterSplit = remember(sharesBeforeSplit, stockSplitRatio) {
+        val before = sharesBeforeSplit.toDoubleOrNull() ?: 0.0
+        val ratio = stockSplitRatio.toDoubleOrNull() ?: 0.0
+        if (before > 0 && ratio > 0) {
+            (before * ratio).toString()
+        } else {
+            ""
+        }
+    }
+
     LaunchedEffect(prefillStockCode, allStocks) {
         if (transactionId == null && prefillStockCode != null) {
             val stock = allStocks.find { it.code == prefillStockCode }
@@ -164,6 +178,10 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                     sharesBeforeReduction = it.sharesBeforeReduction.toString()
                     cashReturned = it.cashReturned.toString()
                 }
+                "分割" -> {
+                    stockSplitRatio = it.stockSplitRatio.toString()
+                    sharesBeforeSplit = it.sharesBeforeSplit.toString()
+                }
             }
         }
     }
@@ -181,6 +199,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             capitalReductionRatio = ""
             sharesBeforeReduction = ""
             cashReturned = ""
+            stockSplitRatio = ""
+            sharesBeforeSplit = ""
         }
     }
 
@@ -228,6 +248,11 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             (capitalReductionRatio.toDoubleOrNull() ?: 0.0) > 0.0 &&
             (sharesBeforeReduction.toDoubleOrNull() ?: 0.0) > 0.0 &&
             (cashReturned.toDoubleOrNull() ?: 0.0) >= 0.0
+        "分割" ->
+            stockName.isNotBlank() &&
+            stockCode.isNotBlank() &&
+            (stockSplitRatio.toDoubleOrNull() ?: 0.0) > 0.0 &&
+            (sharesBeforeSplit.toDoubleOrNull() ?: 0.0) > 0.0
         else -> false
     }
 
@@ -252,7 +277,10 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             capitalReductionRatio = capitalReductionRatio.toDoubleOrNull() ?: 0.0,
             sharesBeforeReduction = sharesBeforeReduction.toDoubleOrNull() ?: 0.0,
             sharesAfterReduction = sharesAfterReduction.toDoubleOrNull() ?: 0.0,
-            cashReturned = cashReturned.toDoubleOrNull() ?: 0.0
+            cashReturned = cashReturned.toDoubleOrNull() ?: 0.0,
+            stockSplitRatio = stockSplitRatio.toDoubleOrNull() ?: 0.0,
+            sharesBeforeSplit = sharesBeforeSplit.toDoubleOrNull() ?: 0.0,
+            sharesAfterSplit = sharesAfterSplit.toDoubleOrNull() ?: 0.0
         )
         val message = if (transactionId == null) "新增成功" else "更新成功"
         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
@@ -326,12 +354,13 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         Spacer(modifier = Modifier.height(16.dp))
         Text(text = "交易類型", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(4.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
             Button(onClick = { transactionType = "買進" }, enabled = transactionType != "買進") { Text("買進") }
             Button(onClick = { transactionType = "賣出" }, enabled = transactionType != "賣出") { Text("賣出") }
             Button(onClick = { transactionType = "配息" }, enabled = transactionType != "配息") { Text("配息") }
             Button(onClick = { transactionType = "配股" }, enabled = transactionType != "配股") { Text("配股") }
             Button(onClick = { transactionType = "減資" }, enabled = transactionType != "減資") { Text("減資") }
+            Button(onClick = { transactionType = "分割" }, enabled = transactionType != "分割") { Text("分割") }
         }
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -656,6 +685,37 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             value = cashReturned,
                             onValueChange = { cashReturned = it },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                    }
+                }
+            }
+            "分割" -> {
+                androidx.compose.material3.Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        LabeledOutlinedTextField(
+                            label = "每股拆分",
+                            value = stockSplitRatio,
+                            onValueChange = { stockSplitRatio = it },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        ShareInputWithStepper(
+                            label = "原持股數",
+                            value = sharesBeforeSplit,
+                            onValueChange = { sharesBeforeSplit = it }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LabeledOutlinedTextField(
+                            label = "新持股數",
+                            value = sharesAfterSplit,
+                            onValueChange = { /* Read-only */ },
+                            readOnly = true
                         )
                     }
                 }

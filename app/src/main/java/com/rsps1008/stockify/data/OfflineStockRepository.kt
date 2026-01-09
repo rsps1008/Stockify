@@ -75,6 +75,45 @@ class OfflineStockRepository(
         }
     }
 
+    private fun adjustTransactionsForSplits(transactions: List<StockTransaction>): List<StockTransaction> {
+        val chronologicallySorted = transactions.sortedBy { it.date }
+        val adjustedTransactions = mutableListOf<StockTransaction>()
+        var splitMultiplier = 1.0
+
+        // Iterate backwards from the newest transaction
+        for (tx in chronologicallySorted.reversed()) {
+            if (tx.type == "分割") {
+                if (tx.stockSplitRatio > 0) {
+                    splitMultiplier *= tx.stockSplitRatio
+                }
+                // Don't add the split transaction itself to the calculation list
+                continue
+            }
+
+            // For transactions that happened before the split, adjust their shares and prices
+            if (splitMultiplier != 1.0) {
+                adjustedTransactions.add(tx.copy(
+                    buyShares = tx.buyShares * splitMultiplier,
+                    buyPrice = tx.buyPrice / splitMultiplier,
+                    sellShares = tx.sellShares * splitMultiplier,
+                    sellPrice = tx.sellPrice / splitMultiplier,
+                    dividendShares = tx.dividendShares * splitMultiplier,
+                    exDividendShares = tx.exDividendShares * splitMultiplier,
+                    exRightsShares = tx.exRightsShares * splitMultiplier,
+                    sharesBeforeReduction = tx.sharesBeforeReduction * splitMultiplier,
+                    sharesAfterReduction = tx.sharesAfterReduction * splitMultiplier
+                    // Monetary values like fee, tax, income, expense, cashReturned are NOT adjusted
+                ))
+            } else {
+                // No adjustment needed for transactions after the last split
+                adjustedTransactions.add(tx)
+            }
+        }
+
+        // Return the list in chronological order
+        return adjustedTransactions.reversed()
+    }
+
     private suspend fun calculateHoldingInfo(
         stock: Stock,
         transactions: List<StockTransaction>,
@@ -94,9 +133,9 @@ class OfflineStockRepository(
         var buySharesTotal = 0.0
         var buyCostTotal = 0.0
 
-        val sortedTransactions = transactions.sortedBy { it.date }
+        val adjustedTransactions = adjustTransactionsForSplits(transactions)
 
-        for (it in sortedTransactions) {
+        for (it in adjustedTransactions) {
             when (it.type) {
                 "買進" -> {
                     shares += it.buyShares

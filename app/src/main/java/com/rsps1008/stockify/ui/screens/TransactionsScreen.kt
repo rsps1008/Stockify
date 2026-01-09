@@ -96,10 +96,20 @@ private fun TransactionsListHeader() {
 
 @Composable
 private fun TransactionRow(transaction: TransactionUiState, navController: NavController) {
-    val amountColor = when (transaction.transaction.type) {
-        "買進" -> StockifyAppTheme.stockColors.loss
-        "賣出", "配息", "減資" -> StockifyAppTheme.stockColors.gain
-        else -> Color.Unspecified
+    val amountText = when (transaction.transaction.type) {
+        "買進" -> String.format("%,.0f", -transaction.transaction.expense)
+        "賣出" -> String.format("%,.0f", transaction.transaction.income)
+        "配息" -> String.format("%,.0f", transaction.transaction.income)
+        "配股" -> "0"
+        "減資" -> String.format("%,.0f", transaction.transaction.cashReturned)
+        "分割" -> "-"
+        else -> ""
+    }
+
+    val amountColor = when {
+        amountText == "-" || amountText == "0" -> Color.Unspecified
+        transaction.transaction.type == "買進" -> StockifyAppTheme.stockColors.loss
+        else -> StockifyAppTheme.stockColors.gain
     }
 
     Row(
@@ -127,6 +137,7 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
             "配息" -> "配息${transaction.transaction.income.toInt()}元"
             "配股" -> "配股${transaction.transaction.dividendShares.toInt()}股"
             "減資" -> "減資${String.format("%.1f", transaction.transaction.capitalReductionRatio)}%"
+            "分割" -> "分割(1→${transaction.transaction.stockSplitRatio.toInt()})"
             else -> transaction.transaction.type
         }
         Text(
@@ -148,16 +159,8 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
             textAlign = TextAlign.Center
         )
 
-        val amount = when (transaction.transaction.type) {
-            "買進" -> -transaction.transaction.expense
-            "賣出" -> transaction.transaction.income
-            "配息" -> transaction.transaction.income
-            "配股" -> 0.0
-            "減資" -> transaction.transaction.cashReturned
-            else -> 0.0
-        }
         Text(
-            text = String.format("%,.0f", amount),
+            text = amountText,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
             color = amountColor,

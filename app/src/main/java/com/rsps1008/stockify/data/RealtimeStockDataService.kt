@@ -249,10 +249,10 @@ class RealtimeStockDataService(
             val list = Json.decodeFromString<List<TaiwanHolidayItem>>(json)
             val today = date.format(DateTimeFormatter.ofPattern("yyyyMMdd"))
             val item = list.find { it.date == today }
-            Log.d(
+            /*Log.d(
                 "RealtimeStockDataService",
                 "json假日資料 → ${item?.isHoliday} 假日"
-            )
+            )*/
             item?.isHoliday == true
         } catch (e: Exception) {
             Log.e(
