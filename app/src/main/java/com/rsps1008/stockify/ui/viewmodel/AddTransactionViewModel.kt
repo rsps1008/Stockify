@@ -39,6 +39,9 @@ class AddTransactionViewModel(
     private val _tax = MutableStateFlow(0.0)
     val tax = _tax.asStateFlow()
 
+    private val _taxRate = MutableStateFlow(0.0)
+    val taxRate = _taxRate.asStateFlow()
+
     private val _expense = MutableStateFlow(0.0)
     val expense = _expense.asStateFlow()
 
@@ -135,47 +138,39 @@ class AddTransactionViewModel(
 
     fun calculateBuyCosts(price: Double, shares: Double) {
         if (price <= 0 || shares <= 0) {
-            _fee.value = 0.0
-            _expense.value = 0.0
             return
         }
 
         val (discount, minFeeRegular, minFeeOddLot) = feeSettings.value
         val transactionValue = price * shares
         val calculatedFee = transactionValue * 0.001425 * discount
-
         val minFee = if (shares % 1000 == 0.0) minFeeRegular else minFeeOddLot
-
         val finalFee = max(calculatedFee, minFee.toDouble()).roundToInt().toDouble()
+
         _fee.value = finalFee
-        _expense.value = (transactionValue + finalFee).roundToInt().toDouble()
+        _expense.value = (transactionValue + _fee.value).roundToInt().toDouble()
     }
 
     fun calculateSellCosts(price: Double, shares: Double, stockType: String) {
         if (price <= 0 || shares <= 0) {
-            _fee.value = 0.0
-            _tax.value = 0.0
-            _income.value = 0.0
             return
         }
 
-        // Fee calculation
         val (discount, minFeeRegular, minFeeOddLot) = feeSettings.value
         val transactionValue = price * shares
         val calculatedFee = transactionValue * 0.001425 * discount
         val minFee = if (shares % 1000 == 0.0) minFeeRegular else minFeeOddLot
-        val finalFee = max(calculatedFee, minFee.toDouble()).roundToInt().toDouble()
-        _fee.value = finalFee
+        val autoFee = max(calculatedFee, minFee.toDouble()).roundToInt().toDouble()
 
-        // Tax calculation for sell
-        val taxRate = if (stockType == "ETF") 0.001 else 0.003
-        val finalTax = (transactionValue * taxRate).roundToInt().toDouble()
+        _fee.value = autoFee
+
+        val taxRateValue = if (stockType == "ETF") 0.001 else 0.003
+        _taxRate.value = taxRateValue
+        val finalTax = (transactionValue * taxRateValue).roundToInt().toDouble()
         _tax.value = finalTax
 
-        // Net income calculation
-        _income.value = (transactionValue - finalFee - finalTax).roundToInt().toDouble()
+        _income.value = (transactionValue - _fee.value - finalTax).roundToInt().toDouble()
     }
-
 
     fun addOrUpdateTransaction(
         stockName: String,
@@ -376,6 +371,7 @@ class AddTransactionViewModel(
         _tax.value = 0.0
         _expense.value = 0.0
         _income.value = 0.0
+        _taxRate.value = 0.0
     }
 
     fun resetEditState() {
@@ -386,4 +382,21 @@ class AddTransactionViewModel(
         resetEditState()
         resetCalculatedValues()
     }
+
+    fun updateFee(newFee: Double, price: Double, shares: Double, type: String, tax: Double = _tax.value) {
+        _fee.value = newFee
+
+        when (type) {
+            "買進" -> {
+                val transactionValue = price * shares
+                _expense.value = (transactionValue + newFee).roundToInt().toDouble()
+            }
+
+            "賣出" -> {
+                val transactionValue = price * shares
+                _income.value = (transactionValue - newFee - tax).roundToInt().toDouble()
+            }
+        }
+    }
+
 }

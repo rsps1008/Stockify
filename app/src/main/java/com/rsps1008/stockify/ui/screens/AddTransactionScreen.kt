@@ -2,6 +2,7 @@ package com.rsps1008.stockify.ui.screens
 
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.Arrangement
@@ -42,6 +43,7 @@ import com.rsps1008.stockify.StockifyApplication
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.ui.Alignment
 import com.rsps1008.stockify.ui.viewmodel.AddTransactionViewModel
@@ -71,6 +73,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     val transactionToEdit by viewModel.transactionToEdit.collectAsState()
     val fee by viewModel.fee.collectAsState()
     val tax by viewModel.tax.collectAsState()
+    val taxRate by viewModel.taxRate.collectAsState()
     val expense by viewModel.expense.collectAsState()
     val income by viewModel.income.collectAsState()
     val defaultDividendFee by viewModel.defaultDividendFee.collectAsState()
@@ -139,6 +142,13 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                 val stock = allStocks.find { it.code == stockCode }
                 viewModel.calculateSellCosts(price.toDoubleOrNull() ?: 0.0, shares.toDoubleOrNull() ?: 0.0, stock?.stockType ?: "")
             }
+        }
+    }
+
+    LaunchedEffect(transactionType) {
+        // 切換買進/賣出 → 清空 fee, tax, expense, income
+        if (transactionType == "買進" || transactionType == "賣出") {
+            viewModel.resetCalculatedValues()
         }
     }
 
@@ -403,14 +413,18 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         // 手續費
-                        Text(
-                            text = "手續費",
+                        EditableTextStyled(
+                            label = "手續費",
+                            value = if (fee > 0) fee.toInt().toString() else "",
+                            onValueChange = { newFee ->
+                                viewModel.updateFee(
+                                    newFee = newFee.toDoubleOrNull() ?: 0.0,
+                                    price = price.toDoubleOrNull() ?: 0.0,
+                                    shares = shares.toDoubleOrNull() ?: 0.0,
+                                    type = "買進"
+                                )
+                            },
                             style = MaterialTheme.typography.bodyLarge
-                        )
-                        Text(
-                            text = if (fee > 0) fee.toInt().toString() else "-",
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.padding(bottom = 12.dp)
                         )
                         androidx.compose.material3.HorizontalDivider()
                         Spacer(modifier = Modifier.height(8.dp))
@@ -463,16 +477,25 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         // 手續費
-                        Text("手續費", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            text = if (fee > 0) fee.toInt().toString() else "-",
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.padding(bottom = 12.dp)
+                        EditableTextStyled(
+                            label = "手續費",
+                            value = if (fee > 0) fee.toInt().toString() else "",
+                            onValueChange = { newFee ->
+                                viewModel.updateFee(
+                                    newFee = newFee.toDoubleOrNull() ?: 0.0,
+                                    price = price.toDoubleOrNull() ?: 0.0,
+                                    shares = shares.toDoubleOrNull() ?: 0.0,
+                                    type = "賣出"
+                                )
+                            },
+                            style = MaterialTheme.typography.bodyLarge
                         )
+
                         androidx.compose.material3.HorizontalDivider()
                         Spacer(modifier = Modifier.height(8.dp))
                         // 交易稅
-                        Text("交易稅", style = MaterialTheme.typography.bodyLarge)
+                        val taxLabel = "交易稅" + if (taxRate > 0) " (${(taxRate * 100).toBigDecimal().stripTrailingZeros().toPlainString()} %)" else ""
+                        Text(taxLabel, style = MaterialTheme.typography.bodyLarge)
                         Text(
                             text = if (tax > 0) tax.toInt().toString() else "-",
                             style = MaterialTheme.typography.bodyLarge,
@@ -830,6 +853,52 @@ fun ShareInputWithStepper(
             ) {
                 Text("-")
             }
+        }
+    }
+}
+@Composable
+fun EditableTextStyled(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    style: androidx.compose.ui.text.TextStyle
+) {
+    var editing by remember { mutableStateOf(false) }
+    var tempText by remember { mutableStateOf(value) }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(label, style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(4.dp))
+
+        if (!editing) {
+            Text(
+                text = if (value.isBlank()) "-" else value,
+                style = style,
+                modifier = Modifier
+                    .padding(bottom = 12.dp)
+                    .clickable {
+                        tempText = value
+                        editing = true
+                    }
+            )
+        } else {
+            OutlinedTextField(
+                value = tempText,
+                onValueChange = { tempText = it },
+                textStyle = style,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    Text(
+                        "完成",
+                        modifier = Modifier.clickable {
+                            onValueChange(tempText)
+                            editing = false
+                        }
+                    )
+                }
+            )
         }
     }
 }
