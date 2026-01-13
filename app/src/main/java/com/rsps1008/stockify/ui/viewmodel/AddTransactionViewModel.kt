@@ -29,6 +29,21 @@ class AddTransactionViewModel(
     private val realtimeStockDataService: RealtimeStockDataService,
     private val dividendRepository: YahooDividendRepository
 ) : ViewModel() {
+    val taxRateNormalListedStock: StateFlow<Double> =
+        settingsDataStore.taxRateNormalListedStockFlow
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 0.003)
+
+    val taxRateDomesticStockEtf: StateFlow<Double> =
+        settingsDataStore.taxRateDomesticStockEtfFlow
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 0.001)
+
+    val taxRateBondEtf: StateFlow<Double> =
+        settingsDataStore.taxRateBondEtfFlow
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 0.0)
+
+    val taxRateDayTrading: StateFlow<Double> =
+        settingsDataStore.taxRateDayTradingFlow
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 0.0015)
 
     private val _transactionToEdit = MutableStateFlow<StockTransaction?>(null)
     val transactionToEdit = _transactionToEdit.asStateFlow()
@@ -151,20 +166,31 @@ class AddTransactionViewModel(
         _expense.value = (transactionValue + _fee.value).roundToInt().toDouble()
     }
 
-    fun calculateSellCosts(price: Double, shares: Double, stockType: String) {
-        if (price <= 0 || shares <= 0) {
-            return
-        }
+
+    fun calculateSellCosts(
+        price: Double,
+        shares: Double,
+        stockType: String,
+        isDayTrading: Boolean = false,
+        isBondEtf: Boolean = false
+    ) {
+        if (price <= 0 || shares <= 0) return
 
         val (discount, minFeeRegular, minFeeOddLot) = feeSettings.value
         val transactionValue = price * shares
+
         val calculatedFee = transactionValue * 0.001425 * discount
         val minFee = if (shares % 1000 == 0.0) minFeeRegular else minFeeOddLot
         val autoFee = max(calculatedFee, minFee.toDouble()).roundToInt().toDouble()
-
         _fee.value = autoFee
 
-        val taxRateValue = if (stockType == "ETF") 0.001 else 0.003
+        val taxRateValue = when {
+            isDayTrading -> taxRateDayTrading.value
+            isBondEtf -> taxRateBondEtf.value
+            stockType == "ETF" -> taxRateDomesticStockEtf.value
+            else -> taxRateNormalListedStock.value
+        }
+
         _taxRate.value = taxRateValue
         val finalTax = (transactionValue * taxRateValue).roundToInt().toDouble()
         _tax.value = finalTax

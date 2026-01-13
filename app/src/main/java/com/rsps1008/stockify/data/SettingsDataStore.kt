@@ -30,6 +30,10 @@ class SettingsDataStore(val context: Context) {
     private val themeKey = stringPreferencesKey("theme")
     private val stockDataSourceKey = stringPreferencesKey("stock_data_source")
     private val notifyFallbackRepeatedlyKey = booleanPreferencesKey("notify_fallback_repeatedly")
+    private val taxRateNormalListedStockKey = doublePreferencesKey("tax_rate_normal_listed_stock")
+    private val taxRateDomesticStockEtfKey = doublePreferencesKey("tax_rate_domestic_stock_etf")
+    private val taxRateBondEtfKey = doublePreferencesKey("tax_rate_bond_etf")
+    private val taxRateDayTradingKey = doublePreferencesKey("tax_rate_day_trading")
 
     val fetchIntervalFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
@@ -85,6 +89,26 @@ class SettingsDataStore(val context: Context) {
     val notifyFallbackRepeatedlyFlow: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
             preferences[notifyFallbackRepeatedlyKey] ?: false
+        }
+
+    val taxRateNormalListedStockFlow: Flow<Double> = context.dataStore.data
+        .map { preferences ->
+            preferences[taxRateNormalListedStockKey] ?: 0.003
+        }
+
+    val taxRateDomesticStockEtfFlow: Flow<Double> = context.dataStore.data
+        .map { preferences ->
+            preferences[taxRateDomesticStockEtfKey] ?: 0.001
+        }
+
+    val taxRateBondEtfFlow: Flow<Double> = context.dataStore.data
+        .map { preferences ->
+            preferences[taxRateBondEtfKey] ?: 0.0
+        }
+
+    val taxRateDayTradingFlow: Flow<Double> = context.dataStore.data
+        .map { preferences ->
+            preferences[taxRateDayTradingKey] ?: 0.0015
         }
 
     suspend fun setFetchInterval(interval: Int) {
@@ -156,6 +180,30 @@ class SettingsDataStore(val context: Context) {
     suspend fun setNotifyFallbackRepeatedly(shouldNotifyRepeatedly: Boolean) {
         context.dataStore.edit {
             it[notifyFallbackRepeatedlyKey] = shouldNotifyRepeatedly
+        }
+    }
+
+    suspend fun setTaxRateNormalListedStock(rate: Double) {
+        context.dataStore.edit {
+            it[taxRateNormalListedStockKey] = rate
+        }
+    }
+
+    suspend fun setTaxRateDomesticStockEtf(rate: Double) {
+        context.dataStore.edit {
+            it[taxRateDomesticStockEtfKey] = rate
+        }
+    }
+
+    suspend fun setTaxRateBondEtf(rate: Double) {
+        context.dataStore.edit {
+            it[taxRateBondEtfKey] = rate
+        }
+    }
+
+    suspend fun setTaxRateDayTrading(rate: Double) {
+        context.dataStore.edit {
+            it[taxRateDayTradingKey] = rate
         }
     }
 }

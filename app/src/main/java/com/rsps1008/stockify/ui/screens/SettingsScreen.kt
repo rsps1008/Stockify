@@ -74,6 +74,10 @@ fun SettingsScreen() {
     val theme by viewModel.theme.collectAsState()
     val stockDataSource by viewModel.stockDataSource.collectAsState()
     val notifyFallbackRepeatedly by viewModel.notifyFallbackRepeatedly.collectAsState()
+    val taxRateNormalListedStock by viewModel.taxRateNormalListedStock.collectAsState()
+    val taxRateDomesticStockEtf by viewModel.taxRateDomesticStockEtf.collectAsState()
+    val taxRateBondEtf by viewModel.taxRateBondEtf.collectAsState()
+    val taxRateDayTrading by viewModel.taxRateDayTrading.collectAsState()
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -363,6 +367,73 @@ fun SettingsScreen() {
                                 it.toIntOrNull()?.let { fee -> viewModel.setDividendFee(fee) }
                             },
                             label = { Text("除息手續費 (元)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("交易稅率設定", style = MaterialTheme.typography.titleLarge)
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        var taxRateNormalListedStockText by remember { mutableStateOf(taxRateNormalListedStock.toString()) }
+                        LaunchedEffect(taxRateNormalListedStock) { taxRateNormalListedStockText = taxRateNormalListedStock.toString() }
+                        OutlinedTextField(
+                            value = taxRateNormalListedStockText,
+                            onValueChange = {
+                                taxRateNormalListedStockText = it
+                                it.toDoubleOrNull()?.let { rate -> viewModel.setTaxRateNormalListedStock(rate) }
+                            },
+                            label = { Text("一般上市股票稅率 (例如 0.003)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        var taxRateDomesticStockEtfText by remember { mutableStateOf(taxRateDomesticStockEtf.toString()) }
+                        LaunchedEffect(taxRateDomesticStockEtf) { taxRateDomesticStockEtfText = taxRateDomesticStockEtf.toString() }
+                        OutlinedTextField(
+                            value = taxRateDomesticStockEtfText,
+                            onValueChange = {
+                                taxRateDomesticStockEtfText = it
+                                it.toDoubleOrNull()?.let { rate -> viewModel.setTaxRateDomesticStockEtf(rate) }
+                            },
+                            label = { Text("國內股票型 ETF 稅率 (例如 0.001)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        var taxRateBondEtfText by remember { mutableStateOf(taxRateBondEtf.toString()) }
+                        LaunchedEffect(taxRateBondEtf) { taxRateBondEtfText = taxRateBondEtf.toString() }
+                        OutlinedTextField(
+                            value = taxRateBondEtfText,
+                            onValueChange = {
+                                taxRateBondEtfText = it
+                                it.toDoubleOrNull()?.let { rate -> viewModel.setTaxRateBondEtf(rate) }
+                            },
+                            label = { Text("債券 ETF 稅率 (例如 0)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        var taxRateDayTradingText by remember { mutableStateOf(taxRateDayTrading.toString()) }
+                        LaunchedEffect(taxRateDayTrading) { taxRateDayTradingText = taxRateDayTrading.toString() }
+                        OutlinedTextField(
+                            value = taxRateDayTradingText,
+                            onValueChange = {
+                                taxRateDayTradingText = it
+                                it.toDoubleOrNull()?.let { rate -> viewModel.setTaxRateDayTrading(rate) }
+                            },
+                            label = { Text("現股當沖稅率 (例如 0.0015)") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.fillMaxWidth()
                         )

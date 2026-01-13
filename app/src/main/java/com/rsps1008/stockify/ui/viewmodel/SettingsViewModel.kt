@@ -92,6 +92,18 @@ class SettingsViewModel(
     val notifyFallbackRepeatedly: StateFlow<Boolean> = settingsDataStore.notifyFallbackRepeatedlyFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), false)
 
+    val taxRateNormalListedStock: StateFlow<Double> = settingsDataStore.taxRateNormalListedStockFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 0.003)
+
+    val taxRateDomesticStockEtf: StateFlow<Double> = settingsDataStore.taxRateDomesticStockEtfFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 0.001)
+
+    val taxRateBondEtf: StateFlow<Double> = settingsDataStore.taxRateBondEtfFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 0.0)
+
+    val taxRateDayTrading: StateFlow<Double> = settingsDataStore.taxRateDayTradingFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 0.0015)
+
     init {
         val account = GoogleSignIn.getLastSignedInAccount(getApplication())
         // 在 init 和 handleSignInResult 中
@@ -346,6 +358,30 @@ class SettingsViewModel(
     fun setPreDeductSellFees(preDeduct: Boolean) {
         viewModelScope.launch {
             settingsDataStore.setPreDeductSellFees(preDeduct)
+        }
+    }
+
+    fun setTaxRateNormalListedStock(rate: Double) {
+        viewModelScope.launch {
+            settingsDataStore.setTaxRateNormalListedStock(rate)
+        }
+    }
+
+    fun setTaxRateDomesticStockEtf(rate: Double) {
+        viewModelScope.launch {
+            settingsDataStore.setTaxRateDomesticStockEtf(rate)
+        }
+    }
+
+    fun setTaxRateBondEtf(rate: Double) {
+        viewModelScope.launch {
+            settingsDataStore.setTaxRateBondEtf(rate)
+        }
+    }
+
+    fun setTaxRateDayTrading(rate: Double) {
+        viewModelScope.launch {
+            settingsDataStore.setTaxRateDayTrading(rate)
         }
     }
 
