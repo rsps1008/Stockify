@@ -44,6 +44,7 @@ import androidx.compose.ui.window.PopupProperties
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.ui.Alignment
 import com.rsps1008.stockify.ui.viewmodel.AddTransactionViewModel
@@ -97,6 +98,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     var stockDividendRate by remember { mutableStateOf("") }
     var exRightsShares by remember { mutableStateOf("") }
 
+    var isDayTrading by remember { mutableStateOf(false) }
+
     // Capital Reduction fields
     var capitalReductionRatio by remember { mutableStateOf("") }
     var sharesBeforeReduction by remember { mutableStateOf("") }
@@ -140,7 +143,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             "買進" -> viewModel.calculateBuyCosts(price.toDoubleOrNull() ?: 0.0, shares.toDoubleOrNull() ?: 0.0)
             "賣出" -> {
                 val stock = allStocks.find { it.code == stockCode }
-                viewModel.calculateSellCosts(price.toDoubleOrNull() ?: 0.0, shares.toDoubleOrNull() ?: 0.0, stock?.stockType ?: "")
+                viewModel.calculateSellCosts(price.toDoubleOrNull() ?: 0.0, shares.toDoubleOrNull() ?: 0.0, stock?.stockType ?: "", isDayTrading = isDayTrading, isBondEtf = stockCode.endsWith("B", ignoreCase = true))
             }
         }
     }
@@ -452,18 +455,73 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                     )
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        LabeledOutlinedTextField(
-                            label = "賣出價格",
-                            value = price,
-                            onValueChange = { price = it },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        ShareInputWithStepper(
-                            label = "賣出股數",
-                            value = shares,
-                            onValueChange = { shares = it }
-                        )
+
+                        // ★ 賣出價格 + 當沖 checkbox
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text(text = "賣出價格", style = MaterialTheme.typography.titleMedium)
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+
+                                // 賣出價格輸入框
+                                OutlinedTextField(
+                                    value = price,
+                                    onValueChange = { price = it },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                // ★ 當沖勾勾（移到右方）
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Checkbox(
+                                        checked = isDayTrading,
+                                        onCheckedChange = { isDayTrading = it }
+                                    )
+                                    Text("當沖")
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // ★ 賣出股數 + 加減按鈕（維持原樣）
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text(text = "賣出股數", style = MaterialTheme.typography.titleMedium)
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+
+                                // 股數輸入框
+                                OutlinedTextField(
+                                    value = shares,
+                                    onValueChange = { input ->
+                                        shares = input.filter { it.isDigit() }
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                )
+
+                                Spacer(modifier = Modifier.width(4.dp))
+
+                                Button(
+                                    onClick = {
+                                        val current = shares.toIntOrNull() ?: 0
+                                        shares = (current + 1000).toString()
+                                    }
+                                ) { Text("+") }
+
+                                Spacer(modifier = Modifier.width(2.dp))
+
+                                Button(
+                                    onClick = {
+                                        val current = shares.toIntOrNull() ?: 0
+                                        shares = (current - 1000).coerceAtLeast(0).toString()
+                                    }
+                                ) { Text("-") }
+                            }
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(10.dp))
