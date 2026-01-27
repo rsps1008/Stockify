@@ -12,9 +12,15 @@ sealed class Screen(val route: String) {
             transactionId: Int? = null,
             stockCode: String? = null
         ): String {
-            val idPart = transactionId?.let { "transactionId=$it" } ?: "transactionId=null"
-            val codePart = stockCode?.let { "stockCode=$it" } ?: "stockCode=null"
-            return "add_transaction?$idPart&$codePart"
+            val params = mutableListOf<String>()
+            transactionId?.let { params.add("transactionId=$it") }
+            stockCode?.let { params.add("stockCode=$it") }
+            
+            return if (params.isEmpty()) {
+                "add_transaction"
+            } else {
+                "add_transaction?${params.joinToString("&")}"
+            }
         }
     }
 

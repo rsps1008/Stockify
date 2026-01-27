@@ -129,7 +129,13 @@ fun MainScreen() {
                             modifier = Modifier
                                 .size(50.dp)
                                 .clickable {
-                                    navController.navigate(Screen.AddTransaction.route) {
+                                    val currentEntry = navController.currentBackStackEntry
+                                    val stockCode = if (currentEntry?.destination?.route == Screen.StockDetail.route) {
+                                        currentEntry.arguments?.getString("stockCode")
+                                    } else {
+                                        null
+                                    }
+                                    navController.navigate(Screen.AddTransaction.createRoute(stockCode = stockCode)) {
                                         launchSingleTop = true
                                     }
                                 }

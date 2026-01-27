@@ -31,16 +31,7 @@ fun NavGraph(
         composable(Screen.Transactions.route) {
             TransactionsScreen(navController = navController)
         }
-        composable(
-            route = Screen.AddTransaction.route,
-            arguments = listOf(navArgument("transactionId") { 
-                type = NavType.IntType 
-                defaultValue = -1
-            })
-        ) { backStackEntry ->
-            val transactionId = backStackEntry.arguments?.getInt("transactionId")
-            AddTransactionScreen(navController = navController, transactionId = if (transactionId == -1) null else transactionId)
-        }
+
         composable(Screen.Settings.route) {
             SettingsScreen()
         }
