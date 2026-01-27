@@ -61,6 +61,21 @@ class ViewModelFactory(
                     realtimeStockDataService = realtimeStockDataService
                 ) as T
             }
+            modelClass.isAssignableFrom(DividendInfoViewModel::class.java) -> {
+                requireNotNull(dividendRepository) { "dividendRepository is required for DividendInfoViewModel" }
+                requireNotNull(realtimeStockDataService) { "realtimeStockDataService is required for DividendInfoViewModel" }
+                requireNotNull(settingsDataStore) { "settingsDataStore is required for DividendInfoViewModel" }
+
+                @Suppress("UNCHECKED_CAST")
+                DividendInfoViewModel(
+                    stockRepository = OfflineStockRepository(
+                        stockDao = stockDao,
+                        realtimeStockDataService = realtimeStockDataService,
+                        settingsDataStore = settingsDataStore
+                    ),
+                    dividendRepository = dividendRepository
+                ) as T
+            }
             modelClass.isAssignableFrom(TransactionDetailViewModel::class.java) -> {
                 requireNotNull(transactionId) { "transactionId is required for TransactionDetailViewModel" }
                 @Suppress("UNCHECKED_CAST")

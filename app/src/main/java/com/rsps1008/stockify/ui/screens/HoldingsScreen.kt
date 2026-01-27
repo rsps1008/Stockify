@@ -63,9 +63,21 @@ import com.rsps1008.stockify.data.LimitState
 import com.rsps1008.stockify.data.RealtimeStockInfo
 import com.rsps1008.stockify.ui.theme.StockGain
 import com.rsps1008.stockify.ui.theme.StockLoss
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import android.widget.Toast
 
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun HoldingsScreen(navController: NavController) {
     val application = LocalContext.current.applicationContext as StockifyApplication
@@ -95,18 +107,41 @@ fun HoldingsScreen(navController: NavController) {
     Column(modifier = Modifier.fillMaxSize()) {
 
         // ★★★★★ 這裡是固定最上方的圖片，不會滑動 ★★★★★
-        Column(
+        // ★★★★★ 這裡是固定最上方的圖片，不會滑動 ★★★★★
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            contentAlignment = Alignment.Center
         ) {
             Image(
                 painter = painterResource(id = R.drawable.stockify),
                 contentDescription = "Stockify Logo",
                 modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(0.35f)
             )
-            Spacer(modifier = Modifier.height(6.dp))
+
+            val context = LocalContext.current
+            IconButton(
+                onClick = { navController.navigate(Screen.DividendInfo.route) },
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 16.dp)
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onLongPress = {
+                                Toast.makeText(context, "查詢持股最新配息配股資訊", Toast.LENGTH_SHORT).show()
+                            },
+                            onTap = {
+                                navController.navigate(Screen.DividendInfo.route)
+                            }
+                        )
+                    }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AttachMoney,
+                    contentDescription = "Dividend Info"
+                )
+            }
         }
 
         // ★ LazyColumn 會在圖片下方滑動
