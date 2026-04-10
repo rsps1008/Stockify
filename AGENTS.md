@@ -1,4 +1,4 @@
-# AGENTS.md - Stockify 專案指引
+﻿# AGENTS.md - Stockify 專案指引
 
 這份文件是這個 repository 的工作準則。只要某次需求揭露了可長期沿用的專案知識，就應該更新這裡，尤其是架構、設定、背景排程、資料流、或任何會影響使用者體驗的行為。
 
@@ -145,3 +145,8 @@ Windows 指令範例：
 
 - `RealtimeStockDataService` 的盤中更新已改成對齊下一個整數秒邊界。
 - 這是為了降低不同裝置之間的抓價時間漂移。
+
+- 資料管理頁新增 PDF 庫存匯入，支援使用者手動輸入 PDF 密碼後解密與抽取文字。
+- PDF 庫存匯入會先整理股票代號與庫存，再抓取目前價格做預覽，最後可選擇替代匯入或新增匯入。
+- PDF import writes snapshot buy transactions with current price, zero fee, expense = price * shares, and note = PDF import snapshot.
+- 首次點擊 PDF 庫存匯入時，會先顯示 4 張教學圖片；使用者可勾選「下次不再提醒」，這個偏好會存到 `SettingsDataStore`。

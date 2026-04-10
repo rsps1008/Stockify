@@ -452,7 +452,7 @@ fun SettingsScreen() {
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("法律與說明", style = MaterialTheme.typography.titleLarge)
+                        Text("隱私政策", style = MaterialTheme.typography.titleLarge)
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
                             onClick = { showPrivacyPolicyDialog = true },

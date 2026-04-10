@@ -28,8 +28,8 @@ android {
         applicationId = "com.rsps1008.stockify"
         minSdk = 26
         targetSdk = 35
-        versionCode = 106
-        versionName = "1.0.6"
+        versionCode = 110
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -129,6 +129,7 @@ dependencies {
 
     // Jsoup
     implementation(libs.jsoup)
+    implementation(libs.pdfbox.android)
 
     // DataStore
     implementation(libs.datastore.preferences)

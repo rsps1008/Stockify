@@ -220,6 +220,20 @@ class RealtimeStockDataService(
         }
     }
 
+    suspend fun fetchCurrentStockInfo(stockCode: String): RealtimeStockInfo? {
+        val cached = _realtimeStockInfo.value[stockCode]
+        if (cached != null) {
+            return cached
+        }
+
+        val (primaryFetcher, secondaryFetcher) = getFetchers()
+        return fetchWithSingleFallback(
+            stockCode = stockCode,
+            primaryFetcher = primaryFetcher,
+            secondaryFetcher = secondaryFetcher
+        ).info
+    }
+
     private suspend fun isTaiwanMarketOpen(): Boolean {
         val taipeiZone = ZoneId.of("Asia/Taipei")
         val now = ZonedDateTime.now(taipeiZone)

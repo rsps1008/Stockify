@@ -25,6 +25,7 @@ datastore = "1.0.0"
 kotlinxSerialization = "1.6.3"
 ktor = "2.3.11"
 jsoup = "1.17.2"
+pdfboxAndroid = "2.0.27.0"
 
 # 測試
 junit = "4.13.2"
@@ -64,6 +65,7 @@ google-http-client-android = { group = "com.google.http-client", name = "google-
 # 其他工具庫
 guava = { group = "com.google.guava", name = "guava", version.ref = "guava" }
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
+pdfbox-android = { group = "com.tom-roush", name = "pdfbox-android", version.ref = "pdfboxAndroid" }
 ktor-client-cio = { group = "io.ktor", name = "ktor-client-cio", version.ref = "ktor" }
 datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }

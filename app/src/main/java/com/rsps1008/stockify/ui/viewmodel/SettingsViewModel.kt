@@ -3,6 +3,7 @@ package com.rsps1008.stockify.ui.viewmodel
 import android.app.Application
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -13,11 +14,15 @@ import com.google.api.services.drive.DriveScopes
 import com.rsps1008.stockify.data.CsvService
 import com.rsps1008.stockify.data.CsvTransaction
 import com.rsps1008.stockify.data.GoogleDriveService
+import com.rsps1008.stockify.data.PdfHoldingImportService
+import com.rsps1008.stockify.data.PdfStockImportPreview
+import com.rsps1008.stockify.data.PdfStockImportPreviewItem
 import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.StockDao
 import com.rsps1008.stockify.data.StockDataFetcher
+import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.StockListRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -32,6 +37,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import kotlin.math.roundToInt
 
 class SettingsViewModel(
     private val stockDao: StockDao,
@@ -40,9 +46,14 @@ class SettingsViewModel(
     private val realtimeStockDataService: RealtimeStockDataService
 ) : AndroidViewModel(application) {
 
+    private companion object {
+        const val TAG = "SettingsViewModel"
+    }
+
     private val stockDataFetcher = StockDataFetcher()
     private val stockListRepository = StockListRepository(application)
     private val csvService = CsvService()
+    private val pdfHoldingImportService = PdfHoldingImportService()
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -55,12 +66,22 @@ class SettingsViewModel(
 
     private var importUri: Uri? = null
     private var importData: ByteArray? = null
+    private var pdfImportUri: Uri? = null
 
     private val _googleSignInAccount = MutableStateFlow<GoogleSignInAccount?>(null)
     val googleSignInAccount: StateFlow<GoogleSignInAccount?> = _googleSignInAccount.asStateFlow()
 
     private val _onSignOut = MutableSharedFlow<Unit>()
     val onSignOut = _onSignOut.asSharedFlow()
+
+    private val _showPdfPasswordDialog = MutableStateFlow(false)
+    val showPdfPasswordDialog: StateFlow<Boolean> = _showPdfPasswordDialog.asStateFlow()
+
+    private val _pdfPassword = MutableStateFlow("")
+    val pdfPassword: StateFlow<String> = _pdfPassword.asStateFlow()
+
+    private val _pdfImportPreview = MutableStateFlow<PdfStockImportPreview?>(null)
+    val pdfImportPreview: StateFlow<PdfStockImportPreview?> = _pdfImportPreview.asStateFlow()
 
     val fetchInterval: StateFlow<Int> = settingsDataStore.fetchIntervalFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 5)
@@ -90,6 +111,9 @@ class SettingsViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), "TWSE")
 
     val notifyFallbackRepeatedly: StateFlow<Boolean> = settingsDataStore.notifyFallbackRepeatedlyFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), false)
+
+    val skipPdfImportTutorial: StateFlow<Boolean> = settingsDataStore.skipPdfImportTutorialFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), false)
 
     val taxRateNormalListedStock: StateFlow<Double> = settingsDataStore.taxRateNormalListedStockFlow
@@ -237,6 +261,133 @@ class SettingsViewModel(
         importData = null
     }
 
+    fun onPdfImportRequest(uri: Uri) {
+        pdfImportUri = uri
+        _pdfPassword.value = ""
+        _showPdfPasswordDialog.value = true
+    }
+
+    fun updatePdfPassword(password: String) {
+        _pdfPassword.value = password
+    }
+
+    fun onPdfPasswordDialogDismiss() {
+        _showPdfPasswordDialog.value = false
+        _pdfPassword.value = ""
+        pdfImportUri = null
+    }
+
+    fun parsePdfImport() {
+        val uri = pdfImportUri ?: run {
+            _message.value = "尚未選擇 PDF 檔案"
+            return
+        }
+
+        val password = _pdfPassword.value
+        if (password.isBlank()) {
+            _message.value = "請先輸入 PDF 密碼"
+            return
+        }
+
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val pdfBytes = withContext(Dispatchers.IO) {
+                    getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                } ?: throw IllegalArgumentException("無法讀取 PDF 檔案")
+
+                val extraction = withContext(Dispatchers.Default) {
+                    pdfHoldingImportService.extract(pdfBytes, password)
+                }
+                val preview = buildPdfImportPreview(extraction)
+
+                _pdfImportPreview.value = preview
+                _showPdfPasswordDialog.value = false
+                _pdfPassword.value = ""
+                pdfImportUri = null
+            } catch (e: Exception) {
+                val errorMessage = e.message.orEmpty()
+                if (errorMessage.contains("the password is incorrect", ignoreCase = true)) {
+                    _message.value = "PDF 密碼錯誤，請重新輸入。"
+                } else {
+                    Log.e(TAG, "PDF import parse failed", e)
+                    _message.value = "PDF 解析錯誤"
+                }
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun dismissPdfImportPreview() {
+        _pdfImportPreview.value = null
+    }
+
+    fun importPdfPortfolio(replaceExisting: Boolean) {
+        val preview = _pdfImportPreview.value ?: return
+
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val importableItems = preview.items.filter { it.currentPrice != null }
+                if (importableItems.isEmpty()) {
+                    throw IllegalArgumentException("沒有可匯入的股票，請確認目前價格是否抓取成功")
+                }
+
+                if (replaceExisting) {
+                    deleteAllData()
+                }
+
+                val allStocksByCode = stockDao.getAllStocks().first().associateBy { it.code }
+                val importDate = System.currentTimeMillis()
+
+                importableItems.forEachIndexed { index, item ->
+                    val stock = allStocksByCode[item.stockCode] ?: Stock(
+                        name = item.stockName.ifBlank { item.stockCode },
+                        code = item.stockCode
+                    ).also { stockDao.insertStock(it) }
+
+                    val currentPrice = item.currentPrice ?: return@forEachIndexed
+                    val expense = ((currentPrice * item.balance).roundToInt()).toDouble()
+
+                    stockDao.insertTransaction(
+                        StockTransaction(
+                            stockCode = stock.code,
+                            date = importDate,
+                            recordTime = importDate + index,
+                            type = "買進",
+                            buyPrice = currentPrice,
+                            buyShares = item.balance.toDouble(),
+                            fee = 0.0,
+                            tax = 0.0,
+                            income = 0.0,
+                            expense = expense,
+                            note = "PDF 匯入快照"
+                        )
+                    )
+                }
+
+                realtimeStockDataService.startFetching()
+                val skippedCount = preview.items.size - importableItems.size
+                _message.value = buildString {
+                    append("PDF 匯入完成，共新增 ")
+                    append(importableItems.size)
+                    append(" 筆庫存快照")
+                    if (skippedCount > 0) {
+                        append("，略過 ")
+                        append(skippedCount)
+                        append(" 筆查無現價的資料")
+                    }
+                }
+                _pdfImportPreview.value = null
+            } catch (e: Exception) {
+                _message.value = "PDF 匯入失敗: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
     private fun performImportFromUri(uri: Uri, deleteOldData: Boolean) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -260,6 +411,31 @@ class SettingsViewModel(
                 importUri = null
             }
         }
+    }
+
+    private suspend fun buildPdfImportPreview(
+        extraction: com.rsps1008.stockify.data.PdfHoldingExtractionResult
+    ): PdfStockImportPreview {
+        val allStocksByCode = stockDao.getAllStocks().first().associateBy { it.code }
+
+        val items = extraction.holdings.map { holding ->
+            val stock = allStocksByCode[holding.stockCode]
+            val priceInfo = realtimeStockDataService.fetchCurrentStockInfo(holding.stockCode)
+            val currentPrice = priceInfo?.currentPrice
+
+            PdfStockImportPreviewItem(
+                stockCode = holding.stockCode,
+                stockName = stock?.name.orEmpty(),
+                balance = holding.balance,
+                currentPrice = currentPrice,
+                marketValue = currentPrice?.let { (it * holding.balance).roundToInt().toDouble() }
+            )
+        }.sortedBy { it.stockCode }
+
+        return PdfStockImportPreview(
+            extractedTextLength = extraction.extractedText.length,
+            items = items
+        )
     }
 
     private fun performImportFromByteArray(data: ByteArray, deleteOldData: Boolean) {
@@ -382,6 +558,12 @@ class SettingsViewModel(
     fun setTaxRateDayTrading(rate: Double) {
         viewModelScope.launch {
             settingsDataStore.setTaxRateDayTrading(rate)
+        }
+    }
+
+    fun setSkipPdfImportTutorial(skip: Boolean) {
+        viewModelScope.launch {
+            settingsDataStore.setSkipPdfImportTutorial(skip)
         }
     }
 

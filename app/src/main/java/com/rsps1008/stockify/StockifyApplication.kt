@@ -4,6 +4,7 @@ import android.app.Application
 import com.rsps1008.stockify.data.AppDatabase
 import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.SettingsDataStore
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
@@ -37,6 +38,7 @@ class StockifyApplication : Application() {
     }
     override fun onCreate() {
         super.onCreate()
+        PDFBoxResourceLoader.init(this)
         database = AppDatabase.getDatabase(this)
         settingsDataStore = SettingsDataStore(this)
         realtimeStockDataService = RealtimeStockDataService(

@@ -34,6 +34,7 @@ class SettingsDataStore(val context: Context) {
     private val taxRateDomesticStockEtfKey = doublePreferencesKey("tax_rate_domestic_stock_etf")
     private val taxRateBondEtfKey = doublePreferencesKey("tax_rate_bond_etf")
     private val taxRateDayTradingKey = doublePreferencesKey("tax_rate_day_trading")
+    private val skipPdfImportTutorialKey = booleanPreferencesKey("skip_pdf_import_tutorial")
 
     val fetchIntervalFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
@@ -109,6 +110,11 @@ class SettingsDataStore(val context: Context) {
     val taxRateDayTradingFlow: Flow<Double> = context.dataStore.data
         .map { preferences ->
             preferences[taxRateDayTradingKey] ?: 0.0015
+        }
+
+    val skipPdfImportTutorialFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[skipPdfImportTutorialKey] ?: false
         }
 
     suspend fun setFetchInterval(interval: Int) {
@@ -204,6 +210,12 @@ class SettingsDataStore(val context: Context) {
     suspend fun setTaxRateDayTrading(rate: Double) {
         context.dataStore.edit {
             it[taxRateDayTradingKey] = rate
+        }
+    }
+
+    suspend fun setSkipPdfImportTutorial(skip: Boolean) {
+        context.dataStore.edit {
+            it[skipPdfImportTutorialKey] = skip
         }
     }
 }
