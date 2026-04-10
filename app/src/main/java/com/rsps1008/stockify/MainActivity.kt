@@ -83,14 +83,7 @@ fun MainScreen() {
                         val navBackStackEntry by navController.currentBackStackEntryAsState()
                         val currentDestination = navBackStackEntry?.destination
                         IconButton(onClick = {
-                            if (navController.currentDestination?.route == Screen.AddTransaction.route) { navController.popBackStack() }
-                            navController.navigate(Screen.Holdings.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
+                            navigateToTopLevel(navController, Screen.Holdings.route)
                         }) {
                             Icon(
                                 imageVector = Icons.Filled.Assessment,
@@ -103,14 +96,7 @@ fun MainScreen() {
                             )
                         }
                         IconButton(onClick = {
-                            if (navController.currentDestination?.route == Screen.AddTransaction.route) { navController.popBackStack() }
-                            navController.navigate(Screen.Transactions.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
+                            navigateToTopLevel(navController, Screen.Transactions.route)
                         }) {
                             Icon(
                                 imageVector = Icons.Filled.History,
@@ -145,14 +131,7 @@ fun MainScreen() {
                             }
                         }
                         IconButton(onClick = {
-                            if (navController.currentDestination?.route == Screen.AddTransaction.route) { navController.popBackStack() }
-                            navController.navigate(Screen.DataManagement.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
+                            navigateToTopLevel(navController, Screen.DataManagement.route)
                         }) {
                             Icon(
                                 imageVector = Icons.Filled.CloudUpload,
@@ -165,14 +144,7 @@ fun MainScreen() {
                             )
                         }
                         IconButton(onClick = {
-                            if (navController.currentDestination?.route == Screen.AddTransaction.route) { navController.popBackStack() }
-                            navController.navigate(Screen.Settings.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
+                            navigateToTopLevel(navController, Screen.Settings.route)
                         }) {
                             Icon(
                                 imageVector = Icons.Filled.Settings,
@@ -194,5 +166,21 @@ fun MainScreen() {
             navController = navController,
             modifier = Modifier.padding(innerPadding)
         )
+    }
+}
+
+private fun navigateToTopLevel(
+    navController: androidx.navigation.NavHostController,
+    route: String
+) {
+    if (navController.currentDestination?.route == Screen.AddTransaction.route) {
+        navController.popBackStack()
+    }
+    navController.navigate(route) {
+        popUpTo(navController.graph.findStartDestination().id) {
+            saveState = false
+        }
+        launchSingleTop = true
+        restoreState = false
     }
 }

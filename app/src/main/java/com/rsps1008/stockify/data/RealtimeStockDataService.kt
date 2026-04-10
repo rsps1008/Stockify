@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
@@ -45,8 +46,20 @@ class RealtimeStockDataService(
 
     private val twseFetcher = TwseStockInfoFetcher()
     private val yahooFetcher = YahooStockInfoFetcher()
+    private val preferredStockDataSource = MutableStateFlow("TWSE")
 
     init {
+        scope.launch {
+            settingsDataStore.stockDataSourceFlow
+                .distinctUntilChanged()
+                .collect { source ->
+                    preferredStockDataSource.value = normalizeStockDataSource(source)
+                    Log.d(
+                        "RealtimeStockDataService",
+                        "Preferred realtime data source updated to ${preferredStockDataSource.value}"
+                    )
+                }
+        }
         startFetching()
     }
 
@@ -62,8 +75,13 @@ class RealtimeStockDataService(
         val fallbackUsed: Boolean
     )
 
-    private suspend fun getFetchers(): Pair<StockInfoFetcher, StockInfoFetcher> {
-        val preferredSource = settingsDataStore.stockDataSourceFlow.first()
+    private data class FetchOutcome(
+        val info: RealtimeStockInfo?,
+        val fallbackUsed: Boolean
+    )
+
+    private fun getFetchers(): Pair<StockInfoFetcher, StockInfoFetcher> {
+        val preferredSource = preferredStockDataSource.value
         return if (preferredSource == "TWSE") {
             Pair(twseFetcher, yahooFetcher)
         } else {
@@ -96,7 +114,7 @@ class RealtimeStockDataService(
 
                     // === 盤中 ===
                     fetchAllStockInfo(isContinuous = true)
-                    delay(interval * 1000L)
+                    delay(delayUntilNextAlignedFetch(interval))
                 }
             }
         }
@@ -109,6 +127,10 @@ class RealtimeStockDataService(
 
         val stockCodes = stocks.map { it.code }
         val (primaryFetcher, secondaryFetcher) = getFetchers()
+        Log.d(
+            "RealtimeStockDataService",
+            "Fetching realtime stock info using primary=${primaryFetcher.javaClass.simpleName}, secondary=${secondaryFetcher.javaClass.simpleName}"
+        )
 
         val updatedInfos = _realtimeStockInfo.value.toMutableMap()
 
@@ -116,18 +138,16 @@ class RealtimeStockDataService(
         val results = coroutineScope {
             stockCodes.map { code ->
                 async(Dispatchers.IO) {
-                    var info = primaryFetcher.fetchStockInfo(code)
-
-                    var usedFallback = false
-                    if (info == null) {
-                        usedFallback = true
-                        info = secondaryFetcher.fetchStockInfo(code)
-                    }
+                    val outcome = fetchWithSingleFallback(
+                        stockCode = code,
+                        primaryFetcher = primaryFetcher,
+                        secondaryFetcher = secondaryFetcher
+                    )
 
                     FetchResult(
                         code = code,
-                        info = info,
-                        fallbackUsed = usedFallback
+                        info = outcome.info,
+                        fallbackUsed = outcome.fallbackUsed
                     )
                 }
             }.awaitAll()
@@ -180,33 +200,19 @@ class RealtimeStockDataService(
 
     suspend fun refreshStock(stockCode: String) {
         val (primaryFetcher, secondaryFetcher) = getFetchers()
+        Log.d(
+            "RealtimeStockDataService",
+            "Refreshing $stockCode using primary=${primaryFetcher.javaClass.simpleName}, secondary=${secondaryFetcher.javaClass.simpleName}"
+        )
 
-        // 先抓主要來源
-        var newInfo = primaryFetcher.fetchStockInfo(stockCode)
-
-        // 主來源抓不到 → 單項 fallback，但不動設定
-        if (newInfo == null) {
-            Log.e(
-                "RealtimeStockDataService",
-                "Primary source failed for $stockCode → fallback to secondary"
-            )
-            newInfo = secondaryFetcher.fetchStockInfo(stockCode)
-
-            if (newInfo != null) {
-                Log.d(
-                    "RealtimeStockDataService",
-                    "Fallback succeeded for $stockCode using ${secondaryFetcher.javaClass.simpleName}"
-                )
-            } else {
-                Log.e(
-                    "RealtimeStockDataService",
-                    "Fallback also failed for $stockCode → no data"
-                )
-            }
-        }
+        val outcome = fetchWithSingleFallback(
+            stockCode = stockCode,
+            primaryFetcher = primaryFetcher,
+            secondaryFetcher = secondaryFetcher
+        )
 
         // 更新 & 快取
-        newInfo?.let {
+        outcome.info?.let {
             val updatedInfos = _realtimeStockInfo.value.toMutableMap()
             updatedInfos[stockCode] = it
             _realtimeStockInfo.value = updatedInfos
@@ -221,7 +227,7 @@ class RealtimeStockDataService(
         val time = now.toLocalTime()
 
         // 1. 非交易時間
-        val inTime = time.isAfter(LocalTime.of(9, 0)) && time.isBefore(LocalTime.of(13, 30))
+        val inTime = time.isAfter(LocalTime.of(9, 0)) && time.isBefore(LocalTime.of(17, 30))
         if (!inTime) return false
 
         // 2. 檢查是否是假日（讀取 20XX.json）
@@ -260,6 +266,59 @@ class RealtimeStockDataService(
                 "若抓不到假日資料 → 視為非假日"
             )
             false   // 若抓不到資料 → 視為非假日（保守作法）
+        }
+    }
+
+    private fun delayUntilNextAlignedFetch(intervalSeconds: Int): Long {
+        if (intervalSeconds <= 0) return 0L
+
+        val now = ZonedDateTime.now(ZoneId.of("Asia/Taipei"))
+        val currentNano = now.nano
+        val epochSecond = now.toEpochSecond()
+        val secondsPastBoundary = Math.floorMod(epochSecond, intervalSeconds.toLong()).toInt()
+
+        // 對齊到整數秒邊界，例如 10 秒 => 0/10/20/30/40/50
+        val secondsUntilNextBoundary = if (secondsPastBoundary == 0) intervalSeconds else intervalSeconds - secondsPastBoundary
+
+        return (secondsUntilNextBoundary * 1000L) - (currentNano / 1_000_000L)
+    }
+
+    private fun normalizeStockDataSource(source: String): String {
+        return when (source.trim().uppercase()) {
+            "TWSE" -> "TWSE"
+            "YAHOO" -> "Yahoo"
+            else -> "TWSE"
+        }
+    }
+
+    private suspend fun fetchWithSingleFallback(
+        stockCode: String,
+        primaryFetcher: StockInfoFetcher,
+        secondaryFetcher: StockInfoFetcher
+    ): FetchOutcome {
+        val primaryInfo = primaryFetcher.fetchStockInfo(stockCode)
+        if (primaryInfo != null) {
+            return FetchOutcome(info = primaryInfo, fallbackUsed = false)
+        }
+
+        Log.e(
+            "RealtimeStockDataService",
+            "Primary source failed for $stockCode → fallback to secondary"
+        )
+
+        val secondaryInfo = secondaryFetcher.fetchStockInfo(stockCode)
+        return if (secondaryInfo != null) {
+            Log.d(
+                "RealtimeStockDataService",
+                "Fallback succeeded for $stockCode using ${secondaryFetcher.javaClass.simpleName}"
+            )
+            FetchOutcome(info = secondaryInfo, fallbackUsed = true)
+        } else {
+            Log.e(
+                "RealtimeStockDataService",
+                "Fallback also failed for $stockCode → no data"
+            )
+            FetchOutcome(info = null, fallbackUsed = true)
         }
     }
 
