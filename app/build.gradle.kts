@@ -22,14 +22,14 @@ val hasReleaseSigning = listOf(
 
 android {
     namespace = "com.rsps1008.stockify"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.rsps1008.stockify"
         minSdk = 26
-        targetSdk = 34
-        versionCode = 105
-        versionName = "1.0.5"
+        targetSdk = 35
+        versionCode = 106
+        versionName = "1.0.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

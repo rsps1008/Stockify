@@ -9,6 +9,7 @@
 - 語言：Kotlin
 - UI：Jetpack Compose + Material 3
 - 最低版本：API 26
+- 目前 `compileSdk` / `targetSdk` 為 API 35。
 - 架構：以 `data/`、`ui/viewmodel/`、`ui/screens/` 為主的 MVVM 風格分層
 
 這個 App 主要用來管理持股、交易紀錄、即時股價與配息配股資訊，也支援匯入匯出與 Google Drive 備份。
