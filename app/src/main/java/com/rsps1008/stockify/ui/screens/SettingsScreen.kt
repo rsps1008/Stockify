@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -23,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -78,8 +82,12 @@ fun SettingsScreen() {
     val taxRateDomesticStockEtf by viewModel.taxRateDomesticStockEtf.collectAsState()
     val taxRateBondEtf by viewModel.taxRateBondEtf.collectAsState()
     val taxRateDayTrading by viewModel.taxRateDayTrading.collectAsState()
-
     val context = LocalContext.current
+    var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
+    val privacyPolicyText = remember {
+        context.resources.openRawResource(R.raw.privacy_policy).bufferedReader().use { it.readText() }
+    }
+
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(message) {
@@ -440,7 +448,43 @@ fun SettingsScreen() {
                     }
                 }
             }
+
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("法律與說明", style = MaterialTheme.typography.titleLarge)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = { showPrivacyPolicyDialog = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("查看隱私政策")
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    if (showPrivacyPolicyDialog) {
+        AlertDialog(
+            onDismissRequest = { showPrivacyPolicyDialog = false },
+            title = { Text("隱私政策") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .height(420.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(text = privacyPolicyText)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showPrivacyPolicyDialog = false }) {
+                    Text("關閉")
+                }
+            }
+        )
     }
 }
 

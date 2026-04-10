@@ -13,3 +13,9 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+app/.idea/
+
+app/release/
+
+app/src/main/assets/adi-registration.properties

@@ -115,6 +115,10 @@ CSV 匯入與匯出的功能，並且能夠備份至Google雲端硬碟，讓您�
 
 希望這份文件能幫助您快速上手！
 
+## 隱私政策
+
+請參考 [韭菜記帳本隱私政策](https://rsps1008.github.io/Stockify/privacy-policy/).
+
 ---
 
 此段內容由Gemini所產生
