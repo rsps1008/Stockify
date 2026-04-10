@@ -3,10 +3,232 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="refresh" content="0; url=privacy-policy/">
-  <title>韭菜記帳本</title>
+  <title>Stockify</title>
+  <meta name="description" content="Stockify 是一款用來管理持股、交易紀錄、配息配股與 Google Drive 備份的 Android App。">
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5efe7;
+      --panel: rgba(255, 251, 246, 0.94);
+      --text: #2e241b;
+      --muted: #6b5f53;
+      --accent: #8b5a2b;
+      --accent-strong: #6d431d;
+      --border: #e7d8c8;
+      --shadow: rgba(53, 36, 20, 0.10);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(139, 90, 43, 0.12), transparent 26%),
+        radial-gradient(circle at bottom right, rgba(139, 90, 43, 0.08), transparent 30%),
+        linear-gradient(180deg, #fbf6ef 0%, #f5efe7 100%);
+    }
+
+    .wrap {
+      width: min(1040px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 28px 0 56px;
+    }
+
+    .hero,
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      box-shadow: 0 18px 48px var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .hero {
+      padding: 36px 32px;
+      margin-bottom: 20px;
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--accent);
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2.2rem, 4.4vw, 4.2rem);
+      line-height: 1.04;
+    }
+
+    .lead {
+      max-width: 720px;
+      margin: 16px 0 0;
+      color: var(--muted);
+      font-size: 1.05rem;
+      line-height: 1.8;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .button,
+    .button-secondary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 46px;
+      padding: 0 18px;
+      border-radius: 999px;
+      text-decoration: none;
+      font-weight: 700;
+      transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+    }
+
+    .button {
+      color: #fff9f2;
+      background: var(--accent);
+      box-shadow: 0 10px 22px rgba(139, 90, 43, 0.22);
+    }
+
+    .button-secondary {
+      color: var(--accent-strong);
+      background: rgba(139, 90, 43, 0.10);
+      border: 1px solid rgba(139, 90, 43, 0.14);
+    }
+
+    .button:hover,
+    .button-secondary:hover {
+      transform: translateY(-1px);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      padding: 24px;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 1.2rem;
+    }
+
+    p {
+      margin: 0;
+      line-height: 1.8;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 1.1rem;
+      line-height: 1.9;
+    }
+
+    li + li {
+      margin-top: 4px;
+    }
+
+    a {
+      color: var(--accent-strong);
+    }
+
+    .footer {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 0.95rem;
+      text-align: center;
+    }
+
+    @media (max-width: 760px) {
+      .wrap {
+        width: min(100% - 20px, 720px);
+        padding: 16px 0 32px;
+      }
+
+      .hero,
+      .card {
+        border-radius: 18px;
+      }
+
+      .hero {
+        padding: 24px 18px;
+      }
+
+      .card {
+        padding: 18px;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
 </head>
 <body>
-  <p>正在前往 <a href="privacy-policy/">隱私政策</a>。</p>
+  <main class="wrap">
+    <section class="hero">
+      <p class="eyebrow">Stock Portfolio Tracker</p>
+      <h1>Stockify</h1>
+      <p class="lead">
+        Stockify 是一款 Android 持股管理 App，用來整理股票交易紀錄、持股成本、配息配股資訊與即時股價。
+        使用者也可以選擇透過 Google Drive 將備份檔安全儲存在自己的帳戶 appDataFolder 中。
+      </p>
+      <div class="actions">
+        <a class="button" href="https://github.com/rsps1008/Stockify" target="_blank" rel="noreferrer">查看專案</a>
+        <a class="button-secondary" href="privacy-policy/">隱私權政策</a>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>App 功能</h2>
+        <ul>
+          <li>管理持股、買賣交易、配息、配股與其他公司動作</li>
+          <li>顯示股票即時價格、平均成本與損益資訊</li>
+          <li>支援 CSV 匯入與匯出</li>
+          <li>支援 Google Drive 備份與還原</li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <h2>Google 資料用途</h2>
+        <p>
+          若使用者主動啟用 Google Drive 備份功能，Stockify 只會要求存取 appDataFolder，
+          以便建立或讀取 App 自己的備份檔，不會讀取使用者一般雲端硬碟中的其他檔案。
+        </p>
+      </article>
+
+      <article class="card">
+        <h2>公開資訊</h2>
+        <ul>
+          <li><a href="privacy-policy/">隱私權政策</a></li>
+          <li><a href="https://github.com/rsps1008/Stockify" target="_blank" rel="noreferrer">GitHub Repository</a></li>
+          <li><a href="https://github.com/rsps1008/Stockify/issues" target="_blank" rel="noreferrer">問題回報</a></li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <h2>聯絡與維護</h2>
+        <p>
+          這個頁面提供 Google OAuth 同意畫面與使用者查閱 App 資訊之用。
+          如需了解資料處理方式，請參考隱私權政策頁面。
+        </p>
+      </article>
+    </section>
+
+    <p class="footer">Last updated: 2026-04-10</p>
+  </main>
 </body>
 </html>
