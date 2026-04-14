@@ -241,7 +241,7 @@ class RealtimeStockDataService(
         val time = now.toLocalTime()
 
         // 1. 非交易時間
-        val inTime = time.isAfter(LocalTime.of(9, 0)) && time.isBefore(LocalTime.of(17, 30))
+        val inTime = time.isAfter(LocalTime.of(9, 0)) && time.isBefore(LocalTime.of(13, 30))
         if (!inTime) return false
 
         // 2. 檢查是否是假日（讀取 20XX.json）
