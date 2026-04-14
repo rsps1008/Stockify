@@ -11,13 +11,35 @@ import kotlinx.coroutines.flow.map
 class OfflineStockRepository(
     private val stockDao: StockDao,
     private val realtimeStockDataService: RealtimeStockDataService,
-    private val settingsDataStore: SettingsDataStore
+    private val settingsDataStore: SettingsDataStore,
+    private val exchangeRateService: UsdTwdExchangeRateService
 ) : StockRepository {
 
     override fun getHoldings(): Flow<HoldingsUiState> {
         // Combine held stocks, all transactions, and real-time data to calculate holdings state
-        return combine(stockDao.getHeldStocks(), stockDao.getAllTransactions(), realtimeStockDataService.realtimeStockInfo, settingsDataStore.preDeductSellFeesFlow) { stocks, transactions, realTimeData, preDeductSellFees ->
-            val holdingInfos = stocks.map { stock ->
+        return combine(
+            stockDao.getHeldStocks(),
+            stockDao.getAllTransactions(),
+            realtimeStockDataService.realtimeStockInfo,
+            settingsDataStore.preDeductSellFeesFlow,
+            exchangeRateService.usdToTwdRate,
+            settingsDataStore.homeDisplayModeFlow
+        ) { values ->
+            val stocks = values[0] as List<Stock>
+            val transactions = values[1] as List<StockTransaction>
+            val realTimeData = values[2] as Map<String, RealtimeStockInfo>
+            val preDeductSellFees = values[3] as Boolean
+            val usdToTwdRate = values[4] as Double
+            val homeDisplayMode = values[5] as String
+
+            val mode = HomeDisplayMode.normalize(homeDisplayMode)
+            val filteredStocks = when (mode) {
+                HomeDisplayMode.TW -> stocks.filter { StockMarket.isTw(it.market) }
+                HomeDisplayMode.US -> stocks.filter { StockMarket.isUs(it.market) }
+                else -> stocks
+            }
+
+            val holdingInfos = filteredStocks.map { stock ->
                 val realtime = realTimeData[stock.code]
                 val stockTransactions = transactions.filter { it.stockCode == stock.code }
                 val currentPrice = realTimeData[stock.code]?.currentPrice ?: 0.0
@@ -27,14 +49,29 @@ class OfflineStockRepository(
                 calculateHoldingInfo(stock, stockTransactions, currentPrice, dailyChange, dailyChangePercentage, limitState, preDeductSellFees)
             }
 
-            // Aggregate data for the summary
-            val cumulativePL = holdingInfos.sumOf { it.totalPL }
-            val marketValue = holdingInfos.sumOf { it.marketValue }
-            val totalCost = holdingInfos.sumOf { it.averageCost * it.shares }
-            val totalInvestment = holdingInfos.sumOf { it.averageCost * it.shares } // Simplified
+            val summaryIsCombined = mode == HomeDisplayMode.COMBINED
+            val cumulativePL = holdingInfos.sumOf { holding ->
+                val rate = if (summaryIsCombined && StockMarket.isUs(holding.stock.market)) usdToTwdRate else 1.0
+                holding.totalPL * rate
+            }
+            val marketValue = holdingInfos.sumOf { holding ->
+                val rate = if (summaryIsCombined && StockMarket.isUs(holding.stock.market)) usdToTwdRate else 1.0
+                holding.marketValue * rate
+            }
+            val totalCost = holdingInfos.sumOf { holding ->
+                val rate = if (summaryIsCombined && StockMarket.isUs(holding.stock.market)) usdToTwdRate else 1.0
+                (holding.averageCost * holding.shares) * rate
+            }
+            val totalInvestment = totalCost
             val cumulativePLPercentage = if (totalInvestment > 0) (cumulativePL / totalInvestment) * 100 else 0.0
-            val dividendIncome = holdingInfos.sumOf { it.dividendIncome }
-            val dailyPL = holdingInfos.sumOf { it.dailyChange * it.shares }
+            val dividendIncome = holdingInfos.sumOf { holding ->
+                val rate = if (summaryIsCombined && StockMarket.isUs(holding.stock.market)) usdToTwdRate else 1.0
+                holding.dividendIncome * rate
+            }
+            val dailyPL = holdingInfos.sumOf { holding ->
+                val rate = if (summaryIsCombined && StockMarket.isUs(holding.stock.market)) usdToTwdRate else 1.0
+                holding.dailyChange * holding.shares * rate
+            }
 
             HoldingsUiState(
                 holdings = holdingInfos, // Only show stocks currently held
@@ -171,7 +208,7 @@ class OfflineStockRepository(
         var totalPL = marketValue - costBasis
         val totalPLPercentage = if (costBasis > 0) (totalPL / costBasis) * 100 else 0.0
 
-        if (preDeductSellFees) {
+        if (preDeductSellFees && !StockMarket.isUs(stock.market)) {
             val feeDiscount = settingsDataStore.feeDiscountFlow.first()
             val minFeeRegular = settingsDataStore.minFeeRegularFlow.first()
 

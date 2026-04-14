@@ -16,10 +16,13 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
@@ -72,9 +75,10 @@ import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import android.widget.Toast
+import com.rsps1008.stockify.data.HomeDisplayMode
 
 
 @OptIn(ExperimentalFoundationApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -85,10 +89,12 @@ fun HoldingsScreen(navController: NavController) {
         factory = ViewModelFactory(
             stockDao = application.database.stockDao(),
             realtimeStockDataService = application.realtimeStockDataService,
-            settingsDataStore = application.settingsDataStore
+            settingsDataStore = application.settingsDataStore,
+            exchangeRateService = application.exchangeRateService
         )
     )
     val uiState by viewModel.uiState.collectAsState()
+    val homeDisplayMode by viewModel.homeDisplayMode.collectAsState()
     val activeHoldings = uiState.holdings.filter { it.shares > 1e-6 }
     val unrealizedCount = activeHoldings.size
     val unrealizedPL = activeHoldings.sumOf { it.totalPL }
@@ -152,7 +158,12 @@ fun HoldingsScreen(navController: NavController) {
         ) {
             item {
                 // ★ 改成傳時間字串，不再把 viewModel 丟進去
-                SummarySection(uiState, lastUpdatedText)
+                SummarySection(
+                    uiState = uiState,
+                    lastUpdatedText = lastUpdatedText,
+                    currentMode = homeDisplayMode,
+                    onModeSelected = viewModel::setHomeDisplayMode
+                )
             }
 
             item {
@@ -245,8 +256,12 @@ fun HoldingsListHeaderStickySells() {
 }
 
 @Composable
-fun SummarySection(uiState: HoldingsUiState, lastUpdatedText: String) {
-
+fun SummarySection(
+    uiState: HoldingsUiState,
+    lastUpdatedText: String,
+    currentMode: String,
+    onModeSelected: (String) -> Unit
+) {
     var showMarketValue by remember { mutableStateOf(true) }
 
     val dailyPlColor =
@@ -257,8 +272,6 @@ fun SummarySection(uiState: HoldingsUiState, lastUpdatedText: String) {
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth()) {
-
-            // 右上角顯示更新時間
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -266,9 +279,7 @@ fun SummarySection(uiState: HoldingsUiState, lastUpdatedText: String) {
             ) {
                 AnimatedContent(
                     targetState = lastUpdatedText,
-                    transitionSpec = {
-                        fadeIn() togetherWith fadeOut()
-                    }
+                    transitionSpec = { fadeIn() togetherWith fadeOut() }
                 ) { time ->
                     Text(
                         text = time,
@@ -278,11 +289,14 @@ fun SummarySection(uiState: HoldingsUiState, lastUpdatedText: String) {
                 }
             }
 
-            Column(Modifier.padding(16.dp)) {
-
+            Column(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .padding(bottom = 4.dp)
+            ) {
                 Text("累積損益", style = MaterialTheme.typography.bodySmall)
 
-                Row {
+                Row(verticalAlignment = Alignment.Bottom) {
                     Text(
                         text = String.format("%,.0f", uiState.cumulativePL),
                         style = MaterialTheme.typography.headlineLarge,
@@ -300,11 +314,15 @@ fun SummarySection(uiState: HoldingsUiState, lastUpdatedText: String) {
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                Row {
-
-                    Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min),
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    Column(modifier = Modifier.weight(3f)) {
                         Text("持股日損益", style = MaterialTheme.typography.bodySmall)
                         Text(
                             String.format("%,.0f", kotlin.math.abs(uiState.dailyPL)),
@@ -315,7 +333,7 @@ fun SummarySection(uiState: HoldingsUiState, lastUpdatedText: String) {
 
                     Column(
                         modifier = Modifier
-                            .weight(1f)
+                            .weight(3.5f)
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
@@ -347,11 +365,24 @@ fun SummarySection(uiState: HoldingsUiState, lastUpdatedText: String) {
                         )
                     }
 
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(modifier = Modifier.weight(2.5f)) {
                         Text("股息收入", style = MaterialTheme.typography.bodySmall)
                         Text(
                             String.format("%,.0f", uiState.dividendIncome),
                             style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        contentAlignment = Alignment.CenterEnd
+                    ) {
+                        HomeModeCyclePill(
+                            currentMode = currentMode,
+                            onModeSelected = onModeSelected,
+                            modifier = Modifier.offset(y = 4.dp)
                         )
                     }
                 }
@@ -360,9 +391,9 @@ fun SummarySection(uiState: HoldingsUiState, lastUpdatedText: String) {
     }
 }
 
-
 @Composable
 fun HoldingsListHeader() {
+
     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text(text = "股票/股數", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
         Text(text = "股價    ", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
@@ -796,6 +827,55 @@ fun ClearedHoldingsHeader
             style = MaterialTheme.typography.bodySmall,
             color = plColor
         )
+    }
+}
+
+@Composable
+fun HomeModeCyclePill(
+    currentMode: String,
+    onModeSelected: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val selectedMode = HomeDisplayMode.normalize(currentMode)
+
+    androidx.compose.material3.Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        onClick = {
+            val nextMode = when (selectedMode) {
+                HomeDisplayMode.TW -> HomeDisplayMode.US
+                HomeDisplayMode.US -> HomeDisplayMode.COMBINED
+                else -> HomeDisplayMode.TW
+            }
+            onModeSelected(nextMode)
+        }
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(0.dp)
+        ) {
+            val twSelected = selectedMode == HomeDisplayMode.TW || selectedMode == HomeDisplayMode.COMBINED
+            val usSelected = selectedMode == HomeDisplayMode.US || selectedMode == HomeDisplayMode.COMBINED
+
+            Text(
+                text = "TW",
+                fontSize = 8.sp,
+                lineHeight = 8.sp,
+                fontWeight = if (twSelected) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (twSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = "US",
+                fontSize = 8.sp,
+                lineHeight = 8.sp,
+                fontWeight = if (usSelected) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (usSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 

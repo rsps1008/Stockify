@@ -10,13 +10,14 @@ import java.util.Locale
 data class CsvTransaction(
     val stockName: String,
     val stockCode: String,
+    val market: String = StockMarket.TW,
     val transaction: StockTransaction
 )
 
 class CsvService {
 
     private val csvHeader = listOf(
-        "id", "交易", "交易稅", "帳戶ID", "手續費", "支出", "收入", "日期",
+        "id", "交易", "交易稅", "帳戶ID", "市場", "手續費", "支出", "收入", "日期",
         "現金股利", "筆記", "紀錄時間", "股名", "股票股利", "股號",
         "買進價格", "買進股數", "賣出價格", "賣出股數",
         "配發股數",
@@ -61,6 +62,7 @@ class CsvService {
         record["股名"] = stock.name
         record["股票股利"] = transaction.stockDividend
         record["股號"] = stock.code
+        record["市場"] = stock.market
         record["買進價格"] = transaction.buyPrice
         record["買進股數"] = transaction.buyShares
         record["賣出價格"] = transaction.sellPrice
@@ -111,6 +113,7 @@ class CsvService {
                 CsvTransaction(
                     stockName = values[headerMap["股名"]!!],
                     stockCode = values[headerMap["股號"]!!],
+                    market = values.getOrNull(headerMap["市場"] ?: -1)?.takeIf { it.isNotBlank() } ?: StockMarket.TW,
                     transaction = parseTransaction(values, headerMap)
                 )
             } catch (e: Exception) {

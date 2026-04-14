@@ -61,7 +61,8 @@ fun SettingsScreen() {
             stockDao = application.database.stockDao(),
             settingsDataStore = application.settingsDataStore,
             application = application,
-            realtimeStockDataService = application.realtimeStockDataService
+            realtimeStockDataService = application.realtimeStockDataService,
+            exchangeRateService = application.exchangeRateService
         )
     )
 

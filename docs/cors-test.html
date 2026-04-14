@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stockify CORS Test</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4efe7;
+      --panel: rgba(255, 252, 247, 0.96);
+      --text: #2d261f;
+      --muted: #6f6357;
+      --accent: #7d4f24;
+      --accent-2: #9b6a3e;
+      --border: #e6d7c8;
+      --success: #0f7a4f;
+      --danger: #b03a2e;
+      --shadow: rgba(57, 39, 23, 0.10);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(125, 79, 36, 0.10), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(125, 79, 36, 0.08), transparent 26%),
+        linear-gradient(180deg, #fbf7f1 0%, #f4efe7 100%);
+    }
+
+    .wrap {
+      width: min(1120px, calc(100% - 24px));
+      margin: 0 auto;
+      padding: 24px 0 40px;
+    }
+
+    .hero,
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      box-shadow: 0 16px 40px var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .hero {
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.8rem, 4vw, 3rem);
+    }
+
+    .lead {
+      margin: 10px 0 0;
+      color: var(--muted);
+      line-height: 1.8;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .card {
+      padding: 18px;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 1.05rem;
+    }
+
+    label {
+      display: block;
+      margin: 0 0 8px;
+      font-weight: 700;
+    }
+
+    textarea,
+    input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+    }
+
+    textarea {
+      min-height: 150px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 999px;
+      min-height: 42px;
+      padding: 0 16px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+    }
+
+    button:hover { transform: translateY(-1px); }
+
+    .primary {
+      color: #fff8f1;
+      background: var(--accent);
+      box-shadow: 0 10px 20px rgba(125, 79, 36, 0.18);
+    }
+
+    .secondary {
+      color: var(--accent);
+      background: rgba(125, 79, 36, 0.08);
+    }
+
+    .hint {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.7;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 14px;
+    }
+
+    th,
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+      word-break: break-word;
+    }
+
+    th {
+      background: rgba(125, 79, 36, 0.06);
+      font-size: 0.92rem;
+    }
+
+    .status-ok { color: var(--success); font-weight: 700; }
+    .status-bad { color: var(--danger); font-weight: 700; }
+    .status-warn { color: var(--accent-2); font-weight: 700; }
+
+    .mono {
+      font-family: Consolas, "SFMono-Regular", Menlo, monospace;
+      font-size: 0.92rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .footer {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 0.95rem;
+      text-align: center;
+    }
+
+    @media (max-width: 860px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <h1>Stockify CORS Test</h1>
+      <p class="lead">
+        這是一個最小測試頁，用瀏覽器直接 `fetch` 外部股票頁面或 API。
+        如果目標站台沒有開 CORS，結果會直接顯示被瀏覽器擋下。
+      </p>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>測試目標</h2>
+        <label for="urls">每行一個網址</label>
+        <textarea id="urls">https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_2330.tw&json=1&delay=0
+https://tw.stock.yahoo.com/quote/2330
+https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&stockNo=2330&date=20260401</textarea>
+        <div class="row">
+          <button class="primary" id="runBtn">開始測試</button>
+          <button class="secondary" id="clearBtn">清空結果</button>
+        </div>
+        <p class="hint">
+          建議用本機 HTTP 伺服器或 GitHub Pages 開啟，不要直接用 `file://`。
+          `file://` 會讓 origin 變得更混亂，不利於判斷到底是 CORS、CSP，還是檔案協定本身的限制。
+        </p>
+      </article>
+
+      <article class="card">
+        <h2>說明</h2>
+        <ul class="hint">
+          <li>這頁只做最原始的瀏覽器跨域檢查，不做任何代理或繞過。</li>
+          <li>如果是 CORS 問題，瀏覽器通常會回傳 `TypeError: Failed to fetch` 或類似錯誤。</li>
+          <li>如果可以抓到內容但不是 JSON，表示網頁可能允許跨域，但內容解析還要另外處理。</li>
+          <li>如果某個站只有伺服器端可抓、前端抓不到，之後就需要後端 proxy 或桌面原生層來做。</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="card">
+      <h2>結果</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 32%;">URL</th>
+            <th style="width: 12%;">狀態</th>
+            <th style="width: 16%;">耗時</th>
+            <th>回應 / 錯誤</th>
+          </tr>
+        </thead>
+        <tbody id="results">
+          <tr>
+            <td colspan="4" class="hint">尚未測試。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <p class="footer">如果你要，我也可以再做一版「純前端可部署的 Stockify 跨域探測頁」。</p>
+  </main>
+
+  <script>
+    const urlsEl = document.getElementById('urls');
+    const resultsEl = document.getElementById('results');
+    const runBtn = document.getElementById('runBtn');
+    const clearBtn = document.getElementById('clearBtn');
+
+    function setResults(rows) {
+      if (!rows.length) {
+        resultsEl.innerHTML = '<tr><td colspan="4" class="hint">尚未測試。</td></tr>';
+        return;
+      }
+
+      resultsEl.innerHTML = rows.map(row => `
+        <tr>
+          <td class="mono">${escapeHtml(row.url)}</td>
+          <td class="${row.statusClass}">${escapeHtml(row.status)}</td>
+          <td>${escapeHtml(row.elapsed)}</td>
+          <td class="mono">${escapeHtml(row.message)}</td>
+        </tr>
+      `).join('');
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    async function testUrl(url) {
+      const startedAt = performance.now();
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          mode: 'cors',
+          credentials: 'omit',
+          cache: 'no-store',
+        });
+
+        const elapsed = `${Math.round(performance.now() - startedAt)} ms`;
+        const contentType = response.headers.get('content-type') || '';
+
+        if (!response.ok) {
+          return {
+            url,
+            status: `HTTP ${response.status}`,
+            statusClass: 'status-warn',
+            elapsed,
+            message: `response.ok = false; content-type = ${contentType || '(none)'}`
+          };
+        }
+
+        if (contentType.includes('application/json')) {
+          const text = await response.text();
+          return {
+            url,
+            status: 'OK',
+            statusClass: 'status-ok',
+            elapsed,
+            message: text.slice(0, 400) || '(empty JSON)'
+          };
+        }
+
+        const text = await response.text();
+        return {
+          url,
+          status: 'OK',
+          statusClass: 'status-ok',
+          elapsed,
+          message: text.slice(0, 400) || '(empty response)'
+        };
+      } catch (error) {
+        const elapsed = `${Math.round(performance.now() - startedAt)} ms`;
+        return {
+          url,
+          status: 'FAILED',
+          statusClass: 'status-bad',
+          elapsed,
+          message: `${error.name}: ${error.message}`
+        };
+      }
+    }
+
+    async function runTests() {
+      const urls = urlsEl.value
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean);
+
+      if (!urls.length) {
+        setResults([]);
+        return;
+      }
+
+      runBtn.disabled = true;
+      runBtn.textContent = '測試中...';
+
+      setResults(urls.map(url => ({
+        url,
+        status: 'PENDING',
+        statusClass: 'status-warn',
+        elapsed: '-',
+        message: '等待回應...'
+      })));
+
+      const rows = [];
+      for (const url of urls) {
+        rows.push(await testUrl(url));
+        setResults([...rows]);
+      }
+
+      runBtn.disabled = false;
+      runBtn.textContent = '開始測試';
+    }
+
+    runBtn.addEventListener('click', runTests);
+    clearBtn.addEventListener('click', () => setResults([]));
+  </script>
+</body>
+</html>

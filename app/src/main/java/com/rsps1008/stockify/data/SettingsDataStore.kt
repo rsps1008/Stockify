@@ -35,6 +35,9 @@ class SettingsDataStore(val context: Context) {
     private val taxRateBondEtfKey = doublePreferencesKey("tax_rate_bond_etf")
     private val taxRateDayTradingKey = doublePreferencesKey("tax_rate_day_trading")
     private val skipPdfImportTutorialKey = booleanPreferencesKey("skip_pdf_import_tutorial")
+    private val usdToTwdRateKey = doublePreferencesKey("usd_to_twd_rate")
+    private val usdToTwdRateUpdatedAtKey = longPreferencesKey("usd_to_twd_rate_updated_at")
+    private val homeDisplayModeKey = stringPreferencesKey("home_display_mode")
 
     val fetchIntervalFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
@@ -115,6 +118,21 @@ class SettingsDataStore(val context: Context) {
     val skipPdfImportTutorialFlow: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
             preferences[skipPdfImportTutorialKey] ?: false
+        }
+
+    val usdToTwdRateFlow: Flow<Double> = context.dataStore.data
+        .map { preferences ->
+            preferences[usdToTwdRateKey] ?: 32.0
+        }
+
+    val usdToTwdRateUpdatedAtFlow: Flow<Long?> = context.dataStore.data
+        .map { preferences ->
+            preferences[usdToTwdRateUpdatedAtKey]
+        }
+
+    val homeDisplayModeFlow: Flow<String> = context.dataStore.data
+        .map { preferences ->
+            preferences[homeDisplayModeKey] ?: HomeDisplayMode.COMBINED
         }
 
     suspend fun setFetchInterval(interval: Int) {
@@ -216,6 +234,19 @@ class SettingsDataStore(val context: Context) {
     suspend fun setSkipPdfImportTutorial(skip: Boolean) {
         context.dataStore.edit {
             it[skipPdfImportTutorialKey] = skip
+        }
+    }
+
+    suspend fun setUsdToTwdRate(rate: Double, updatedAt: Long = System.currentTimeMillis()) {
+        context.dataStore.edit {
+            it[usdToTwdRateKey] = rate
+            it[usdToTwdRateUpdatedAtKey] = updatedAt
+        }
+    }
+
+    suspend fun setHomeDisplayMode(mode: String) {
+        context.dataStore.edit {
+            it[homeDisplayModeKey] = HomeDisplayMode.normalize(mode)
         }
     }
 }

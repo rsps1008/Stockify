@@ -57,7 +57,7 @@ class StockDataFetcher {
                                             id = 0,
                                             code = code,
                                             name = name,
-                                            market = market,
+                                            market = StockMarket.TW,
                                             industry = industry,
                                             stockType = stockType
                                         )

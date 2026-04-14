@@ -22,6 +22,7 @@ import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.StockDao
 import com.rsps1008.stockify.data.StockDataFetcher
+import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.StockListRepository
 import kotlinx.coroutines.Dispatchers
@@ -344,7 +345,8 @@ class SettingsViewModel(
                 importableItems.forEachIndexed { index, item ->
                     val stock = allStocksByCode[item.stockCode] ?: Stock(
                         name = item.stockName.ifBlank { item.stockCode },
-                        code = item.stockCode
+                        code = item.stockCode,
+                        market = StockMarket.inferFromCode(item.stockCode)
                     ).also { stockDao.insertStock(it) }
 
                     val currentPrice = item.currentPrice ?: return@forEachIndexed
@@ -467,7 +469,11 @@ class SettingsViewModel(
         transactions.forEach { csvTransaction ->
             var stock = stockDao.getStockByCode(csvTransaction.stockCode)
             if (stock == null) {
-                val newStock = Stock(name = csvTransaction.stockName, code = csvTransaction.stockCode)
+                val newStock = Stock(
+                    name = csvTransaction.stockName,
+                    code = csvTransaction.stockCode,
+                    market = StockMarket.normalize(csvTransaction.market.ifBlank { StockMarket.inferFromCode(csvTransaction.stockCode) })
+                )
                 stockDao.insertStock(newStock)
             }
             stockDao.insertTransaction(csvTransaction.transaction)
@@ -586,7 +592,7 @@ class SettingsViewModel(
                 // Save to json file
                 stockListRepository.saveStocks(stocks)
                 // And also save to Room database
-                stockDao.deleteAllStocks()
+                stockDao.deleteStocksByMarket(StockMarket.TW)
                 stockDao.insertStocks(stocks)
                 settingsDataStore.setLastStockListUpdateTime(System.currentTimeMillis())
                 _message.value = "股票列表更新成功！共 ${stocks.size} 筆"

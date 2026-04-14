@@ -7,6 +7,7 @@ import com.rsps1008.stockify.data.OfflineStockRepository
 import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.StockDao
+import com.rsps1008.stockify.data.UsdTwdExchangeRateService
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
 
 class ViewModelFactory(
@@ -16,15 +17,25 @@ class ViewModelFactory(
     private val settingsDataStore: SettingsDataStore? = null,
     private val stockCode: String? = null,
     private val transactionId: Int? = null,
-    private val dividendRepository: YahooDividendRepository? = null
+    private val dividendRepository: YahooDividendRepository? = null,
+    private val exchangeRateService: UsdTwdExchangeRateService? = null
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return when {
             modelClass.isAssignableFrom(HoldingsViewModel::class.java) -> {
                 requireNotNull(realtimeStockDataService) { "realtimeStockDataService is required for HoldingsViewModel" }
                 requireNotNull(settingsDataStore) { "settingsDataStore is required for HoldingsViewModel" }
+                requireNotNull(exchangeRateService) { "exchangeRateService is required for HoldingsViewModel" }
                 @Suppress("UNCHECKED_CAST")
-                HoldingsViewModel(OfflineStockRepository(stockDao, realtimeStockDataService, settingsDataStore)) as T
+                HoldingsViewModel(
+                    settingsDataStore = settingsDataStore,
+                    stockRepository = OfflineStockRepository(
+                        stockDao = stockDao,
+                        realtimeStockDataService = realtimeStockDataService,
+                        settingsDataStore = settingsDataStore,
+                        exchangeRateService = exchangeRateService
+                    )
+                ) as T
             }
             modelClass.isAssignableFrom(AddTransactionViewModel::class.java) -> {
                 requireNotNull(settingsDataStore) { "settingsDataStore is required for AddTransactionViewModel" }
@@ -48,6 +59,7 @@ class ViewModelFactory(
                 requireNotNull(stockCode) { "stockCode is required for StockDetailViewModel" }
                 requireNotNull(realtimeStockDataService) { "realtimeStockDataService is required for StockDetailViewModel" }
                 requireNotNull(settingsDataStore) { "settingsDataStore is required for StockDetailViewModel" }
+                requireNotNull(exchangeRateService) { "exchangeRateService is required for StockDetailViewModel" }
 
                 @Suppress("UNCHECKED_CAST")
                 StockDetailViewModel(
@@ -56,7 +68,8 @@ class ViewModelFactory(
                     stockRepository = OfflineStockRepository(
                         stockDao = stockDao,
                         realtimeStockDataService = realtimeStockDataService,
-                        settingsDataStore = settingsDataStore
+                        settingsDataStore = settingsDataStore,
+                        exchangeRateService = exchangeRateService
                     ),
                     realtimeStockDataService = realtimeStockDataService
                 ) as T
@@ -65,13 +78,15 @@ class ViewModelFactory(
                 requireNotNull(dividendRepository) { "dividendRepository is required for DividendInfoViewModel" }
                 requireNotNull(realtimeStockDataService) { "realtimeStockDataService is required for DividendInfoViewModel" }
                 requireNotNull(settingsDataStore) { "settingsDataStore is required for DividendInfoViewModel" }
+                requireNotNull(exchangeRateService) { "exchangeRateService is required for DividendInfoViewModel" }
 
                 @Suppress("UNCHECKED_CAST")
                 DividendInfoViewModel(
                     stockRepository = OfflineStockRepository(
                         stockDao = stockDao,
                         realtimeStockDataService = realtimeStockDataService,
-                        settingsDataStore = settingsDataStore
+                        settingsDataStore = settingsDataStore,
+                        exchangeRateService = exchangeRateService
                     ),
                     dividendRepository = dividendRepository
                 ) as T

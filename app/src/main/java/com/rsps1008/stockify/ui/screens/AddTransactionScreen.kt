@@ -66,7 +66,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             transactionId = transactionId,
             application = application,
             realtimeStockDataService = application.realtimeStockDataService,
-            dividendRepository = YahooDividendRepository(application.httpClient)
+            dividendRepository = YahooDividendRepository(application.httpClient),
+            exchangeRateService = application.exchangeRateService
         )
     )
     val context = LocalContext.current
@@ -140,10 +141,24 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
 
     LaunchedEffect(price, shares, transactionType, stockCode) {
         when (transactionType) {
-            "買進" -> viewModel.calculateBuyCosts(price.toDoubleOrNull() ?: 0.0, shares.toDoubleOrNull() ?: 0.0)
+            "買進" -> {
+                val stock = allStocks.find { it.code == stockCode }
+                viewModel.calculateBuyCosts(
+                    price.toDoubleOrNull() ?: 0.0,
+                    shares.toDoubleOrNull() ?: 0.0,
+                    stock?.market ?: ""
+                )
+            }
             "賣出" -> {
                 val stock = allStocks.find { it.code == stockCode }
-                viewModel.calculateSellCosts(price.toDoubleOrNull() ?: 0.0, shares.toDoubleOrNull() ?: 0.0, stock?.stockType ?: "", isDayTrading = isDayTrading, isBondEtf = stockCode.endsWith("B", ignoreCase = true))
+                viewModel.calculateSellCosts(
+                    price.toDoubleOrNull() ?: 0.0,
+                    shares.toDoubleOrNull() ?: 0.0,
+                    stock?.market ?: "",
+                    stock?.stockType ?: "",
+                    isDayTrading = isDayTrading,
+                    isBondEtf = stockCode.endsWith("B", ignoreCase = true)
+                )
             }
         }
     }
@@ -333,7 +348,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                 ) {
                     filteredStocks.take(5).forEach { selectionOption ->
                         DropdownMenuItem(
-                            text = { Text("${selectionOption.code} ${selectionOption.name}") },
+                            text = { Text("${selectionOption.market} ${selectionOption.code} ${selectionOption.name}") },
                             onClick = {
                                 stockName = selectionOption.name
                                 stockCode = selectionOption.code
@@ -346,12 +361,13 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             Spacer(modifier = Modifier.height(8.dp))
             LabeledOutlinedTextField(
                 label = "股票代號",
-                value = stockCode,
+                value = if (stockCode.isBlank()) stockCode else "${allStocks.find { it.code == stockCode }?.market ?: ""} $stockCode",
                 onValueChange = {},
                 readOnly = true
             )
         } else {
-            LabeledOutlinedTextField(label = "股票", value = "$stockCode $stockName", onValueChange = {}, readOnly = true)
+            val stock = allStocks.find { it.code == stockCode }
+            LabeledOutlinedTextField(label = "股票", value = "${stock?.market ?: ""} $stockCode $stockName", onValueChange = {}, readOnly = true)
         }
 
         Spacer(modifier = Modifier.height(16.dp))

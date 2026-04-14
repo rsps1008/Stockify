@@ -41,7 +41,7 @@ class StockListRepository(private val context: Context) {
             JsonStock(
                 name = it.name,
                 code = it.code,
-                market = it.market,
+                market = StockMarket.TW,
                 industry = it.industry,
                 stockType = it.stockType
             )
@@ -60,7 +60,7 @@ class StockListRepository(private val context: Context) {
                 Stock(
                     name = it.name,
                     code = it.code,
-                    market = it.market,
+                    market = StockMarket.TW,
                     industry = it.industry,
                     stockType = it.stockType
                 )

@@ -71,7 +71,8 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
             stockDao = application.database.stockDao(),
             realtimeStockDataService = application.realtimeStockDataService,
             settingsDataStore = application.settingsDataStore,
-            stockCode = stockCode
+            stockCode = stockCode,
+            exchangeRateService = application.exchangeRateService
         )
     )
     val holdingInfo by viewModel.holdingInfo.collectAsState()

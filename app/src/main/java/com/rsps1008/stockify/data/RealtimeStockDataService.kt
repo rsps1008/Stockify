@@ -30,6 +30,7 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import com.rsps1008.stockify.data.StockMarket
 
 class RealtimeStockDataService(
     private val stockDao: StockDao,
@@ -46,6 +47,7 @@ class RealtimeStockDataService(
 
     private val twseFetcher = TwseStockInfoFetcher()
     private val yahooFetcher = YahooStockInfoFetcher()
+    private val usYahooFetcher = UsYahooStockInfoFetcher()
     private val preferredStockDataSource = MutableStateFlow("TWSE")
 
     init {
@@ -80,7 +82,7 @@ class RealtimeStockDataService(
         val fallbackUsed: Boolean
     )
 
-    private fun getFetchers(): Pair<StockInfoFetcher, StockInfoFetcher> {
+    private fun getTwFetchers(): Pair<StockInfoFetcher, StockInfoFetcher> {
         val preferredSource = preferredStockDataSource.value
         return if (preferredSource == "TWSE") {
             Pair(twseFetcher, yahooFetcher)
@@ -89,30 +91,32 @@ class RealtimeStockDataService(
         }
     }
 
+    private fun getFetcherForMarket(market: String): StockInfoFetcher {
+        return if (StockMarket.isUs(market)) usYahooFetcher else twseFetcher
+    }
+
+    private fun isAnyMarketOpen(): Boolean {
+        return twseFetcher.isMarketOpen() || usYahooFetcher.isMarketOpen()
+    }
+
     fun startFetching() {
         fetchJob?.cancel()
         fetchJob = scope.launch {
 
-            // 1️⃣ 先載入快取
             val cachedData = settingsDataStore.realtimeStockInfoCacheFlow.first()
             if (cachedData.isNotEmpty()) {
                 _realtimeStockInfo.value = cachedData
             }
 
-            // 2️⃣ 盤前只抓一次
-            if (!isTaiwanMarketOpen()) {
-                fetchAllStockInfo(isContinuous = false)
-            }
+            fetchAllStockInfo(isContinuous = false)
 
-            // 3️⃣ 永遠 loop，等待開盤
             settingsDataStore.fetchIntervalFlow.collectLatest { interval ->
                 while (true) {
-                    if (!isTaiwanMarketOpen()) {
-                        delay(30_000L)   // 每分鐘檢查一次是否開盤
+                    if (!isAnyMarketOpen()) {
+                        delay(30_000L)
                         continue
                     }
 
-                    // === 盤中 ===
                     fetchAllStockInfo(isContinuous = true)
                     delay(delayUntilNextAlignedFetch(interval))
                 }
@@ -125,44 +129,47 @@ class RealtimeStockDataService(
         val stocks = stockDao.getHeldStocks().first()
         if (stocks.isEmpty()) return
 
-        val stockCodes = stocks.map { it.code }
-        val (primaryFetcher, secondaryFetcher) = getFetchers()
-        Log.d(
-            "RealtimeStockDataService",
-            "Fetching realtime stock info using primary=${primaryFetcher.javaClass.simpleName}, secondary=${secondaryFetcher.javaClass.simpleName}"
-        )
-
         val updatedInfos = _realtimeStockInfo.value.toMutableMap()
+        val fetchClosedMarkets = !isContinuous
+        val stockGroups = stocks.groupBy { StockMarket.normalize(it.market) }
 
-        // ★★★ 並發 ★★★
         val results = coroutineScope {
-            stockCodes.map { code ->
-                async(Dispatchers.IO) {
-                    val outcome = fetchWithSingleFallback(
-                        stockCode = code,
-                        primaryFetcher = primaryFetcher,
-                        secondaryFetcher = secondaryFetcher
-                    )
+            stockGroups.flatMap { (market, marketStocks) ->
+                val stockCodes = marketStocks.map { it.code }
+                val fetcher = getFetcherForMarket(market)
+                Log.d(
+                    "RealtimeStockDataService",
+                    "Fetching $market realtime stock info using ${fetcher.javaClass.simpleName}"
+                )
 
-                    FetchResult(
-                        code = code,
-                        info = outcome.info,
-                        fallbackUsed = outcome.fallbackUsed
-                    )
+                if (!fetchClosedMarkets && !fetcher.isMarketOpen()) {
+                    emptyList()
+                } else {
+                    marketStocks.map { stock ->
+                        async(Dispatchers.IO) {
+                            val outcome = fetchStockInfoForMarket(
+                                stockCode = stock.code,
+                                market = market
+                            )
+
+                            FetchResult(
+                                code = stock.code,
+                                info = outcome.info,
+                                fallbackUsed = outcome.fallbackUsed
+                            )
+                        }
+                    }
                 }
             }.awaitAll()
         }
 
-        // 統計 fallback
         val fallbackCount = results.count { it.fallbackUsed }
         val successCount = results.count { it.info != null }
 
-        // 更新資料
         results.forEach { r ->
             r.info?.let { updatedInfos[r.code] = it }
         }
 
-        // fallback 提示邏輯（保持不變）
         if (fallbackCount > 0) {
             val shouldNotifyRepeatedly = settingsDataStore.notifyFallbackRepeatedlyFlow.first()
             val shouldShowNotification = shouldNotifyRepeatedly || !hasNotifiedAboutFallback
@@ -170,7 +177,7 @@ class RealtimeStockDataService(
             if (shouldShowNotification) {
                 val message = when {
                     successCount == 0 -> "主要與備援來源皆無法取得資料"
-                    fallbackCount == stockCodes.size -> "主要來源無法取得所有資料，全部改用備用來源"
+                    fallbackCount == results.size -> "主要來源無法取得所有資料，全部改用備用來源"
                     else -> "部分股票主要來源異常，部分改用備用來源"
                 }
 
@@ -184,7 +191,6 @@ class RealtimeStockDataService(
             }
         }
 
-        // 更新 StateFlow 與快取
         _realtimeStockInfo.value = updatedInfos
 
         if (isContinuous) {
@@ -199,19 +205,10 @@ class RealtimeStockDataService(
     }
 
     suspend fun refreshStock(stockCode: String) {
-        val (primaryFetcher, secondaryFetcher) = getFetchers()
-        Log.d(
-            "RealtimeStockDataService",
-            "Refreshing $stockCode using primary=${primaryFetcher.javaClass.simpleName}, secondary=${secondaryFetcher.javaClass.simpleName}"
-        )
+        val stock = stockDao.getStockByCode(stockCode)
+        val market = StockMarket.normalize(stock?.market ?: StockMarket.inferFromCode(stockCode))
+        val outcome = fetchStockInfoForMarket(stockCode, market)
 
-        val outcome = fetchWithSingleFallback(
-            stockCode = stockCode,
-            primaryFetcher = primaryFetcher,
-            secondaryFetcher = secondaryFetcher
-        )
-
-        // 更新 & 快取
         outcome.info?.let {
             val updatedInfos = _realtimeStockInfo.value.toMutableMap()
             updatedInfos[stockCode] = it
@@ -226,12 +223,33 @@ class RealtimeStockDataService(
             return cached
         }
 
-        val (primaryFetcher, secondaryFetcher) = getFetchers()
-        return fetchWithSingleFallback(
-            stockCode = stockCode,
-            primaryFetcher = primaryFetcher,
-            secondaryFetcher = secondaryFetcher
-        ).info
+        val stock = stockDao.getStockByCode(stockCode)
+        val market = StockMarket.normalize(stock?.market ?: StockMarket.inferFromCode(stockCode))
+        return fetchStockInfoForMarket(stockCode, market).info
+    }
+
+    private suspend fun fetchStockInfoForMarket(stockCode: String, market: String): FetchOutcome {
+        return if (StockMarket.isUs(market)) {
+            Log.d(
+                "RealtimeStockDataService",
+                "Refreshing $stockCode using ${usYahooFetcher.javaClass.simpleName}"
+            )
+            FetchOutcome(
+                info = usYahooFetcher.fetchStockInfo(stockCode),
+                fallbackUsed = false
+            )
+        } else {
+            val (primaryFetcher, secondaryFetcher) = getTwFetchers()
+            Log.d(
+                "RealtimeStockDataService",
+                "Refreshing $stockCode using primary=${primaryFetcher.javaClass.simpleName}, secondary=${secondaryFetcher.javaClass.simpleName}"
+            )
+            fetchWithSingleFallback(
+                stockCode = stockCode,
+                primaryFetcher = primaryFetcher,
+                secondaryFetcher = secondaryFetcher
+            )
+        }
     }
 
     private suspend fun isTaiwanMarketOpen(): Boolean {

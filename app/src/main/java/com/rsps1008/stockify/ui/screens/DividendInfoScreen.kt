@@ -30,7 +30,8 @@ fun DividendInfoScreen(navController: NavController) {
             stockDao = application.database.stockDao(),
             settingsDataStore = application.settingsDataStore,
             realtimeStockDataService = application.realtimeStockDataService,
-            dividendRepository = YahooDividendRepository(application.httpClient)
+            dividendRepository = YahooDividendRepository(application.httpClient),
+            exchangeRateService = application.exchangeRateService
         )
     )
 

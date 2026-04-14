@@ -64,6 +64,12 @@ interface StockDao {
     @Query("SELECT COUNT(*) FROM stocks")
     suspend fun getStocksCount(): Int
 
+    @Query("SELECT COUNT(*) FROM stocks WHERE market = :market")
+    suspend fun getStockCountByMarket(market: String): Int
+
+    @Query("DELETE FROM stocks WHERE market = :market")
+    suspend fun deleteStocksByMarket(market: String)
+
     @Query("DELETE FROM stock_transactions WHERE 股號 = :stockCode")
     suspend fun deleteTransactionsByStockCode(stockCode: String)
 

@@ -7,6 +7,7 @@ import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.StockDao
+import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -151,8 +152,14 @@ class AddTransactionViewModel(
         Triple(discount, minRegular, minOdd)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), Triple(0.28, 20, 1))
 
-    fun calculateBuyCosts(price: Double, shares: Double) {
+    fun calculateBuyCosts(price: Double, shares: Double, market: String = StockMarket.TW) {
         if (price <= 0 || shares <= 0) {
+            return
+        }
+
+        if (StockMarket.isUs(market)) {
+            _fee.value = 0.0
+            _expense.value = (price * shares).roundToInt().toDouble()
             return
         }
 
@@ -170,11 +177,20 @@ class AddTransactionViewModel(
     fun calculateSellCosts(
         price: Double,
         shares: Double,
+        market: String,
         stockType: String,
         isDayTrading: Boolean = false,
         isBondEtf: Boolean = false
     ) {
         if (price <= 0 || shares <= 0) return
+
+        if (StockMarket.isUs(market)) {
+            _fee.value = 0.0
+            _taxRate.value = 0.0
+            _tax.value = 0.0
+            _income.value = (price * shares).roundToInt().toDouble()
+            return
+        }
 
         val (discount, minFeeRegular, minFeeOddLot) = feeSettings.value
         val transactionValue = price * shares
@@ -294,7 +310,7 @@ class AddTransactionViewModel(
         var stock = stockDao.getStockByCode(stockCode)
 
         if (stock == null) {
-            val newStock = Stock(name = stockName, code = stockCode, market = "", industry = "")
+            val newStock = Stock(name = stockName, code = stockCode, market = StockMarket.inferFromCode(stockCode), industry = "")
             stockDao.insertStock(newStock)
             stock = stockDao.getStockByCode(stockCode)
         }

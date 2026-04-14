@@ -2,13 +2,18 @@ package com.rsps1008.stockify.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.StockRepository
 import com.rsps1008.stockify.ui.screens.HoldingsUiState
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
-class HoldingsViewModel(stockRepository: StockRepository) : ViewModel() {
+class HoldingsViewModel(
+    private val settingsDataStore: SettingsDataStore,
+    stockRepository: StockRepository
+) : ViewModel() {
 
     val uiState: StateFlow<HoldingsUiState> = stockRepository.getHoldings()
         .stateIn(
@@ -16,4 +21,17 @@ class HoldingsViewModel(stockRepository: StockRepository) : ViewModel() {
             started = SharingStarted.WhileSubscribed(5000L),
             initialValue = HoldingsUiState()
         )
+
+    val homeDisplayMode: StateFlow<String> = settingsDataStore.homeDisplayModeFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000L),
+            initialValue = com.rsps1008.stockify.data.HomeDisplayMode.COMBINED
+        )
+
+    fun setHomeDisplayMode(mode: String) {
+        viewModelScope.launch {
+            settingsDataStore.setHomeDisplayMode(mode)
+        }
+    }
 }

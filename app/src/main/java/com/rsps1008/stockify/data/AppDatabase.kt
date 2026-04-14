@@ -39,11 +39,32 @@ abstract class AppDatabase : RoomDatabase() {
         ) : RoomDatabase.Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
                 super.onCreate(db)
-                INSTANCE?.let { database ->
-                    CoroutineScope(Dispatchers.IO).launch {
-                        val stockListRepository = StockListRepository(context)
-                        val stocks = stockListRepository.readStocks()
-                        database.stockDao().insertStocks(stocks)
+                seedStockLists(context)
+            }
+
+            override fun onOpen(db: SupportSQLiteDatabase) {
+                super.onOpen(db)
+                seedStockLists(context)
+            }
+        }
+
+        private fun seedStockLists(context: Context) {
+            INSTANCE?.let { database ->
+                CoroutineScope(Dispatchers.IO).launch {
+                    val stockDao = database.stockDao()
+
+                    if (stockDao.getStockCountByMarket(StockMarket.TW) == 0) {
+                        val twStocks = StockListRepository(context).readStocks()
+                        if (twStocks.isNotEmpty()) {
+                            stockDao.insertStocks(twStocks)
+                        }
+                    }
+
+                    if (stockDao.getStockCountByMarket(StockMarket.US) == 0) {
+                        val usStocks = UsStockListRepository(context).readStocks()
+                        if (usStocks.isNotEmpty()) {
+                            stockDao.insertStocks(usStocks)
+                        }
                     }
                 }
             }
