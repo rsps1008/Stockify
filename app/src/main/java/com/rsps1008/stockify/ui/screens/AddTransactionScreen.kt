@@ -47,9 +47,12 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
 import com.rsps1008.stockify.ui.viewmodel.AddTransactionViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
+import com.rsps1008.stockify.data.Stock
+import com.rsps1008.stockify.data.StockMarket
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -287,9 +290,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         else -> false
     }
 
-    val filteredStocks = allStocks.filter {
-        it.name.contains(stockName, ignoreCase = true) || it.code.contains(stockName, ignoreCase = true)
-    }
+    val filteredStocks = prioritizeStockSearchResults(allStocks, stockName)
 
     val onAddOrUpdateTransaction: () -> Unit = {
         viewModel.addOrUpdateTransaction(
@@ -348,7 +349,21 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                 ) {
                     filteredStocks.take(5).forEach { selectionOption ->
                         DropdownMenuItem(
-                            text = { Text("${selectionOption.market} ${selectionOption.code} ${selectionOption.name}") },
+                            text = {
+                                Column {
+                                    Text(
+                                        text = "${selectionOption.market} ${selectionOption.code}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = selectionOption.name,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            },
                             onClick = {
                                 stockName = selectionOption.name
                                 stockCode = selectionOption.code
@@ -361,13 +376,18 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             Spacer(modifier = Modifier.height(8.dp))
             LabeledOutlinedTextField(
                 label = "股票代號",
-                value = if (stockCode.isBlank()) stockCode else "${allStocks.find { it.code == stockCode }?.market ?: ""} $stockCode",
+                value = formatStockCodeLabel(allStocks.find { it.code == stockCode }),
                 onValueChange = {},
                 readOnly = true
             )
         } else {
             val stock = allStocks.find { it.code == stockCode }
-            LabeledOutlinedTextField(label = "股票", value = "${stock?.market ?: ""} $stockCode $stockName", onValueChange = {}, readOnly = true)
+            LabeledOutlinedTextField(
+                label = "股票",
+                value = formatStockDisplayLabel(stock, stockCode, stockName),
+                onValueChange = {},
+                readOnly = true
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -834,6 +854,65 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             val buttonText = if (transactionId == null) "新增交易" else "更新交易"
             Text(buttonText)
         }
+    }
+}
+
+private fun prioritizeStockSearchResults(stocks: List<Stock>, query: String): List<Stock> {
+    val normalizedQuery = query.trim().lowercase(Locale.ROOT)
+    if (normalizedQuery.isBlank()) return stocks
+
+    return stocks
+        .mapNotNull { stock ->
+            val rank = stockSearchRank(stock, normalizedQuery)
+            if (rank == Int.MAX_VALUE) {
+                null
+            } else {
+                stock to rank
+            }
+        }
+        .sortedWith(
+            compareBy<Pair<Stock, Int>> { it.second }
+                .thenBy { it.first.code.length }
+                .thenBy { it.first.code }
+                .thenBy { it.first.name }
+        )
+        .map { it.first }
+}
+
+private fun stockSearchRank(stock: Stock, normalizedQuery: String): Int {
+    val code = stock.code.lowercase(Locale.ROOT)
+    val name = stock.name.lowercase(Locale.ROOT)
+
+    return when {
+        code == normalizedQuery -> 0
+        code.startsWith(normalizedQuery) -> 1
+        code.contains(normalizedQuery) -> 2
+        name.startsWith(normalizedQuery) -> 3
+        name.contains(normalizedQuery) -> 4
+        else -> Int.MAX_VALUE
+    }
+}
+
+private fun formatStockCodeLabel(stock: Stock?): String {
+    return if (stock == null) {
+        ""
+    } else {
+        "${displayMarketLabel(stock.market)} ${stock.code}"
+    }
+}
+
+private fun formatStockDisplayLabel(stock: Stock?, stockCode: String, stockName: String): String {
+    val marketCode = displayMarketLabel(stock?.market)
+    return listOf(marketCode, stockCode, stockName)
+        .filter { it.isNotBlank() }
+        .joinToString(" ")
+}
+
+private fun displayMarketLabel(market: String?): String {
+    return when (market?.trim()) {
+        StockMarket.TW -> StockMarket.TW
+        StockMarket.US -> StockMarket.US
+        else -> market.orEmpty()
     }
 }
 
