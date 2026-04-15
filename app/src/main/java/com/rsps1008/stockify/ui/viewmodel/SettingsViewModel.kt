@@ -111,6 +111,9 @@ class SettingsViewModel(
     val stockDataSource: StateFlow<String> = settingsDataStore.stockDataSourceFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), "TWSE")
 
+    val usStockDataSource: StateFlow<String> = settingsDataStore.usStockDataSourceFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), "Nasdaq")
+
     val notifyFallbackRepeatedly: StateFlow<Boolean> = settingsDataStore.notifyFallbackRepeatedlyFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), false)
 
@@ -343,7 +346,8 @@ class SettingsViewModel(
                 val importDate = System.currentTimeMillis()
 
                 importableItems.forEachIndexed { index, item ->
-                    val stock = allStocksByCode[item.stockCode] ?: Stock(
+                    val existingStock = allStocksByCode[item.stockCode]
+                    val stock = existingStock ?: Stock(
                         name = item.stockName.ifBlank { item.stockCode },
                         code = item.stockCode,
                         market = StockMarket.inferFromCode(item.stockCode)
@@ -367,6 +371,10 @@ class SettingsViewModel(
                             note = "PDF 匯入快照"
                         )
                     )
+
+                    if (existingStock == null) {
+                        realtimeStockDataService.refreshStock(stock.code)
+                    }
                 }
 
                 realtimeStockDataService.startFetching()
@@ -468,6 +476,7 @@ class SettingsViewModel(
     private suspend fun processImportedTransactions(transactions: List<CsvTransaction>) {
         transactions.forEach { csvTransaction ->
             var stock = stockDao.getStockByCode(csvTransaction.stockCode)
+            val shouldRefresh = stock == null
             if (stock == null) {
                 val newStock = Stock(
                     name = csvTransaction.stockName,
@@ -477,6 +486,9 @@ class SettingsViewModel(
                 stockDao.insertStock(newStock)
             }
             stockDao.insertTransaction(csvTransaction.transaction)
+            if (shouldRefresh) {
+                realtimeStockDataService.refreshStock(csvTransaction.stockCode)
+            }
         }
         realtimeStockDataService.startFetching()
         _message.value = "匯入成功，共 ${transactions.size} 筆紀錄"
@@ -497,6 +509,12 @@ class SettingsViewModel(
     fun setStockDataSource(source: String) {
         viewModelScope.launch {
             settingsDataStore.setStockDataSource(source)
+        }
+    }
+
+    fun setUsStockDataSource(source: String) {
+        viewModelScope.launch {
+            settingsDataStore.setUsStockDataSource(source)
         }
     }
 

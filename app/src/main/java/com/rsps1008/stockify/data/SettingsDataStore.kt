@@ -29,6 +29,7 @@ class SettingsDataStore(val context: Context) {
     private val realtimeStockInfoCacheKey = stringPreferencesKey("realtime_stock_info_cache")
     private val themeKey = stringPreferencesKey("theme")
     private val stockDataSourceKey = stringPreferencesKey("stock_data_source")
+    private val usStockDataSourceKey = stringPreferencesKey("us_stock_data_source")
     private val notifyFallbackRepeatedlyKey = booleanPreferencesKey("notify_fallback_repeatedly")
     private val taxRateNormalListedStockKey = doublePreferencesKey("tax_rate_normal_listed_stock")
     private val taxRateDomesticStockEtfKey = doublePreferencesKey("tax_rate_domestic_stock_etf")
@@ -88,6 +89,11 @@ class SettingsDataStore(val context: Context) {
     val stockDataSourceFlow: Flow<String> = context.dataStore.data
         .map { preferences ->
             preferences[stockDataSourceKey] ?: "TWSE"
+        }
+
+    val usStockDataSourceFlow: Flow<String> = context.dataStore.data
+        .map { preferences ->
+            preferences[usStockDataSourceKey] ?: "Nasdaq"
         }
 
     val notifyFallbackRepeatedlyFlow: Flow<Boolean> = context.dataStore.data
@@ -198,6 +204,12 @@ class SettingsDataStore(val context: Context) {
     suspend fun setStockDataSource(source: String) {
         context.dataStore.edit {
             it[stockDataSourceKey] = source
+        }
+    }
+
+    suspend fun setUsStockDataSource(source: String) {
+        context.dataStore.edit {
+            it[usStockDataSourceKey] = source
         }
     }
 

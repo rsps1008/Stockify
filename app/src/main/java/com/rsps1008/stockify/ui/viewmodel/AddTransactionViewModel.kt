@@ -214,7 +214,7 @@ class AddTransactionViewModel(
         _income.value = (transactionValue - _fee.value - finalTax).roundToInt().toDouble()
     }
 
-    fun addOrUpdateTransaction(
+    suspend fun addOrUpdateTransaction(
         stockName: String,
         stockCode: String,
         date: Long,
@@ -225,7 +225,6 @@ class AddTransactionViewModel(
         exDividendShares: Double = 0.0,
         stockDividend: Double = 0.0,
         exRightsShares: Double = 0.0,
-        dividendShares: Double = 0.0,
         dividendFee: Double = 0.0,
         note: String = "",
         capitalReductionRatio: Double = 0.0,
@@ -236,48 +235,46 @@ class AddTransactionViewModel(
         sharesBeforeSplit: Double = 0.0,
         sharesAfterSplit: Double = 0.0
     ) {
-        viewModelScope.launch {
-            val finalFee = when (type) {
-                "配息" -> dividendFee
-                else -> _fee.value
-            }
+        val finalFee = when (type) {
+            "配息" -> dividendFee
+            else -> _fee.value
+        }
 
-            val finalIncome = when (type) {
-                "賣出" -> _income.value
-                "配息" -> price - finalFee
-                "減資" -> cashReturned
-                else -> 0.0
-            }
+        val finalIncome = when (type) {
+            "賣出" -> _income.value
+            "配息" -> price - finalFee
+            "減資" -> cashReturned
+            else -> 0.0
+        }
 
-            val finalExpense = if (type == "買進") _expense.value else 0.0
-            val finalTax = if (type == "賣出") _tax.value else 0.0
-            val finalShares = if (type == "配股") 0.0 else shares
-            val finalDividendShares = if (type == "配股") shares else 0.0
-            val finalDividendIncome = if (type == "配息") finalIncome else 0.0
+        val finalExpense = if (type == "買進") _expense.value else 0.0
+        val finalTax = if (type == "賣出") _tax.value else 0.0
+        val finalShares = if (type == "配股") 0.0 else shares
+        val finalDividendShares = if (type == "配股") shares else 0.0
+        val finalDividendIncome = if (type == "配息") finalIncome else 0.0
 
-            if (transactionId == null) {
-                addTransaction(
-                    stockName, stockCode, date, type,
-                    price, finalShares,
-                    finalFee, finalTax, finalIncome, finalExpense,
-                    cashDividend, exDividendShares, stockDividend,
-                    finalDividendShares, exRightsShares,
-                    note, finalDividendIncome, capitalReductionRatio,
-                    sharesBeforeReduction, sharesAfterReduction, cashReturned,
-                    stockSplitRatio, sharesBeforeSplit, sharesAfterSplit
-                )
-            } else {
-                updateTransaction(
-                    stockCode, date, type,
-                    price, finalShares,
-                    finalFee, finalTax, finalIncome, finalExpense,
-                    cashDividend, exDividendShares, stockDividend,
-                    finalDividendShares, exRightsShares,
-                    note, finalDividendIncome, capitalReductionRatio,
-                    sharesBeforeReduction, sharesAfterReduction, cashReturned,
-                    stockSplitRatio, sharesBeforeSplit, sharesAfterSplit
-                )
-            }
+        if (transactionId == null) {
+            addTransaction(
+                stockName, stockCode, date, type,
+                price, finalShares,
+                finalFee, finalTax, finalIncome, finalExpense,
+                cashDividend, exDividendShares, stockDividend,
+                finalDividendShares, exRightsShares,
+                note, finalDividendIncome, capitalReductionRatio,
+                sharesBeforeReduction, sharesAfterReduction, cashReturned,
+                stockSplitRatio, sharesBeforeSplit, sharesAfterSplit
+            )
+        } else {
+            updateTransaction(
+                stockCode, date, type,
+                price, finalShares,
+                finalFee, finalTax, finalIncome, finalExpense,
+                cashDividend, exDividendShares, stockDividend,
+                finalDividendShares, exRightsShares,
+                note, finalDividendIncome, capitalReductionRatio,
+                sharesBeforeReduction, sharesAfterReduction, cashReturned,
+                stockSplitRatio, sharesBeforeSplit, sharesAfterSplit
+            )
         }
     }
 
@@ -307,17 +304,22 @@ class AddTransactionViewModel(
         sharesBeforeSplit: Double,
         sharesAfterSplit: Double
     ) {
+        val inferredMarket = StockMarket.inferFromCode(stockCode)
         var stock = stockDao.getStockByCode(stockCode)
 
         if (stock == null) {
-            val newStock = Stock(name = stockName, code = stockCode, market = StockMarket.inferFromCode(stockCode), industry = "")
+            val newStock = Stock(name = stockName, code = stockCode, market = inferredMarket, industry = "")
             stockDao.insertStock(newStock)
             stock = stockDao.getStockByCode(stockCode)
+        } else if (StockMarket.normalize(stock.market) != inferredMarket) {
+            val updatedStock = stock.copy(market = inferredMarket)
+            stockDao.updateStock(updatedStock)
+            stock = updatedStock
         }
 
-        stock?.let {
+        stock?.let { currentStock ->
             val transaction = StockTransaction(
-                stockCode = it.code,
+                stockCode = currentStock.code,
                 date = date,
                 recordTime = System.currentTimeMillis(),
                 type = type,

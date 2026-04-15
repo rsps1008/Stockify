@@ -18,6 +18,9 @@ interface StockDao {
     @Insert
     suspend fun insertStock(stock: Stock)
 
+    @Update
+    suspend fun updateStock(stock: Stock)
+
     @Insert
     suspend fun insertTransaction(transaction: StockTransaction)
 

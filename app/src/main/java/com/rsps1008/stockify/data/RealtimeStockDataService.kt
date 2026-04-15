@@ -48,7 +48,9 @@ class RealtimeStockDataService(
     private val twseFetcher = TwseStockInfoFetcher()
     private val yahooFetcher = YahooStockInfoFetcher()
     private val usYahooFetcher = UsYahooStockInfoFetcher()
+    private val usNasdaqFetcher = NasdaqStockInfoFetcher()
     private val preferredStockDataSource = MutableStateFlow("TWSE")
+    private val preferredUsStockDataSource = MutableStateFlow("Nasdaq")
 
     init {
         scope.launch {
@@ -59,6 +61,17 @@ class RealtimeStockDataService(
                     Log.d(
                         "RealtimeStockDataService",
                         "Preferred realtime data source updated to ${preferredStockDataSource.value}"
+                    )
+                }
+        }
+        scope.launch {
+            settingsDataStore.usStockDataSourceFlow
+                .distinctUntilChanged()
+                .collect { source ->
+                    preferredUsStockDataSource.value = normalizeUsStockDataSource(source)
+                    Log.d(
+                        "RealtimeStockDataService",
+                        "Preferred US realtime data source updated to ${preferredUsStockDataSource.value}"
                     )
                 }
         }
@@ -92,11 +105,11 @@ class RealtimeStockDataService(
     }
 
     private fun getFetcherForMarket(market: String): StockInfoFetcher {
-        return if (StockMarket.isUs(market)) usYahooFetcher else twseFetcher
+        return if (StockMarket.isUs(market)) getUsPrimaryFetcher() else twseFetcher
     }
 
     private fun isAnyMarketOpen(): Boolean {
-        return twseFetcher.isMarketOpen() || usYahooFetcher.isMarketOpen()
+        return twseFetcher.isMarketOpen() || usNasdaqFetcher.isMarketOpen()
     }
 
     fun startFetching() {
@@ -108,7 +121,9 @@ class RealtimeStockDataService(
                 _realtimeStockInfo.value = cachedData
             }
 
-            fetchAllStockInfo(isContinuous = false)
+            if (isAnyMarketOpen()) {
+                fetchAllStockInfo(isContinuous = false)
+            }
 
             settingsDataStore.fetchIntervalFlow.collectLatest { interval ->
                 while (true) {
@@ -116,7 +131,6 @@ class RealtimeStockDataService(
                         delay(30_000L)
                         continue
                     }
-
                     fetchAllStockInfo(isContinuous = true)
                     delay(delayUntilNextAlignedFetch(interval))
                 }
@@ -130,21 +144,23 @@ class RealtimeStockDataService(
         if (stocks.isEmpty()) return
 
         val updatedInfos = _realtimeStockInfo.value.toMutableMap()
-        val fetchClosedMarkets = !isContinuous
         val stockGroups = stocks.groupBy { StockMarket.normalize(it.market) }
 
         val results = coroutineScope {
             stockGroups.flatMap { (market, marketStocks) ->
-                val stockCodes = marketStocks.map { it.code }
-                val fetcher = getFetcherForMarket(market)
-                Log.d(
-                    "RealtimeStockDataService",
-                    "Fetching $market realtime stock info using ${fetcher.javaClass.simpleName}"
-                )
-
-                if (!fetchClosedMarkets && !fetcher.isMarketOpen()) {
+                if (!shouldRefreshMarket(market)) {
+                    Log.d(
+                        "RealtimeStockDataService",
+                        "Skipping $market realtime stock info because market is closed"
+                    )
                     emptyList()
                 } else {
+                    val fetcher = getFetcherForMarket(market)
+                    Log.d(
+                        "RealtimeStockDataService",
+                        "Fetching $market realtime stock info using ${fetcher.javaClass.simpleName}"
+                    )
+
                     marketStocks.map { stock ->
                         async(Dispatchers.IO) {
                             val outcome = fetchStockInfoForMarket(
@@ -204,7 +220,13 @@ class RealtimeStockDataService(
         }
     }
 
-    suspend fun refreshStock(stockCode: String) {
+    fun refreshStock(stockCode: String) {
+        scope.launch {
+            refreshStockInternal(stockCode)
+        }
+    }
+
+    private suspend fun refreshStockInternal(stockCode: String) {
         val stock = stockDao.getStockByCode(stockCode)
         val market = StockMarket.normalize(stock?.market ?: StockMarket.inferFromCode(stockCode))
         val outcome = fetchStockInfoForMarket(stockCode, market)
@@ -230,13 +252,15 @@ class RealtimeStockDataService(
 
     private suspend fun fetchStockInfoForMarket(stockCode: String, market: String): FetchOutcome {
         return if (StockMarket.isUs(market)) {
+            val (primaryFetcher, secondaryFetcher) = getUsFetchers()
             Log.d(
                 "RealtimeStockDataService",
-                "Refreshing $stockCode using ${usYahooFetcher.javaClass.simpleName}"
+                "Refreshing $stockCode using primary=${primaryFetcher.javaClass.simpleName}, secondary=${secondaryFetcher.javaClass.simpleName}"
             )
-            FetchOutcome(
-                info = usYahooFetcher.fetchStockInfo(stockCode),
-                fallbackUsed = false
+            fetchWithSingleFallback(
+                stockCode = stockCode,
+                primaryFetcher = primaryFetcher,
+                secondaryFetcher = secondaryFetcher
             )
         } else {
             val (primaryFetcher, secondaryFetcher) = getTwFetchers()
@@ -249,6 +273,29 @@ class RealtimeStockDataService(
                 primaryFetcher = primaryFetcher,
                 secondaryFetcher = secondaryFetcher
             )
+        }
+    }
+
+    private fun getUsFetchers(): Pair<StockInfoFetcher, StockInfoFetcher> {
+        return if (preferredUsStockDataSource.value == "Yahoo") {
+            Pair(usYahooFetcher, usNasdaqFetcher)
+        } else {
+            Pair(usNasdaqFetcher, usYahooFetcher)
+        }
+    }
+
+    private fun getUsPrimaryFetcher(): StockInfoFetcher {
+        return if (preferredUsStockDataSource.value == "Yahoo") {
+            usYahooFetcher
+        } else {
+            usNasdaqFetcher
+        }
+    }
+
+    private suspend fun shouldRefreshMarket(market: String): Boolean {
+        return when (StockMarket.normalize(market)) {
+            StockMarket.US -> usNasdaqFetcher.isMarketOpen()
+            else -> isTaiwanMarketOpen()
         }
     }
 
@@ -320,6 +367,14 @@ class RealtimeStockDataService(
             "TWSE" -> "TWSE"
             "YAHOO" -> "Yahoo"
             else -> "TWSE"
+        }
+    }
+
+    private fun normalizeUsStockDataSource(source: String): String {
+        return when (source.trim().uppercase()) {
+            "NASDAQ" -> "Nasdaq"
+            "YAHOO" -> "Yahoo"
+            else -> "Nasdaq"
         }
     }
 

@@ -32,6 +32,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -53,6 +54,7 @@ import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
 import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.StockMarket
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -83,6 +85,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     val income by viewModel.income.collectAsState()
     val defaultDividendFee by viewModel.defaultDividendFee.collectAsState()
     var dividendFee by remember { mutableStateOf("") }
+    val coroutineScope = rememberCoroutineScope()
 
     var stockName by remember { mutableStateOf("") }
     var stockCode by remember { mutableStateOf("") }
@@ -291,32 +294,6 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     }
 
     val filteredStocks = prioritizeStockSearchResults(allStocks, stockName)
-
-    val onAddOrUpdateTransaction: () -> Unit = {
-        viewModel.addOrUpdateTransaction(
-            stockName = stockName,
-            stockCode = stockCode,
-            date = date,
-            type = transactionType,
-            price = price.toDoubleOrNull() ?: 0.0,
-            shares = shares.toDoubleOrNull() ?: 0.0,
-            cashDividend = cashDividend.toDoubleOrNull() ?: 0.0,
-            exDividendShares = exDividendShares.toDoubleOrNull() ?: 0.0,
-            stockDividend = stockDividendRate.toDoubleOrNull() ?: 0.0,
-            exRightsShares = exRightsShares.toDoubleOrNull() ?: 0.0,
-            dividendShares = shares.toDoubleOrNull() ?: 0.0,
-            dividendFee = dividendFee.toDoubleOrNull() ?: 0.0,
-            capitalReductionRatio = capitalReductionRatio.toDoubleOrNull() ?: 0.0,
-            sharesBeforeReduction = sharesBeforeReduction.toDoubleOrNull() ?: 0.0,
-            sharesAfterReduction = sharesAfterReduction.toDoubleOrNull() ?: 0.0,
-            cashReturned = cashReturned.toDoubleOrNull() ?: 0.0,
-            stockSplitRatio = stockSplitRatio.toDoubleOrNull() ?: 0.0,
-            sharesBeforeSplit = sharesBeforeSplit.toDoubleOrNull() ?: 0.0,
-            sharesAfterSplit = sharesAfterSplit.toDoubleOrNull() ?: 0.0
-        )
-        val message = if (transactionId == null) "新增成功" else "更新成功"
-        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-    }
 
     Column(
         modifier = Modifier
@@ -844,9 +821,32 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         Spacer(modifier = Modifier.height(32.dp))
         Button(
             onClick = {
-                onAddOrUpdateTransaction()
-                viewModel.resetForm()
-                navController.popBackStack()
+                coroutineScope.launch {
+                    viewModel.addOrUpdateTransaction(
+                        stockName = stockName,
+                        stockCode = stockCode,
+                        date = date,
+                        type = transactionType,
+                        price = price.toDoubleOrNull() ?: 0.0,
+                        shares = shares.toDoubleOrNull() ?: 0.0,
+                        cashDividend = cashDividend.toDoubleOrNull() ?: 0.0,
+                        exDividendShares = exDividendShares.toDoubleOrNull() ?: 0.0,
+                        stockDividend = stockDividendRate.toDoubleOrNull() ?: 0.0,
+                        exRightsShares = exRightsShares.toDoubleOrNull() ?: 0.0,
+                        dividendFee = dividendFee.toDoubleOrNull() ?: 0.0,
+                        capitalReductionRatio = capitalReductionRatio.toDoubleOrNull() ?: 0.0,
+                        sharesBeforeReduction = sharesBeforeReduction.toDoubleOrNull() ?: 0.0,
+                        sharesAfterReduction = sharesAfterReduction.toDoubleOrNull() ?: 0.0,
+                        cashReturned = cashReturned.toDoubleOrNull() ?: 0.0,
+                        stockSplitRatio = stockSplitRatio.toDoubleOrNull() ?: 0.0,
+                        sharesBeforeSplit = sharesBeforeSplit.toDoubleOrNull() ?: 0.0,
+                        sharesAfterSplit = sharesAfterSplit.toDoubleOrNull() ?: 0.0
+                    )
+                    val message = if (transactionId == null) "新增成功" else "更新成功"
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                    viewModel.resetForm()
+                    navController.popBackStack()
+                }
             },
             enabled = isFormValid,
             modifier = Modifier.fillMaxWidth()

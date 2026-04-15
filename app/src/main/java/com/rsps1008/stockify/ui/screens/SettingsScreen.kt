@@ -78,6 +78,7 @@ fun SettingsScreen() {
     val fetchInterval by viewModel.fetchInterval.collectAsState()
     val theme by viewModel.theme.collectAsState()
     val stockDataSource by viewModel.stockDataSource.collectAsState()
+    val usStockDataSource by viewModel.usStockDataSource.collectAsState()
     val notifyFallbackRepeatedly by viewModel.notifyFallbackRepeatedly.collectAsState()
     val taxRateNormalListedStock by viewModel.taxRateNormalListedStock.collectAsState()
     val taxRateDomesticStockEtf by viewModel.taxRateDomesticStockEtf.collectAsState()
@@ -195,6 +196,10 @@ fun SettingsScreen() {
                             mapOf("TWSE" to "台灣證券交易所(推薦)", "Yahoo" to "Yahoo!奇摩股市(爬蟲)")
                         }
                         var expandedDataSource by remember { mutableStateOf(false) }
+                        val usDataSourceOptions = remember {
+                            mapOf("Nasdaq" to "Nasdaq API(推薦)", "Yahoo" to "Yahoo! Finance chart")
+                        }
+                        var expandedUsDataSource by remember { mutableStateOf(false) }
 
                         ExposedDropdownMenuBox(
                             expanded = expandedDataSource,
@@ -231,6 +236,47 @@ fun SettingsScreen() {
 
                         Text(
                             text = "*如果選擇的來源不可用，將自動採用另一個作為備用機制。",
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        ExposedDropdownMenuBox(
+                            expanded = expandedUsDataSource,
+                            onExpandedChange = { expandedUsDataSource = !expandedUsDataSource },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = usDataSourceOptions[usStockDataSource] ?: usStockDataSource,
+                                onValueChange = { },
+                                label = { Text("美股即時資料來源") },
+                                readOnly = true,
+                                trailingIcon = {
+                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedUsDataSource)
+                                },
+                                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = expandedUsDataSource,
+                                onDismissRequest = { expandedUsDataSource = false },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                usDataSourceOptions.forEach { (key, value) ->
+                                    DropdownMenuItem(
+                                        text = { Text(value) },
+                                        onClick = {
+                                            viewModel.setUsStockDataSource(key)
+                                            expandedUsDataSource = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        Text(
+                            text = "*目前美股主來源會先試 Nasdaq API，失敗才改用 Yahoo! Finance。",
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.padding(top = 4.dp)
                         )
