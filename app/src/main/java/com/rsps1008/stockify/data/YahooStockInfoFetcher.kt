@@ -8,9 +8,9 @@ import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
 import java.time.DayOfWeek
 import java.time.LocalTime
@@ -39,82 +39,79 @@ class YahooStockInfoFetcher : StockInfoFetcher {
         return isWeekday && isTradingTime
     }
 
-    override suspend fun fetchStockInfoList(stockCodes: List<String>): Map<String, RealtimeStockInfo> = withContext(Dispatchers.IO) {
-        stockCodes.map { code ->
-            async {
-                fetchStockInfoInternal(code)?.let { info ->
-                    code to info
+    override suspend fun fetchStockInfoList(stockCodes: List<String>): Map<String, RealtimeStockInfo> =
+        withContext(Dispatchers.IO) {
+            stockCodes.map { code ->
+                async {
+                    fetchStockInfoInternal(code)?.let { info ->
+                        code to info
+                    }
                 }
-            }
-        }.awaitAll().filterNotNull().toMap()
-    }
+            }.awaitAll().filterNotNull().toMap()
+        }
 
     override suspend fun fetchStockInfo(stockCode: String): RealtimeStockInfo? = withContext(Dispatchers.IO) {
         fetchStockInfoInternal(stockCode)
     }
 
     private suspend fun fetchStockInfoInternal(stockCode: String): RealtimeStockInfo? {
-        return fetchSemaphore.withPermit {
+        return retryOnTransientNetworkFailure("YahooStockInfoFetcher", stockCode) {
             val url = "https://tw.stock.yahoo.com/quote/$stockCode"
-            try {
-                val responseText = client.get(url) {
+            val responseText = fetchSemaphore.withPermit {
+                client.get(url) {
                     headers.append("User-Agent", "Mozilla/5.0")
                 }.bodyAsText()
+            }
 
-                val soup = Jsoup.parse(responseText)
+            val soup = Jsoup.parse(responseText)
 
-                val ul = soup.selectFirst("section#qsp-overview-realtime-info ul")
-                if (ul == null) {
-                    Log.e("YahooStockInfoFetcher", "Could not find the target 'ul' element for $stockCode")
-                    return@withPermit null
+            val ul = soup.selectFirst("section#qsp-overview-realtime-info ul")
+            if (ul == null) {
+                Log.e("YahooStockInfoFetcher", "Could not find the target 'ul' element for $stockCode")
+                return@retryOnTransientNetworkFailure null
+            }
+
+            val kv = mutableMapOf<String, String>()
+
+            for (li in ul.select("li")) {
+                val spans = li.select("> span")
+                if (spans.size == 2) {
+                    val key = spans[0].text().trim()
+                    val valueSpan = spans[1]
+                    val valueText = valueSpan.text().trim()
+                    kv[key] = valueText
                 }
+            }
 
-                val kv = mutableMapOf<String, String>()
+            val priceStr = kv["?漱"]
+            val yesterdayPriceStr = kv["?冽"]
 
-                for (li in ul.select("li")) {
-                    val spans = li.select("> span")
-                    if (spans.size == 2) {
-                        val key = spans[0].text().trim()
-                        val valueSpan = spans[1]
-                        val valueText = valueSpan.text().trim()
-                        kv[key] = valueText
+            val price = priceStr?.normalizeYahooNumber()?.toDoubleOrNull()
+            val yesterdayPrice = yesterdayPriceStr?.normalizeYahooNumber()?.toDoubleOrNull()
+
+            if (price != null && yesterdayPrice != null && yesterdayPrice != 0.0) {
+                val change = price - yesterdayPrice
+                val changePercent = (change / yesterdayPrice) * 100
+                val limitState =
+                    when {
+                        changePercent >= 9.9 -> LimitState.LIMIT_UP
+                        changePercent <= -9.9 -> LimitState.LIMIT_DOWN
+                        else -> LimitState.NONE
                     }
-                }
-
-                val priceStr = kv["成交"]
-                val yesterdayPriceStr = kv["昨收"]
-
-                val price = priceStr?.normalizeYahooNumber()?.toDoubleOrNull()
-                val yesterdayPrice = yesterdayPriceStr?.normalizeYahooNumber()?.toDoubleOrNull()
-
-                if (price != null && yesterdayPrice != null && yesterdayPrice != 0.0) {
-                    val change = price - yesterdayPrice
-                    val changePercent = (change / yesterdayPrice) * 100
-                    val limitState =
-                        when {
-                            changePercent >= 9.9 -> LimitState.LIMIT_UP
-                            changePercent <= -9.9 -> LimitState.LIMIT_DOWN
-                            else -> LimitState.NONE
-                        }
-                    val info = RealtimeStockInfo(
-                        currentPrice = price,
-                        change = change,
-                        changePercent = changePercent,
-                        limitState = limitState
-                    )
-                    Log.d("YahooStockInfoFetcher", "Yahoo Fetched $stockCode → $info from $url")
-                    return@withPermit info
-                } else {
-                    Log.e(
-                        "YahooStockInfoFetcher",
-                        "Failed to parse price or yesterday's price for $stockCode. PriceStr: $priceStr, YesterdayPriceStr: $yesterdayPriceStr"
-                    )
-                    return@withPermit null
-                }
-
-            } catch (e: Exception) {
-                Log.e("YahooStockInfoFetcher", "Exception while fetching stock info for $stockCode: ${e.message}", e)
-                return@withPermit null
+                val info = RealtimeStockInfo(
+                    currentPrice = price,
+                    change = change,
+                    changePercent = changePercent,
+                    limitState = limitState
+                )
+                Log.d("YahooStockInfoFetcher", "Yahoo Fetched $stockCode -> $info from $url")
+                info
+            } else {
+                Log.e(
+                    "YahooStockInfoFetcher",
+                    "Failed to parse price or yesterday's price for $stockCode. PriceStr: $priceStr, YesterdayPriceStr: $yesterdayPriceStr"
+                )
+                null
             }
         }
     }

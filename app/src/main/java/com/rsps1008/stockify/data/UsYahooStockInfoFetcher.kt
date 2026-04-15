@@ -9,6 +9,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
@@ -20,6 +22,8 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 
 class UsYahooStockInfoFetcher : StockInfoFetcher {
+
+    private val fetchSemaphore = Semaphore(permits = 3)
 
     private val client = HttpClient(CIO) {
         engine {
@@ -58,16 +62,18 @@ class UsYahooStockInfoFetcher : StockInfoFetcher {
 
     private suspend fun fetchStockInfoInternal(stockCode: String): RealtimeStockInfo? {
         val url = "https://query1.finance.yahoo.com/v8/finance/chart/$stockCode?interval=1d&range=1d&includePrePost=false&events=div%2Csplits"
-        return try {
-            val responseText = client.get(url) {
-                headers.append("User-Agent", "Mozilla/5.0")
-            }.bodyAsText()
+        return retryOnTransientNetworkFailure("UsYahooStockInfoFetcher", stockCode) {
+            val responseText = fetchSemaphore.withPermit {
+                client.get(url) {
+                    headers.append("User-Agent", "Mozilla/5.0")
+                }.bodyAsText()
+            }
 
             val root = Json.parseToJsonElement(responseText).jsonObject
-            val chart = root["chart"]?.jsonObject ?: return null
-            val results = chart["result"]?.jsonArray ?: return null
-            val result = results.firstOrNull()?.jsonObject ?: return null
-            val meta = result["meta"]?.jsonObject ?: return null
+            val chart = root["chart"]?.jsonObject ?: return@retryOnTransientNetworkFailure null
+            val results = chart["result"]?.jsonArray ?: return@retryOnTransientNetworkFailure null
+            val result = results.firstOrNull()?.jsonObject ?: return@retryOnTransientNetworkFailure null
+            val meta = result["meta"]?.jsonObject ?: return@retryOnTransientNetworkFailure null
 
             val price = meta["regularMarketPrice"]?.jsonPrimitive?.doubleOrNull
             val previousClose = meta["chartPreviousClose"]?.jsonPrimitive?.doubleOrNull
@@ -85,14 +91,11 @@ class UsYahooStockInfoFetcher : StockInfoFetcher {
                     limitState = LimitState.NONE
                 )
                 Log.d("UsYahooStockInfoFetcher", "US Yahoo Fetched $stockCode -> $info from $url")
-                return info
+                info
+            } else {
+                Log.e("UsYahooStockInfoFetcher", "Missing price data for $stockCode from $url")
+                null
             }
-
-            Log.e("UsYahooStockInfoFetcher", "Missing price data for $stockCode from $url")
-            null
-        } catch (e: Exception) {
-            Log.e("UsYahooStockInfoFetcher", "Exception while fetching stock info for $stockCode: ${e.message}", e)
-            null
         }
     }
 }

@@ -9,6 +9,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
@@ -20,6 +22,8 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 
 class NasdaqStockInfoFetcher : StockInfoFetcher {
+
+    private val fetchSemaphore = Semaphore(permits = 3)
 
     private val client = HttpClient(CIO) {
         engine {
@@ -58,23 +62,25 @@ class NasdaqStockInfoFetcher : StockInfoFetcher {
 
     private suspend fun fetchStockInfoInternal(stockCode: String): RealtimeStockInfo? {
         val url = "https://api.nasdaq.com/api/quote/$stockCode/info?assetclass=stocks"
-        return try {
-            val responseText = client.get(url) {
-                headers.append("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-                headers.append("Accept", "application/json, text/plain, */*")
-                headers.append("Accept-Language", "en-US,en;q=0.9")
-                headers.append("Referer", "https://www.nasdaq.com/")
-                headers.append("Origin", "https://www.nasdaq.com")
-                headers.append("Sec-Fetch-Site", "same-site")
-                headers.append("Sec-Fetch-Mode", "cors")
-                headers.append("Sec-Fetch-Dest", "empty")
-                headers.append("Cache-Control", "no-cache")
-                headers.append("Pragma", "no-cache")
-            }.bodyAsText()
+        return retryOnTransientNetworkFailure("NasdaqStockInfoFetcher", stockCode) {
+            val responseText = fetchSemaphore.withPermit {
+                client.get(url) {
+                    headers.append("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+                    headers.append("Accept", "application/json, text/plain, */*")
+                    headers.append("Accept-Language", "en-US,en;q=0.9")
+                    headers.append("Referer", "https://www.nasdaq.com/")
+                    headers.append("Origin", "https://www.nasdaq.com")
+                    headers.append("Sec-Fetch-Site", "same-site")
+                    headers.append("Sec-Fetch-Mode", "cors")
+                    headers.append("Sec-Fetch-Dest", "empty")
+                    headers.append("Cache-Control", "no-cache")
+                    headers.append("Pragma", "no-cache")
+                }.bodyAsText()
+            }
 
             val root = Json.parseToJsonElement(responseText).jsonObject
-            val data = root["data"]?.jsonObject ?: return null
-            val primaryData = data["primaryData"]?.jsonObject ?: return null
+            val data = root["data"]?.jsonObject ?: return@retryOnTransientNetworkFailure null
+            val primaryData = data["primaryData"]?.jsonObject ?: return@retryOnTransientNetworkFailure null
 
             val lastSalePrice = primaryData["lastSalePrice"]?.jsonPrimitive?.contentOrNull
             val netChange = primaryData["netChange"]?.jsonPrimitive?.contentOrNull
@@ -102,17 +108,14 @@ class NasdaqStockInfoFetcher : StockInfoFetcher {
                     limitState = LimitState.NONE
                 )
                 Log.d("NasdaqStockInfoFetcher", "Nasdaq Fetched $stockCode -> $info from $url")
-                return info
+                info
+            } else {
+                Log.e(
+                    "NasdaqStockInfoFetcher",
+                    "Missing price data for $stockCode from $url. lastSalePrice=$lastSalePrice, netChange=$netChange, percentageChange=$percentageChange"
+                )
+                null
             }
-
-            Log.e(
-                "NasdaqStockInfoFetcher",
-                "Missing price data for $stockCode from $url. lastSalePrice=$lastSalePrice, netChange=$netChange, percentageChange=$percentageChange"
-            )
-            null
-        } catch (e: Exception) {
-            Log.e("NasdaqStockInfoFetcher", "Exception while fetching stock info for $stockCode: ${e.message}", e)
-            null
         }
     }
 }

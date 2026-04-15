@@ -22,6 +22,10 @@ import kotlinx.serialization.json.jsonPrimitive
 class UsdTwdExchangeRateService(
     private val settingsDataStore: SettingsDataStore
 ) {
+    private companion object {
+        private const val REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000L
+    }
+
     private val client = HttpClient(CIO) {
         engine {
             requestTimeout = 5000
@@ -46,7 +50,7 @@ class UsdTwdExchangeRateService(
         refreshJob = scope.launch {
             refreshOnce()
             while (true) {
-                delay(6 * 60 * 60 * 1000L)
+                delay(REFRESH_INTERVAL_MS)
                 refreshOnce()
             }
         }

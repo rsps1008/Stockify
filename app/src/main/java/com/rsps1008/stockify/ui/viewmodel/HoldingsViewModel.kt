@@ -2,6 +2,7 @@ package com.rsps1008.stockify.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.StockRepository
 import com.rsps1008.stockify.ui.screens.HoldingsUiState
@@ -12,6 +13,7 @@ import kotlinx.coroutines.launch
 
 class HoldingsViewModel(
     private val settingsDataStore: SettingsDataStore,
+    private val realtimeStockDataService: RealtimeStockDataService,
     stockRepository: StockRepository
 ) : ViewModel() {
 
@@ -32,6 +34,12 @@ class HoldingsViewModel(
     fun setHomeDisplayMode(mode: String) {
         viewModelScope.launch {
             settingsDataStore.setHomeDisplayMode(mode)
+        }
+    }
+
+    fun refreshAllHoldingsQuotes() {
+        viewModelScope.launch {
+            realtimeStockDataService.refreshAllHeldStockInfo()
         }
     }
 }

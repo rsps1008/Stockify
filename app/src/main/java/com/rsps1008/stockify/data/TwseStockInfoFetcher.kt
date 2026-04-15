@@ -9,6 +9,8 @@ import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
@@ -20,6 +22,8 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 
 class TwseStockInfoFetcher : StockInfoFetcher {
+
+    private val fetchSemaphore = Semaphore(permits = 3)
 
     private val client = HttpClient(CIO) {
         engine {
@@ -60,17 +64,19 @@ class TwseStockInfoFetcher : StockInfoFetcher {
 
     @SuppressLint("UnsafeOptInUsageError")
     private suspend fun fetchStockInfoInternal(stockCode: String): RealtimeStockInfo? {
-        val code = if (stockCode.contains(".")) stockCode else "$stockCode.tw"
-        val urls = listOf(
-            "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_$code&json=1&delay=0",
-            "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=otc_$code&json=1&delay=0"
-        )
+        return retryOnTransientNetworkFailure("TwseStockInfoFetcher", stockCode) {
+            val code = if (stockCode.contains(".")) stockCode else "$stockCode.tw"
+            val urls = listOf(
+                "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_$code&json=1&delay=0",
+                "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=otc_$code&json=1&delay=0"
+            )
 
-        for (url in urls) {
-            try {
-                val responseText = client.get(url) {
-                    headers.append("User-Agent", "Mozilla/5.0")
-                }.bodyAsText()
+            for (url in urls) {
+                val responseText = fetchSemaphore.withPermit {
+                    client.get(url) {
+                        headers.append("User-Agent", "Mozilla/5.0")
+                    }.bodyAsText()
+                }
 
                 if (responseText.isBlank() ||
                     !responseText.trim().startsWith("{") ||
@@ -85,7 +91,7 @@ class TwseStockInfoFetcher : StockInfoFetcher {
 
                 val obj = msgArray[0].jsonObject
 
-                // -------- 新增：買賣一，用來補 z="-" 的情況 --------
+                // Parse last price, falling back to bid/ask when z is unavailable.
                 val zRaw = obj["z"]?.jsonPrimitive?.content
                 val price: Double? =
                     zRaw?.takeIf { it != "-" }?.toDoubleOrNull()
@@ -97,7 +103,6 @@ class TwseStockInfoFetcher : StockInfoFetcher {
                     val change = price - yesterday
                     val changePercent = (change / yesterday) * 100
 
-                    val z = zRaw?.takeIf { it != "-" }?.toDoubleOrNull()
                     val up = obj["u"]?.jsonPrimitive?.content?.toDoubleOrNull()
                     val down = obj["w"]?.jsonPrimitive?.content?.toDoubleOrNull()
                     val limitState =
@@ -114,19 +119,14 @@ class TwseStockInfoFetcher : StockInfoFetcher {
                         limitState = limitState
                     )
 
-                    Log.d("TwseStockInfoFetcher", "TWSE Fetched $stockCode → $info from $url")
-                    return info
+                    Log.d("TwseStockInfoFetcher", "TWSE Fetched $stockCode -> $info from $url")
+                    return@retryOnTransientNetworkFailure info
                 }
-
-            } catch (e: Exception) {
-                Log.e("TwseStockInfoFetcher",
-                    "Exception for $stockCode from $url: ${e.javaClass.simpleName} ${e.message}"
-                )
             }
-        }
 
-        Log.e("TwseStockInfoFetcher", "Failed to fetch price data for $stockCode from all TWSE URLs")
-        return null
+            Log.e("TwseStockInfoFetcher", "Failed to fetch price data for $stockCode from all TWSE URLs")
+            null
+        }
     }
 
     fun firstValidPrice(raw: String?): Double? =

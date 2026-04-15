@@ -193,11 +193,11 @@ fun SettingsScreen() {
                         Spacer(modifier = Modifier.height(16.dp))
 
                         val dataSourceOptions = remember {
-                            mapOf("TWSE" to "台灣證券交易所(推薦)", "Yahoo" to "Yahoo!奇摩股市(爬蟲)")
+                            mapOf("TWSE" to "台灣證券交易所 (推薦)", "Yahoo" to "Yahoo! 奇摩股市")
                         }
                         var expandedDataSource by remember { mutableStateOf(false) }
                         val usDataSourceOptions = remember {
-                            mapOf("Nasdaq" to "Nasdaq API(推薦)", "Yahoo" to "Yahoo! Finance chart")
+                            mapOf("Nasdaq" to "Nasdaq API (推薦)", "Yahoo" to "Yahoo! Finance")
                         }
                         var expandedUsDataSource by remember { mutableStateOf(false) }
 
@@ -233,13 +233,6 @@ fun SettingsScreen() {
                                 }
                             }
                         }
-
-                        Text(
-                            text = "*如果選擇的來源不可用，將自動採用另一個作為備用機制。",
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-
                         Spacer(modifier = Modifier.height(16.dp))
 
                         ExposedDropdownMenuBox(
@@ -276,7 +269,7 @@ fun SettingsScreen() {
                         }
 
                         Text(
-                            text = "*目前美股主來源會先試 Nasdaq API，失敗才改用 Yahoo! Finance。",
+                            text = "*如果選擇的來源不可用，將自動採用另一個作為備用機制。",
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.padding(top = 4.dp)
                         )

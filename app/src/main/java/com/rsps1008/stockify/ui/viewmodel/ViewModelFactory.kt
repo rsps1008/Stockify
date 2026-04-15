@@ -29,6 +29,7 @@ class ViewModelFactory(
                 @Suppress("UNCHECKED_CAST")
                 HoldingsViewModel(
                     settingsDataStore = settingsDataStore,
+                    realtimeStockDataService = realtimeStockDataService,
                     stockRepository = OfflineStockRepository(
                         stockDao = stockDao,
                         realtimeStockDataService = realtimeStockDataService,

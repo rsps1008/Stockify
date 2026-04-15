@@ -1,4 +1,4 @@
-package com.rsps1008.stockify.ui.viewmodel
+﻿package com.rsps1008.stockify.ui.viewmodel
 
 import android.app.Application
 import android.content.Intent
@@ -474,9 +474,10 @@ class SettingsViewModel(
     }
 
     private suspend fun processImportedTransactions(transactions: List<CsvTransaction>) {
+        val refreshedStockCodes = linkedSetOf<String>()
+
         transactions.forEach { csvTransaction ->
             var stock = stockDao.getStockByCode(csvTransaction.stockCode)
-            val shouldRefresh = stock == null
             if (stock == null) {
                 val newStock = Stock(
                     name = csvTransaction.stockName,
@@ -486,10 +487,13 @@ class SettingsViewModel(
                 stockDao.insertStock(newStock)
             }
             stockDao.insertTransaction(csvTransaction.transaction)
-            if (shouldRefresh) {
-                realtimeStockDataService.refreshStock(csvTransaction.stockCode)
-            }
+            refreshedStockCodes += csvTransaction.stockCode
         }
+
+        if (refreshedStockCodes.isNotEmpty()) {
+            realtimeStockDataService.refreshStocks(refreshedStockCodes)
+        }
+
         realtimeStockDataService.startFetching()
         _message.value = "匯入成功，共 ${transactions.size} 筆紀錄"
     }

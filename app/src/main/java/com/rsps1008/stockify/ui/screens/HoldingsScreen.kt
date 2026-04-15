@@ -68,6 +68,7 @@ import com.rsps1008.stockify.ui.theme.StockGain
 import com.rsps1008.stockify.ui.theme.StockLoss
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -104,8 +105,8 @@ fun HoldingsScreen(navController: NavController) {
 
     // ★ 從 application 的 realtimeStockDataService 取得即時股價 Map
     val realtimeMap by application.realtimeStockDataService.realtimeStockInfo.collectAsState()
-    val firstInfo = realtimeMap.values.firstOrNull()
-    val lastUpdatedText = firstInfo?.lastUpdated?.let {
+    val lastUpdated = realtimeMap.values.maxOfOrNull { it.lastUpdated }
+    val lastUpdatedText = lastUpdated?.let {
         java.text.SimpleDateFormat("MM/dd HH:mm:ss", java.util.Locale.getDefault())
             .format(java.util.Date(it))
     } ?: "--:--"
@@ -162,7 +163,8 @@ fun HoldingsScreen(navController: NavController) {
                     uiState = uiState,
                     lastUpdatedText = lastUpdatedText,
                     currentMode = homeDisplayMode,
-                    onModeSelected = viewModel::setHomeDisplayMode
+                    onModeSelected = viewModel::setHomeDisplayMode,
+                    onRefreshClick = viewModel::refreshAllHoldingsQuotes
                 )
             }
 
@@ -260,7 +262,8 @@ fun SummarySection(
     uiState: HoldingsUiState,
     lastUpdatedText: String,
     currentMode: String,
-    onModeSelected: (String) -> Unit
+    onModeSelected: (String) -> Unit,
+    onRefreshClick: () -> Unit
 ) {
     var showMarketValue by remember { mutableStateOf(true) }
 
@@ -276,15 +279,28 @@ fun SummarySection(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(8.dp)
+                    .clickable { onRefreshClick() }
             ) {
-                AnimatedContent(
-                    targetState = lastUpdatedText,
-                    transitionSpec = { fadeIn() togetherWith fadeOut() }
-                ) { time ->
-                    Text(
-                        text = time,
-                        fontSize = 9.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    AnimatedContent(
+                        targetState = lastUpdatedText,
+                        transitionSpec = { fadeIn() togetherWith fadeOut() }
+                    ) { time ->
+                        Text(
+                            text = time,
+                            fontSize = 9.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = "Refresh quotes",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.height(10.dp)
                     )
                 }
             }

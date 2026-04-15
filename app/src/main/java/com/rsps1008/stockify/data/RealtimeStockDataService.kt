@@ -139,7 +139,11 @@ class RealtimeStockDataService(
     }
 
 
-    suspend fun fetchAllStockInfo(isContinuous: Boolean, forceSave: Boolean = false) {
+    suspend fun fetchAllStockInfo(
+        isContinuous: Boolean,
+        forceSave: Boolean = false,
+        refreshRegardlessOfMarketOpen: Boolean = false
+    ) {
         val stocks = stockDao.getHeldStocks().first()
         if (stocks.isEmpty()) return
 
@@ -148,7 +152,7 @@ class RealtimeStockDataService(
 
         val results = coroutineScope {
             stockGroups.flatMap { (market, marketStocks) ->
-                if (!shouldRefreshMarket(market)) {
+                if (!refreshRegardlessOfMarketOpen && !shouldRefreshMarket(market)) {
                     Log.d(
                         "RealtimeStockDataService",
                         "Skipping $market realtime stock info because market is closed"
@@ -223,6 +227,31 @@ class RealtimeStockDataService(
     fun refreshStock(stockCode: String) {
         scope.launch {
             refreshStockInternal(stockCode)
+        }
+    }
+
+    suspend fun refreshAllHeldStockInfo() {
+        fetchAllStockInfo(
+            isContinuous = false,
+            forceSave = true,
+            refreshRegardlessOfMarketOpen = true
+        )
+    }
+
+    suspend fun refreshStocks(stockCodes: Collection<String>) {
+        val distinctCodes = stockCodes
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+
+        if (distinctCodes.isEmpty()) return
+
+        coroutineScope {
+            distinctCodes.map { stockCode ->
+                async(Dispatchers.IO) {
+                    refreshStockInternal(stockCode)
+                }
+            }.awaitAll()
         }
     }
 

@@ -73,9 +73,10 @@
   - 將結果寫回 `StateFlow` 與 DataStore 快取
   - 長駐監聽 `SettingsDataStore.stockDataSourceFlow`，即時資料來源切換後會直接套用到下一輪抓取，不需要重啟 App。
 - `YahooStockInfoFetcher` 需要先移除千分位逗號再解析價格，否則像 `1,575` 這類字串會被視為失敗。
-- `YahooStockInfoFetcher` 目前有並發限制，單次最多 3 條同時抓取，避免 Yahoo 在高並發時出現 connect timeout。
+- `YahooStockInfoFetcher` 目前有並發限制，單次最多 3 條同時抓取，並且對暫時性 `IOException` 會先重試一次，避免 Yahoo 在高並發或短暫斷線時出現 connect timeout。
+- `TwseStockInfoFetcher`、`NasdaqStockInfoFetcher`、`UsYahooStockInfoFetcher` 也都限制單次最多 3 條同時抓取，並對暫時性 `IOException` 做一次短 retry，降低 `Connection reset by peer` 造成的即時報價缺值。
 - 台股即時報價是主要來源加一次 fallback，fallback 只會嘗試一次，不會在主要/備援來源之間反覆回圈。
-- 美股即時報價目前一律固定走 Yahoo，沒有第二個備援來源。
+- 美股即時報價目前可在 Nasdaq / Yahoo 之間切換，主來源加一次 fallback，不會在來源間反覆回圈。
 
 ### 開盤與休市
 
@@ -149,6 +150,10 @@ Windows 指令範例：
 
 - `RealtimeStockDataService` 的盤中更新已改成對齊下一個整數秒邊界。
 - 這是為了降低不同裝置之間的抓價時間漂移。
+- `UsdTwdExchangeRateService` 啟動時會先抓一次匯率，之後改為每 24 小時更新一次，不再每 6 小時刷新。
+- CSV 匯入與 Google Drive 還原完成後，會強制對這次匯入到的股票做一次即時價 refresh，即使當下台股關盤也會先塞入一筆價格。
+- 首頁「累積損益」卡右上角顯示的是目前已載入即時報價中的最新 `lastUpdated`，而且可以點擊該時間來強制刷新整個持股清單的報價。
+- 首頁「累積損益」卡右上角的刷新時間尾巴會顯示 refresh icon，讓使用者明確知道那裡可點擊更新。
 
 - 資料管理頁新增 PDF 庫存匯入，支援使用者手動輸入 PDF 密碼後解密與抽取文字。
 - PDF 庫存匯入會先整理股票代號與庫存，再抓取目前價格做預覽，最後可選擇替代匯入或新增匯入。
