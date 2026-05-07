@@ -77,6 +77,10 @@
 - `TwseStockInfoFetcher`、`NasdaqStockInfoFetcher`、`UsYahooStockInfoFetcher` 也都限制單次最多 3 條同時抓取，並對暫時性 `IOException` 做一次短 retry，降低 `Connection reset by peer` 造成的即時報價缺值。
 - 台股即時報價是主要來源加一次 fallback，fallback 只會嘗試一次，不會在主要/備援來源之間反覆回圈。
 - 美股即時報價目前可在 Nasdaq / Yahoo 之間切換，主來源加一次 fallback，不會在來源間反覆回圈。
+- App 啟動時會先強制做一次全市場最新資料抓取，即使台股與美股都關盤也一樣，避免初始畫面只顯示過期快取。
+- 當台股與美股都關盤時，背景輪詢會每 30 秒醒來一次重新檢查開盤狀態；一旦任一市場重新開盤，下一輪就會恢復正常的對齊秒點刷新。
+- 手動刷新路徑（單檔 `refreshStock`、批次 `refreshStocks`、首頁 `refreshAllHeldStockInfo`）會繞過開盤門檻，所以匯入或使用者主動刷新時，關盤期間也能先更新快照。
+- 目前背景自動刷新規則是：App 啟動先強制抓一次最新資料；之後台股與美股各自依市場時區與開盤時間分流，開盤中按設定 interval 刷新，關盤時每 30 秒檢查是否重新開盤；台股開盤只抓台股，美股開盤只抓美股，不會在對方市場開盤時去抓另一邊的資料。
 
 ### 開盤與休市
 

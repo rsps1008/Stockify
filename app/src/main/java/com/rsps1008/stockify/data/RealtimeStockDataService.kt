@@ -121,9 +121,11 @@ class RealtimeStockDataService(
                 _realtimeStockInfo.value = cachedData
             }
 
-            if (isAnyMarketOpen()) {
-                fetchAllStockInfo(isContinuous = false)
-            }
+            // App 啟動時先強制抓一次最新資料，避免只看到過期快取。
+            fetchAllStockInfo(
+                isContinuous = false,
+                refreshRegardlessOfMarketOpen = true
+            )
 
             settingsDataStore.fetchIntervalFlow.collectLatest { interval ->
                 while (true) {
