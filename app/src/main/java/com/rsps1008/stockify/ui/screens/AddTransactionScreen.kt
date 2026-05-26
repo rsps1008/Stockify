@@ -296,6 +296,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     }
 
     val filteredStocks = prioritizeStockSearchResults(allStocks, stockName)
+    val selectedStock = allStocks.find { it.code == stockCode }
+    val shareStep = if (StockMarket.isUs(selectedStock?.market.orEmpty())) 1 else 1000
 
     Column(
         modifier = Modifier
@@ -416,7 +418,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         ShareInputWithStepper(
                             label = "買進股數",
                             value = shares,
-                            onValueChange = { shares = it }
+                            onValueChange = { shares = it },
+                            step = shareStep
                         )
                     }
                 }
@@ -501,42 +504,12 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // ★ 賣出股數 + 加減按鈕（維持原樣）
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(text = "賣出股數", style = MaterialTheme.typography.titleMedium)
-                            Spacer(modifier = Modifier.height(4.dp))
-
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-
-                                // 股數輸入框
-                                OutlinedTextField(
-                                    value = shares,
-                                    onValueChange = { input ->
-                                        shares = input.filter { it.isDigit() }
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                                )
-
-                                Spacer(modifier = Modifier.width(4.dp))
-
-                                Button(
-                                    onClick = {
-                                        val current = shares.toIntOrNull() ?: 0
-                                        shares = (current + 1000).toString()
-                                    }
-                                ) { Text("+") }
-
-                                Spacer(modifier = Modifier.width(2.dp))
-
-                                Button(
-                                    onClick = {
-                                        val current = shares.toIntOrNull() ?: 0
-                                        shares = (current - 1000).coerceAtLeast(0).toString()
-                                    }
-                                ) { Text("-") }
-                            }
-                        }
+                        ShareInputWithStepper(
+                            label = "賣出股數",
+                            value = shares,
+                            onValueChange = { shares = it },
+                            step = shareStep
+                        )
                     }
                 }
                 Spacer(modifier = Modifier.height(10.dp))
@@ -645,7 +618,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         ShareInputWithStepper(
                             label = "除息股數(可省略)",
                             value = exDividendShares,
-                            onValueChange = { exDividendShares = it }
+                            onValueChange = { exDividendShares = it },
+                            step = shareStep
                         )
                     }
                 }
@@ -727,7 +701,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         ShareInputWithStepper(
                             label = "除權股數(可省略)",
                             value = exRightsShares,
-                            onValueChange = { exRightsShares = it }
+                            onValueChange = { exRightsShares = it },
+                            step = shareStep
                         )
                     }
                 }
@@ -769,7 +744,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         ShareInputWithStepper(
                             label = "減資前股數",
                             value = sharesBeforeReduction,
-                            onValueChange = { sharesBeforeReduction = it }
+                            onValueChange = { sharesBeforeReduction = it },
+                            step = shareStep
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         LabeledOutlinedTextField(
@@ -807,7 +783,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         ShareInputWithStepper(
                             label = "原持股數",
                             value = sharesBeforeSplit,
-                            onValueChange = { sharesBeforeSplit = it }
+                            onValueChange = { sharesBeforeSplit = it },
+                            step = shareStep
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         LabeledOutlinedTextField(
@@ -994,7 +971,6 @@ fun ShareInputWithStepper(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
             Spacer(modifier = Modifier.width(4.dp))
-            // +1000
             Button(
                 onClick = {
                     val current = value.toIntOrNull() ?: 0
@@ -1004,7 +980,6 @@ fun ShareInputWithStepper(
                 Text("+")
             }
             Spacer(modifier = Modifier.width(2.dp))
-            // -1000
             Button(
                 onClick = {
                     val current = value.toIntOrNull() ?: 0
