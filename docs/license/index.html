@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MIT License - Stockify</title>
+  <meta name="description" content="Stockify 的 MIT 授權說明">
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5efe7;
+      --panel: rgba(255, 251, 246, 0.96);
+      --text: #2e241b;
+      --muted: #6b5f53;
+      --accent: #8b5a2b;
+      --border: #e7d8c8;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(139, 90, 43, 0.12), transparent 26%),
+        linear-gradient(180deg, #fbf6ef 0%, #f5efe7 100%);
+    }
+
+    main {
+      width: min(920px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 56px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 28px;
+      box-shadow: 0 18px 48px rgba(53, 36, 20, 0.10);
+      backdrop-filter: blur(10px);
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--accent);
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(2rem, 4vw, 3rem);
+      line-height: 1.1;
+    }
+
+    p {
+      margin: 0;
+      line-height: 1.8;
+    }
+
+    .meta {
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    pre {
+      margin: 24px 0 0;
+      padding: 18px;
+      border-radius: 16px;
+      background: rgba(139, 90, 43, 0.06);
+      border: 1px solid rgba(139, 90, 43, 0.12);
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: "Cascadia Mono", "Consolas", monospace;
+      line-height: 1.7;
+      color: #3a2d21;
+    }
+
+    a {
+      color: var(--accent);
+    }
+
+    .back {
+      display: inline-block;
+      margin-top: 20px;
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    @media (max-width: 640px) {
+      main { width: min(100% - 20px, 920px); padding: 16px 0 32px; }
+      .card { padding: 20px 16px; border-radius: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card">
+      <p class="eyebrow">License</p>
+      <h1>MIT License</h1>
+      <p class="meta">Stockify 授權說明</p>
+      <p>
+        本專案採用 MIT License。您可以自由使用、複製、修改、合併、發布、散布、再授權，或出售本專案原始碼與衍生作品，
+        但必須保留原始版權與授權聲明，且軟體不提供任何保證。
+      </p>
+      <pre>MIT License
+
+Copyright (c) 2026 rsps1008
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.</pre>
+      <a class="back" href="../">返回首頁</a>
+    </section>
+  </main>
+</body>
+</html>
