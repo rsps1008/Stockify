@@ -25,15 +25,7 @@ class StockListRepository(private val context: Context) {
 
     private fun ensureJsonFileExists() {
         if (!jsonFile.exists()) {
-            try {
-                context.assets.open("stocks.json").use { inputStream ->
-                    jsonFile.outputStream().use { outputStream ->
-                        inputStream.copyTo(outputStream)
-                    }
-                }
-            } catch (e: IOException) {
-                e.printStackTrace()
-            }
+            copyBundledStocksToJsonFile()
         }
     }
 
@@ -42,15 +34,7 @@ class StockListRepository(private val context: Context) {
     }
 
     fun refreshBundledCacheFromAsset() {
-        try {
-            context.assets.open("stocks.json").use { inputStream ->
-                jsonFile.outputStream().use { outputStream ->
-                    inputStream.copyTo(outputStream)
-                }
-            }
-        } catch (e: IOException) {
-            e.printStackTrace()
-        }
+        copyBundledStocksToJsonFile()
     }
 
     fun getBundledStocksChecksum(): String? {
@@ -86,6 +70,42 @@ class StockListRepository(private val context: Context) {
         }.getOrDefault(emptyList())
     }
 
+    private fun copyBundledStocksToJsonFile() {
+        try {
+            context.assets.open("stocks.json").use { inputStream ->
+                jsonFile.outputStream().use { outputStream ->
+                    inputStream.copyTo(outputStream)
+                }
+            }
+        } catch (e: IOException) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun repairAndReloadStocks(): List<Stock> {
+        return runCatching {
+            if (jsonFile.exists()) {
+                jsonFile.delete()
+            }
+            copyBundledStocksToJsonFile()
+            readStocksFromJsonFile()
+        }.getOrDefault(emptyList())
+    }
+
+    private fun readStocksFromJsonFile(): List<Stock> {
+        val jsonString = jsonFile.readText()
+        val jsonStocks = Json.decodeFromString<List<JsonStock>>(jsonString)
+        return jsonStocks.map {
+            Stock(
+                name = it.name,
+                code = it.code,
+                market = StockMarket.TW,
+                industry = it.industry,
+                stockType = it.stockType
+            )
+        }
+    }
+
     suspend fun saveStocks(stocks: List<Stock>) {
         val jsonStocks = stocks.map { 
             JsonStock(
@@ -104,16 +124,11 @@ class StockListRepository(private val context: Context) {
         ensureJsonFileExists()
 
         return if (jsonFile.exists()) {
-            val jsonString = jsonFile.readText()
-            val jsonStocks = Json.decodeFromString<List<JsonStock>>(jsonString)
-            jsonStocks.map { 
-                Stock(
-                    name = it.name,
-                    code = it.code,
-                    market = StockMarket.TW,
-                    industry = it.industry,
-                    stockType = it.stockType
-                )
+            runCatching {
+                readStocksFromJsonFile()
+            }.getOrElse { e ->
+                e.printStackTrace()
+                repairAndReloadStocks()
             }
         } else {
             emptyList()
