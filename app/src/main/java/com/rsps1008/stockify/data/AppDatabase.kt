@@ -8,7 +8,9 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.io.File
 
 @Database(entities = [Stock::class, StockTransaction::class], version = 8, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
@@ -52,23 +54,81 @@ abstract class AppDatabase : RoomDatabase() {
             INSTANCE?.let { database ->
                 CoroutineScope(Dispatchers.IO).launch {
                     val stockDao = database.stockDao()
+                    val settingsDataStore = SettingsDataStore(context)
+                    val hasManualTwListUpdate = settingsDataStore.lastStockListUpdateTimeFlow.first() != null
 
-                    if (stockDao.getStockCountByMarket(StockMarket.TW) == 0) {
-                        val twStocks = StockListRepository(context).readStocks()
-                        if (twStocks.isNotEmpty()) {
-                            stockDao.insertStocks(twStocks)
-                        }
-                    }
+                    syncBundledStockList(
+                        context = context,
+                        stockDao = stockDao,
+                        market = StockMarket.TW,
+                        assetName = TW_STOCKS_ASSET_NAME,
+                        checksumFileName = TW_STOCKS_CHECKSUM_FILE_NAME,
+                        bundledStocks = StockListRepository(context).readBundledStocks(),
+                        refreshBundledCache = { StockListRepository(context).refreshBundledCacheFromAsset() },
+                        skipIfManuallyUpdated = hasManualTwListUpdate
+                    )
 
-                    if (stockDao.getStockCountByMarket(StockMarket.US) == 0) {
-                        val usStocks = UsStockListRepository(context).readStocks()
-                        if (usStocks.isNotEmpty()) {
-                            stockDao.insertStocks(usStocks)
-                        }
-                    }
+                    syncBundledStockList(
+                        context = context,
+                        stockDao = stockDao,
+                        market = StockMarket.US,
+                        assetName = US_STOCKS_ASSET_NAME,
+                        checksumFileName = US_STOCKS_CHECKSUM_FILE_NAME,
+                        bundledStocks = UsStockListRepository(context).readStocks(),
+                        refreshBundledCache = null,
+                        skipIfManuallyUpdated = false
+                    )
                 }
             }
         }
+
+        private suspend fun syncBundledStockList(
+            context: Context,
+            stockDao: StockDao,
+            market: String,
+            assetName: String,
+            checksumFileName: String,
+            bundledStocks: List<Stock>,
+            refreshBundledCache: (() -> Unit)?,
+            skipIfManuallyUpdated: Boolean
+        ) {
+            val currentCount = stockDao.getStockCountByMarket(market)
+            if (currentCount > 0 && skipIfManuallyUpdated) {
+                return
+            }
+
+            val bundledChecksum = readAssetChecksum(context, assetName) ?: return
+            val checksumFile = File(context.filesDir, checksumFileName)
+            val storedChecksum = checksumFile.takeIf { it.exists() }?.readText()?.trim().orEmpty().ifBlank { null }
+            val needsRefresh = currentCount == 0 || storedChecksum != bundledChecksum
+            if (!needsRefresh || bundledStocks.isEmpty()) {
+                return
+            }
+
+            stockDao.replaceStocks(bundledStocks)
+            refreshBundledCache?.invoke()
+            checksumFile.writeText(bundledChecksum)
+        }
+
+        private fun readAssetChecksum(context: Context, assetName: String): String? {
+            return runCatching {
+                val digest = java.security.MessageDigest.getInstance("SHA-256")
+                context.assets.open(assetName).use { inputStream ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    while (true) {
+                        val read = inputStream.read(buffer)
+                        if (read <= 0) break
+                        digest.update(buffer, 0, read)
+                    }
+                }
+                digest.digest().joinToString("") { "%02x".format(it) }
+            }.getOrNull()
+        }
+
+        private const val TW_STOCKS_ASSET_NAME = "stocks.json"
+        private const val US_STOCKS_ASSET_NAME = "us_stocks.json"
+        private const val TW_STOCKS_CHECKSUM_FILE_NAME = "stocks.json.sha256"
+        private const val US_STOCKS_CHECKSUM_FILE_NAME = "us_stocks.json.sha256"
 
         private val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(database: SupportSQLiteDatabase) {

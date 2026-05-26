@@ -6,6 +6,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.io.IOException
+import java.security.MessageDigest
 
 @Serializable
 data class JsonStock(
@@ -34,6 +35,55 @@ class StockListRepository(private val context: Context) {
                 e.printStackTrace()
             }
         }
+    }
+
+    fun readBundledStocks(): List<Stock> {
+        return readStocksFromAsset("stocks.json")
+    }
+
+    fun refreshBundledCacheFromAsset() {
+        try {
+            context.assets.open("stocks.json").use { inputStream ->
+                jsonFile.outputStream().use { outputStream ->
+                    inputStream.copyTo(outputStream)
+                }
+            }
+        } catch (e: IOException) {
+            e.printStackTrace()
+        }
+    }
+
+    fun getBundledStocksChecksum(): String? {
+        return runCatching {
+            context.assets.open("stocks.json").use { inputStream ->
+                val digest = MessageDigest.getInstance("SHA-256")
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                while (true) {
+                    val read = inputStream.read(buffer)
+                    if (read <= 0) break
+                    digest.update(buffer, 0, read)
+                }
+                digest.digest().joinToString("") { "%02x".format(it) }
+            }
+        }.getOrNull()
+    }
+
+    private fun readStocksFromAsset(assetName: String): List<Stock> {
+        return runCatching {
+            context.assets.open(assetName).use { inputStream ->
+                val jsonString = inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val jsonStocks = Json.decodeFromString<List<JsonStock>>(jsonString)
+                jsonStocks.map {
+                    Stock(
+                        name = it.name,
+                        code = it.code,
+                        market = StockMarket.TW,
+                        industry = it.industry,
+                        stockType = it.stockType
+                    )
+                }
+            }
+        }.getOrDefault(emptyList())
     }
 
     suspend fun saveStocks(stocks: List<Stock>) {

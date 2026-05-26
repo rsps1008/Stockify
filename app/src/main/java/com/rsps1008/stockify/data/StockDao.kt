@@ -15,6 +15,9 @@ interface StockDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertStocks(stocks: List<Stock>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun replaceStocks(stocks: List<Stock>)
+
     @Insert
     suspend fun insertStock(stock: Stock)
 
@@ -69,6 +72,9 @@ interface StockDao {
 
     @Query("SELECT COUNT(*) FROM stocks WHERE market = :market")
     suspend fun getStockCountByMarket(market: String): Int
+
+    @Query("SELECT * FROM stocks WHERE market = :market")
+    suspend fun getStocksByMarket(market: String): List<Stock>
 
     @Query("DELETE FROM stocks WHERE market = :market")
     suspend fun deleteStocksByMarket(market: String)
