@@ -142,6 +142,9 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                         DetailRow(label = "新持股數", value = String.format("%,.0f", transaction.sharesAfterSplit))
                     }
                 }
+                if (transaction.note.isNotBlank()) {
+                    DetailRow(label = "交易筆記", value = transaction.note)
+                }
             }
         }
     }

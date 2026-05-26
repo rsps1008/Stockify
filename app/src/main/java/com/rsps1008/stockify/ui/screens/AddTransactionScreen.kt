@@ -93,6 +93,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     var transactionType by remember { mutableStateOf("買進") }
     var price by remember { mutableStateOf("") } // Represents total amount for dividend, price per share for buy/sell
     var shares by remember { mutableStateOf("") } // Represents shares for buy/sell/stock_dividend
+    var note by remember { mutableStateOf("") }
 
     var showDatePicker by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf(false) }
@@ -189,6 +190,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             stockCode = stock?.code ?: ""
             date = it.date
             transactionType = it.type
+            note = it.note
 
             when (it.type) {
                 "買進" -> {
@@ -818,6 +820,11 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                 }
             }
         }
+        LabeledOutlinedTextField(
+            label = "交易筆記",
+            value = note,
+            onValueChange = { note = it }
+        )
         Spacer(modifier = Modifier.height(32.dp))
         Button(
             onClick = {
@@ -834,6 +841,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         stockDividend = stockDividendRate.toDoubleOrNull() ?: 0.0,
                         exRightsShares = exRightsShares.toDoubleOrNull() ?: 0.0,
                         dividendFee = dividendFee.toDoubleOrNull() ?: 0.0,
+                        note = note,
                         capitalReductionRatio = capitalReductionRatio.toDoubleOrNull() ?: 0.0,
                         sharesBeforeReduction = sharesBeforeReduction.toDoubleOrNull() ?: 0.0,
                         sharesAfterReduction = sharesAfterReduction.toDoubleOrNull() ?: 0.0,
