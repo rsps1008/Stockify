@@ -1,7 +1,7 @@
 import requests
 import json
 
-API_KEY = "d7f3plhr01qpjqqjbjogd7f3plhr01qpjqqjbjp0"
+API_KEY = ""
 
 def build_data():
     url = f"https://finnhub.io/api/v1/stock/symbol?exchange=US&token={API_KEY}"

@@ -1,4 +1,4 @@
-﻿# AGENTS.md - Stockify 專案指引
+# AGENTS.md - Stockify 專案指引
 
 這份文件是這個 repository 的工作準則。只要某次需求揭露了可長期沿用的專案知識，就應該更新這裡，尤其是架構、設定、背景排程、資料流、或任何會影響使用者體驗的行為。
 
@@ -158,6 +158,8 @@ Windows 指令範例：
 - CSV 匯入與 Google Drive 還原完成後，會強制對這次匯入到的股票做一次即時價 refresh，即使當下台股關盤也會先塞入一筆價格。
 - 首頁「累積損益」卡右上角顯示的是目前已載入即時報價中的最新 `lastUpdated`，而且可以點擊該時間來強制刷新整個持股清單的報價。
 - 首頁「累積損益」卡右上角的刷新時間尾巴會顯示 refresh icon，讓使用者明確知道那裡可點擊更新。
+- `NasdaqStockInfoFetcher` 解析 Nasdaq API 時會先確認 `data` 和 `primaryData` 都真的是 `JsonObject`，避免 API 回傳 `null`、錯誤訊息或其他非物件結構時直接拋出 `JsonNull is not a JsonObject`。
+- 美股走 Nasdaq API 時會依 `stockType` 切換 `assetclass`，`ETF` 使用 `assetclass=etf`，一般股票使用 `assetclass=stocks`。
 - `scripts/update_stock_list.py` 可直接抓取 TWSE 上市/上櫃清單並輸出成 `app/src/main/assets/stocks.json` 相同格式的 JSON。
 - App 啟動時會比對 bundled `stocks.json` / `us_stocks.json` 的 checksum，必要時自動把新版 seed 同步進 Room 與本機快取；TW 內建 seed 只會在使用者沒有手動更新股票清單時自動套用，避免覆蓋 `SettingsDataStore.lastStockListUpdateTime` 代表的手動更新結果。
 

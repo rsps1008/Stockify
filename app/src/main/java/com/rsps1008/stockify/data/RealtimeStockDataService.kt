@@ -171,7 +171,8 @@ class RealtimeStockDataService(
                         async(Dispatchers.IO) {
                             val outcome = fetchStockInfoForMarket(
                                 stockCode = stock.code,
-                                market = market
+                                market = market,
+                                stockType = stock.stockType
                             )
 
                             FetchResult(
@@ -260,7 +261,7 @@ class RealtimeStockDataService(
     private suspend fun refreshStockInternal(stockCode: String) {
         val stock = stockDao.getStockByCode(stockCode)
         val market = StockMarket.normalize(stock?.market ?: StockMarket.inferFromCode(stockCode))
-        val outcome = fetchStockInfoForMarket(stockCode, market)
+        val outcome = fetchStockInfoForMarket(stockCode, market, stock?.stockType.orEmpty())
 
         outcome.info?.let {
             val updatedInfos = _realtimeStockInfo.value.toMutableMap()
@@ -278,10 +279,10 @@ class RealtimeStockDataService(
 
         val stock = stockDao.getStockByCode(stockCode)
         val market = StockMarket.normalize(stock?.market ?: StockMarket.inferFromCode(stockCode))
-        return fetchStockInfoForMarket(stockCode, market).info
+        return fetchStockInfoForMarket(stockCode, market, stock?.stockType.orEmpty()).info
     }
 
-    private suspend fun fetchStockInfoForMarket(stockCode: String, market: String): FetchOutcome {
+    private suspend fun fetchStockInfoForMarket(stockCode: String, market: String, stockType: String = ""): FetchOutcome {
         return if (StockMarket.isUs(market)) {
             val (primaryFetcher, secondaryFetcher) = getUsFetchers()
             Log.d(
@@ -291,7 +292,8 @@ class RealtimeStockDataService(
             fetchWithSingleFallback(
                 stockCode = stockCode,
                 primaryFetcher = primaryFetcher,
-                secondaryFetcher = secondaryFetcher
+                secondaryFetcher = secondaryFetcher,
+                stockType = stockType
             )
         } else {
             val (primaryFetcher, secondaryFetcher) = getTwFetchers()
@@ -302,7 +304,8 @@ class RealtimeStockDataService(
             fetchWithSingleFallback(
                 stockCode = stockCode,
                 primaryFetcher = primaryFetcher,
-                secondaryFetcher = secondaryFetcher
+                secondaryFetcher = secondaryFetcher,
+                stockType = stockType
             )
         }
     }
@@ -412,9 +415,10 @@ class RealtimeStockDataService(
     private suspend fun fetchWithSingleFallback(
         stockCode: String,
         primaryFetcher: StockInfoFetcher,
-        secondaryFetcher: StockInfoFetcher
+        secondaryFetcher: StockInfoFetcher,
+        stockType: String = ""
     ): FetchOutcome {
-        val primaryInfo = primaryFetcher.fetchStockInfo(stockCode)
+        val primaryInfo = primaryFetcher.fetchStockInfo(stockCode, stockType)
         if (primaryInfo != null) {
             return FetchOutcome(info = primaryInfo, fallbackUsed = false)
         }
@@ -424,7 +428,7 @@ class RealtimeStockDataService(
             "Primary source failed for $stockCode → fallback to secondary"
         )
 
-        val secondaryInfo = secondaryFetcher.fetchStockInfo(stockCode)
+        val secondaryInfo = secondaryFetcher.fetchStockInfo(stockCode, stockType)
         return if (secondaryInfo != null) {
             Log.d(
                 "RealtimeStockDataService",

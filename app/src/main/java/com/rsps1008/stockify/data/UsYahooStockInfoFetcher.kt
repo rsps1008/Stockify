@@ -56,7 +56,7 @@ class UsYahooStockInfoFetcher : StockInfoFetcher {
             }.awaitAll().filterNotNull().toMap()
         }
 
-    override suspend fun fetchStockInfo(stockCode: String): RealtimeStockInfo? = withContext(Dispatchers.IO) {
+    override suspend fun fetchStockInfo(stockCode: String, stockType: String): RealtimeStockInfo? = withContext(Dispatchers.IO) {
         fetchStockInfoInternal(stockCode)
     }
 

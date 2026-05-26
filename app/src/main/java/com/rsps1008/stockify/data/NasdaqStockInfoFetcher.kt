@@ -14,6 +14,8 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.time.DayOfWeek
@@ -56,12 +58,13 @@ class NasdaqStockInfoFetcher : StockInfoFetcher {
             }.awaitAll().filterNotNull().toMap()
         }
 
-    override suspend fun fetchStockInfo(stockCode: String): RealtimeStockInfo? = withContext(Dispatchers.IO) {
-        fetchStockInfoInternal(stockCode)
+    override suspend fun fetchStockInfo(stockCode: String, stockType: String): RealtimeStockInfo? = withContext(Dispatchers.IO) {
+        fetchStockInfoInternal(stockCode, stockType)
     }
 
-    private suspend fun fetchStockInfoInternal(stockCode: String): RealtimeStockInfo? {
-        val url = "https://api.nasdaq.com/api/quote/$stockCode/info?assetclass=stocks"
+    private suspend fun fetchStockInfoInternal(stockCode: String, stockType: String = ""): RealtimeStockInfo? {
+        val assetClass = if (stockType.trim().equals("ETF", ignoreCase = true)) "etf" else "stocks"
+        val url = "https://api.nasdaq.com/api/quote/$stockCode/info?assetclass=$assetClass"
         return retryOnTransientNetworkFailure("NasdaqStockInfoFetcher", stockCode) {
             val responseText = fetchSemaphore.withPermit {
                 client.get(url) {
@@ -78,9 +81,26 @@ class NasdaqStockInfoFetcher : StockInfoFetcher {
                 }.bodyAsText()
             }
 
-            val root = Json.parseToJsonElement(responseText).jsonObject
-            val data = root["data"]?.jsonObject ?: return@retryOnTransientNetworkFailure null
-            val primaryData = data["primaryData"]?.jsonObject ?: return@retryOnTransientNetworkFailure null
+            Log.d(
+                "NasdaqStockInfoFetcher",
+                "Raw response for $stockCode ($assetClass) from $url: ${responseText.take(2000)}"
+            )
+
+            val root = Json.parseToJsonElement(responseText) as? JsonObject
+                ?: run {
+                    Log.e("NasdaqStockInfoFetcher", "Unexpected Nasdaq root JSON for $stockCode from $url: ${responseText.take(200)}")
+                    return@retryOnTransientNetworkFailure null
+                }
+            val data = root["data"].asJsonObjectOrNull()
+                ?: run {
+                    Log.e("NasdaqStockInfoFetcher", "Missing Nasdaq data object for $stockCode from $url: ${responseText.take(200)}")
+                    return@retryOnTransientNetworkFailure null
+                }
+            val primaryData = data["primaryData"].asJsonObjectOrNull()
+                ?: run {
+                    Log.e("NasdaqStockInfoFetcher", "Missing Nasdaq primaryData object for $stockCode from $url: ${responseText.take(200)}")
+                    return@retryOnTransientNetworkFailure null
+                }
 
             val lastSalePrice = primaryData["lastSalePrice"]?.jsonPrimitive?.contentOrNull
             val netChange = primaryData["netChange"]?.jsonPrimitive?.contentOrNull
@@ -118,4 +138,6 @@ class NasdaqStockInfoFetcher : StockInfoFetcher {
             }
         }
     }
+
+    private fun JsonElement?.asJsonObjectOrNull(): JsonObject? = this as? JsonObject
 }
