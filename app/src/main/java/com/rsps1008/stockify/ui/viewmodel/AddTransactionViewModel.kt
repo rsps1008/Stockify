@@ -144,13 +144,13 @@ class AddTransactionViewModel(
             initialValue = emptyList()
         )
 
-    private val feeSettings = combine(
+    val feeSettings = combine(
         settingsDataStore.feeDiscountFlow,
         settingsDataStore.minFeeRegularFlow,
         settingsDataStore.minFeeOddLotFlow
     ) { discount, minRegular, minOdd ->
         Triple(discount, minRegular, minOdd)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), Triple(0.28, 20, 1))
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), Triple(0.28, 1, 1))
 
     fun calculateBuyCosts(price: Double, shares: Double, market: String = StockMarket.TW) {
         if (price <= 0 || shares <= 0) {

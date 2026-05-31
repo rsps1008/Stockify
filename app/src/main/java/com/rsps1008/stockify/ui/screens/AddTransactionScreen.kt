@@ -83,6 +83,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     val taxRate by viewModel.taxRate.collectAsState()
     val expense by viewModel.expense.collectAsState()
     val income by viewModel.income.collectAsState()
+    val feeSettings by viewModel.feeSettings.collectAsState()
     val defaultDividendFee by viewModel.defaultDividendFee.collectAsState()
     var dividendFee by remember { mutableStateOf("") }
     val coroutineScope = rememberCoroutineScope()
@@ -146,7 +147,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         }
     }
 
-    LaunchedEffect(price, shares, transactionType, stockCode) {
+    LaunchedEffect(price, shares, transactionType, stockCode, feeSettings) {
         when (transactionType) {
             "買進" -> {
                 val stock = allStocks.find { it.code == stockCode }
@@ -435,7 +436,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                     Column(modifier = Modifier.padding(16.dp)) {
                         // 手續費
                         EditableTextStyled(
-                            label = "手續費",
+                            label = "手續費 (點擊數字修改)",
                             value = if (fee > 0) fee.toInt().toString() else "",
                             onValueChange = { newFee ->
                                 viewModel.updateFee(
@@ -524,7 +525,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                     Column(modifier = Modifier.padding(16.dp)) {
                         // 手續費
                         EditableTextStyled(
-                            label = "手續費",
+                            label = "手續費 (點擊數字修改)",
                             value = if (fee > 0) fee.toInt().toString() else "",
                             onValueChange = { newFee ->
                                 viewModel.updateFee(
@@ -634,7 +635,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         LabeledOutlinedTextField(
-                            label = "配息手續費",
+                            label = "配息手續費 (點擊數字修改)",
                             value = dividendFee,
                             onValueChange = { dividendFee = it },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),

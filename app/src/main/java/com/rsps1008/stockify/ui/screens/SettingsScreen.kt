@@ -384,7 +384,7 @@ fun SettingsScreen() {
                                 minFeeRegularText = it
                                 it.toIntOrNull()?.let { fee -> viewModel.setMinFeeRegular(fee) }
                             },
-                            label = { Text("整股最低手續費 (元)") },
+                            label = { Text("整股最低手續費 (元) - 股數為1000倍數時生效") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.fillMaxWidth()
                         )
