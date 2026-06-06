@@ -451,7 +451,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         // 手續費
                         EditableTextStyled(
                             label = "手續費 (點擊數字修改)",
-                            value = if (fee > 0) fee.toInt().toString() else "",
+                            value = formatFeeDisplayValue(fee, selectedStock?.market),
                             onValueChange = { newFee ->
                                 viewModel.updateFee(
                                     newFee = newFee.toDoubleOrNull() ?: 0.0,
@@ -541,7 +541,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         // 手續費
                         EditableTextStyled(
                             label = "手續費 (點擊數字修改)",
-                            value = if (fee > 0) fee.toInt().toString() else "",
+                            value = formatFeeDisplayValue(fee, selectedStock?.market),
                             onValueChange = { newFee ->
                                 viewModel.updateFee(
                                     newFee = newFee.toDoubleOrNull() ?: 0.0,
@@ -558,7 +558,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         // 交易稅
                         EditableTextStyled(
                             label = "交易稅 (點擊數字修改)",
-                            value = if (tax > 0) tax.toInt().toString() else "",
+                            value = formatTaxDisplayValue(tax, selectedStock?.market),
                             onValueChange = { newTax ->
                                 viewModel.updateTax(
                                     newTax = newTax.toDoubleOrNull() ?: 0.0,
@@ -925,6 +925,24 @@ private fun displayMarketLabel(market: String?): String {
         StockMarket.TW -> StockMarket.TW
         StockMarket.US -> StockMarket.US
         else -> market.orEmpty()
+    }
+}
+
+private fun formatFeeDisplayValue(fee: Double, market: String?): String {
+    if (fee <= 0.0) return ""
+    return if (StockMarket.isUs(market.orEmpty())) {
+        String.format(Locale.US, "%.2f", fee)
+    } else {
+        fee.toInt().toString()
+    }
+}
+
+private fun formatTaxDisplayValue(tax: Double, market: String?): String {
+    if (tax <= 0.0) return ""
+    return if (StockMarket.isUs(market.orEmpty())) {
+        String.format(Locale.US, "%.2f", tax)
+    } else {
+        tax.toInt().toString()
     }
 }
 

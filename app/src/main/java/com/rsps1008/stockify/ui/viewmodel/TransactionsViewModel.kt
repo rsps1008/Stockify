@@ -19,7 +19,8 @@ class TransactionsViewModel(stockDao: StockDao) : ViewModel() {
             val stock = stocks.find { it.code == transaction.stockCode }
             TransactionUiState(
                 transaction = transaction,
-                stockName = stock?.name ?: ""
+                stockName = stock?.name ?: "",
+                market = stock?.market ?: ""
             )
         }
     }.stateIn(

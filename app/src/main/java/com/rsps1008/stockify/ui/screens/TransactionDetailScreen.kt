@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.rsps1008.stockify.StockifyApplication
+import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.ui.navigation.Screen
 import com.rsps1008.stockify.ui.theme.StockifyAppTheme
 import com.rsps1008.stockify.ui.viewmodel.TransactionDetailViewModel
@@ -109,15 +110,14 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                     "買進" -> {
                         DetailRow(label = "買進價格", value = String.format("%,.2f", transaction.buyPrice))
                         DetailRow(label = "買進股數", value = formatShareCount(transaction.buyShares))
-                        DetailRow(label = "手續費", value = String.format("%,.0f", transaction.fee))
-                        DetailRow(label = "交易稅", value = String.format("%,.0f", transaction.tax))
+                        DetailRow(label = "手續費", value = formatFeeValue(transaction.fee, uiState.market))
                         DetailRow(label = "支出", value = String.format("%,.0f", transaction.expense), valueColor = StockifyAppTheme.stockColors.loss)
                     }
                     "賣出" -> {
                         DetailRow(label = "賣出價格", value = String.format("%,.2f", transaction.sellPrice))
                         DetailRow(label = "賣出股數", value = formatShareCount(transaction.sellShares))
-                        DetailRow(label = "手續費", value = String.format("%,.0f", transaction.fee))
-                        DetailRow(label = "交易稅", value = String.format("%,.0f", transaction.tax))
+                        DetailRow(label = "手續費", value = formatFeeValue(transaction.fee, uiState.market))
+                        DetailRow(label = "交易稅", value = formatTaxValue(transaction.tax, uiState.market))
                         DetailRow(label = "收入", value = String.format("%,.0f", transaction.income), valueColor = StockifyAppTheme.stockColors.gain)
                     }
                     "配息" -> {
@@ -156,5 +156,21 @@ fun DetailRow(label: String, value: String, valueColor: Color = Color.Unspecifie
     Row(modifier = Modifier.padding(vertical = 8.dp)) {
         Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Text(text = value, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), color = valueColor)
+    }
+}
+
+private fun formatFeeValue(fee: Double, market: String): String {
+    return if (StockMarket.isUs(market)) {
+        String.format(Locale.US, "%,.2f", fee)
+    } else {
+        String.format("%,.0f", fee)
+    }
+}
+
+private fun formatTaxValue(tax: Double, market: String): String {
+    return if (StockMarket.isUs(market)) {
+        String.format(Locale.US, "%,.2f", tax)
+    } else {
+        String.format("%,.0f", tax)
     }
 }

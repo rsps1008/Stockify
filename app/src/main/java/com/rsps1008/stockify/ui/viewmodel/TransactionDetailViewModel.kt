@@ -22,7 +22,7 @@ class TransactionDetailViewModel(transactionId: Int, private val stockDao: Stock
 
     val transactionUiState: StateFlow<TransactionUiState?> = transaction.filterNotNull().flatMapLatest { tx ->
         stockDao.getStockByCodeFlow(tx.stockCode).filterNotNull().map { stock ->
-            TransactionUiState(tx, stock.name)
+            TransactionUiState(tx, stock.name, stock.market)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 

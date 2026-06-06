@@ -158,8 +158,7 @@ class AddTransactionViewModel(
         }
 
         if (StockMarket.isUs(market)) {
-            _fee.value = 0.0
-            _expense.value = (price * shares).roundToInt().toDouble()
+            _expense.value = (price * shares + _fee.value).roundToInt().toDouble()
             return
         }
 
@@ -185,10 +184,8 @@ class AddTransactionViewModel(
         if (price <= 0 || shares <= 0) return
 
         if (StockMarket.isUs(market)) {
-            _fee.value = 0.0
             _taxRate.value = 0.0
-            _tax.value = 0.0
-            _income.value = (price * shares).roundToInt().toDouble()
+            _income.value = (price * shares - _fee.value - _tax.value).roundToInt().toDouble()
             return
         }
 

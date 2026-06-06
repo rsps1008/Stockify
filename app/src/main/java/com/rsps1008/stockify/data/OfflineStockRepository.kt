@@ -106,7 +106,8 @@ class OfflineStockRepository(
             transactions.map { transaction ->
                 TransactionUiState(
                     transaction = transaction,
-                    stockName = stock?.name ?: "Unknown"
+                    stockName = stock?.name ?: "Unknown",
+                    market = stock?.market ?: ""
                 )
             }
         }
