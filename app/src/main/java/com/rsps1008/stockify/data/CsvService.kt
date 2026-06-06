@@ -64,20 +64,20 @@ class CsvService {
         record["股號"] = stock.code
         record["市場"] = stock.market
         record["買進價格"] = transaction.buyPrice
-        record["買進股數"] = transaction.buyShares
+        record["買進股數"] = formatShareInputValue(transaction.buyShares)
         record["賣出價格"] = transaction.sellPrice
-        record["賣出股數"] = transaction.sellShares
-        record["配發股數"] = transaction.dividendShares.toInt()
-        record["除息股數"] = transaction.exDividendShares.toInt()
-        record["除權股數"] = transaction.exRightsShares.toInt()
+        record["賣出股數"] = formatShareInputValue(transaction.sellShares)
+        record["配發股數"] = formatShareInputValue(transaction.dividendShares)
+        record["除息股數"] = formatShareInputValue(transaction.exDividendShares)
+        record["除權股數"] = formatShareInputValue(transaction.exRightsShares)
         record["股息收入"] = transaction.dividendIncome.toInt()
         record["減資比例"] = transaction.capitalReductionRatio
-        record["減資前股數"] = transaction.sharesBeforeReduction
-        record["減資後股數"] = transaction.sharesAfterReduction
+        record["減資前股數"] = formatShareInputValue(transaction.sharesBeforeReduction)
+        record["減資後股數"] = formatShareInputValue(transaction.sharesAfterReduction)
         record["減資返還現金"] = transaction.cashReturned
         record["拆分比例"] = transaction.stockSplitRatio
-        record["拆分前股數"] = transaction.sharesBeforeSplit
-        record["拆分後股數"] = transaction.sharesAfterSplit
+        record["拆分前股數"] = formatShareInputValue(transaction.sharesBeforeSplit)
+        record["拆分後股數"] = formatShareInputValue(transaction.sharesAfterSplit)
 
         // Ensure the order matches the header
         return csvHeader.map { header ->

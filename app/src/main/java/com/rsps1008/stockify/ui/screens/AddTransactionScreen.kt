@@ -54,6 +54,7 @@ import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
 import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.StockMarket
+import com.rsps1008.stockify.data.formatShareInputValue
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -116,7 +117,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         val before = sharesBeforeReduction.toDoubleOrNull() ?: 0.0
         val ratio = capitalReductionRatio.toDoubleOrNull() ?: 0.0
         if (before > 0 && ratio > 0) {
-            (before * (1 - ratio / 100)).toString()
+            formatShareInputValue(before * (1 - ratio / 100))
         } else {
             ""
         }
@@ -130,7 +131,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         val before = sharesBeforeSplit.toDoubleOrNull() ?: 0.0
         val ratio = stockSplitRatio.toDoubleOrNull() ?: 0.0
         if (before > 0 && ratio > 0) {
-            (before * ratio).toString()
+            formatShareInputValue(before * ratio)
         } else {
             ""
         }
@@ -196,22 +197,22 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             when (it.type) {
                 "買進" -> {
                     price = it.buyPrice.toString()
-                    shares = it.buyShares.toInt().toString()
+                    shares = formatShareInputValue(it.buyShares)
                 }
                 "賣出" -> {
                     price = it.sellPrice.toString()
-                    shares = it.sellShares.toInt().toString()
+                    shares = formatShareInputValue(it.sellShares)
                 }
                 "配息" -> {
                     cashDividend = if (it.cashDividend != 0.0) it.cashDividend.toString() else ""
-                    exDividendShares = if (it.exDividendShares != 0.0) it.exDividendShares.toInt().toString() else ""
+                    exDividendShares = if (it.exDividendShares != 0.0) formatShareInputValue(it.exDividendShares) else ""
                     price = it.income.toInt().toString()
                     dividendFee = it.fee.toString()
                 }
                 "配股" -> {
                     stockDividendRate = if (it.stockDividend != 0.0) it.stockDividend.toString() else ""
-                    exRightsShares = if (it.exRightsShares != 0.0) it.exRightsShares.toInt().toString() else ""
-                    shares = it.dividendShares.toInt().toString()
+                    exRightsShares = if (it.exRightsShares != 0.0) formatShareInputValue(it.exRightsShares) else ""
+                    shares = formatShareInputValue(it.dividendShares)
                 }
                 "減資" -> {
                     capitalReductionRatio = it.capitalReductionRatio.toString()
@@ -263,7 +264,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             // Assuming Taiwan stock market rules: rate is NTD per 10 NTD par value share.
             // So a 1 NTD stock dividend means 100 shares for every 1000 shares held.
             if (rate != null && baseShares != null) {
-                shares = (baseShares / 10 * rate).toInt().toString()
+                shares = formatShareInputValue(baseShares / 10 * rate)
             }
         }
     }
@@ -273,7 +274,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             stockName.isNotBlank() &&
             stockCode.isNotBlank() &&
             (price.toDoubleOrNull() ?: 0.0) > 0.0 &&
-            (shares.toLongOrNull() ?: 0L) > 0L
+            (shares.toDoubleOrNull() ?: 0.0) > 0.0
         "配息" ->
             stockName.isNotBlank() &&
             stockCode.isNotBlank() &&
@@ -281,7 +282,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         "配股" ->
             stockName.isNotBlank() &&
             stockCode.isNotBlank() &&
-            (shares.toLongOrNull() ?: 0L) > 0L
+            (shares.toDoubleOrNull() ?: 0.0) > 0.0
         "減資" ->
             stockName.isNotBlank() &&
             stockCode.isNotBlank() &&
@@ -298,7 +299,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
 
     val filteredStocks = prioritizeStockSearchResults(allStocks, stockName)
     val selectedStock = allStocks.find { it.code == stockCode }
-    val shareStep = if (StockMarket.isUs(selectedStock?.market.orEmpty())) 1 else 1000
+    val isUsStock = StockMarket.isUs(selectedStock?.market.orEmpty())
+    val shareStep = if (isUsStock) 1.0 else 1000.0
 
     Column(
         modifier = Modifier
@@ -420,7 +422,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             label = "買進股數",
                             value = shares,
                             onValueChange = { shares = it },
-                            step = shareStep
+                            step = shareStep,
+                            allowDecimal = isUsStock
                         )
                     }
                 }
@@ -509,7 +512,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             label = "賣出股數",
                             value = shares,
                             onValueChange = { shares = it },
-                            step = shareStep
+                            step = shareStep,
+                            allowDecimal = isUsStock
                         )
                     }
                 }
@@ -578,7 +582,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                                 stockCode,
                                 onResult = { perShare, holdingShares, dateStr ->
                                     cashDividend = perShare.toString()
-                                    exDividendShares = holdingShares.roundToInt().toString()
+                                    exDividendShares = formatShareInputValue(holdingShares)
 
                                     dateStr?.let {
                                         val sdf = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault())
@@ -620,7 +624,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             label = "除息股數(可省略)",
                             value = exDividendShares,
                             onValueChange = { exDividendShares = it },
-                            step = shareStep
+                            step = shareStep,
+                            allowDecimal = isUsStock
                         )
                     }
                 }
@@ -664,7 +669,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             stockCode,
                             onResult = { rate, holdingShares, dateStr ->
                                 stockDividendRate = rate.toString()
-                                exRightsShares = holdingShares.roundToInt().toString()
+                                exRightsShares = formatShareInputValue(holdingShares)
 
                                 dateStr?.let {
                                     val sdf = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault())
@@ -703,7 +708,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             label = "除權股數(可省略)",
                             value = exRightsShares,
                             onValueChange = { exRightsShares = it },
-                            step = shareStep
+                            step = shareStep,
+                            allowDecimal = isUsStock
                         )
                     }
                 }
@@ -721,7 +727,9 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             label = "配發股數",
                             value = shares,
                             onValueChange = { shares = it },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = if (isUsStock) KeyboardType.Decimal else KeyboardType.Number
+                            )
                         )
                     }
                 }
@@ -746,7 +754,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             label = "減資前股數",
                             value = sharesBeforeReduction,
                             onValueChange = { sharesBeforeReduction = it },
-                            step = shareStep
+                            step = shareStep,
+                            allowDecimal = isUsStock
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         LabeledOutlinedTextField(
@@ -785,7 +794,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             label = "原持股數",
                             value = sharesBeforeSplit,
                             onValueChange = { sharesBeforeSplit = it },
-                            step = shareStep
+                            step = shareStep,
+                            allowDecimal = isUsStock
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         LabeledOutlinedTextField(
@@ -953,8 +963,9 @@ fun ShareInputWithStepper(
     label: String,
     value: String,
     onValueChange: (String) -> Unit,
-    step: Int = 1000,
-    modifier: Modifier = Modifier
+    step: Double = 1000.0,
+    modifier: Modifier = Modifier,
+    allowDecimal: Boolean = false
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         Text(text = label, style = MaterialTheme.typography.titleMedium)
@@ -966,16 +977,18 @@ fun ShareInputWithStepper(
             OutlinedTextField(
                 value = value,
                 onValueChange = { input ->
-                    onValueChange(input.filter { it.isDigit() })
+                    onValueChange(filterShareInput(input, allowDecimal))
                 },
                 modifier = Modifier.weight(1f),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = if (allowDecimal) KeyboardType.Decimal else KeyboardType.Number
+                )
             )
             Spacer(modifier = Modifier.width(4.dp))
             Button(
                 onClick = {
-                    val current = value.toIntOrNull() ?: 0
-                    onValueChange((current + step).toString())
+                    val current = value.toDoubleOrNull() ?: 0.0
+                    onValueChange(formatShareInputValue(current + step))
                 }
             ) {
                 Text("+")
@@ -983,12 +996,29 @@ fun ShareInputWithStepper(
             Spacer(modifier = Modifier.width(2.dp))
             Button(
                 onClick = {
-                    val current = value.toIntOrNull() ?: 0
-                    val next = (current - step).coerceAtLeast(0)
-                    onValueChange(next.toString())
+                    val current = value.toDoubleOrNull() ?: 0.0
+                    val next = (current - step).coerceAtLeast(0.0)
+                    onValueChange(formatShareInputValue(next))
                 }
             ) {
                 Text("-")
+            }
+        }
+    }
+}
+
+private fun filterShareInput(input: String, allowDecimal: Boolean): String {
+    if (!allowDecimal) return input.filter { it.isDigit() }
+
+    var decimalPointSeen = false
+    return buildString {
+        input.forEach { char ->
+            when {
+                char.isDigit() -> append(char)
+                char == '.' && !decimalPointSeen -> {
+                    append(char)
+                    decimalPointSeen = true
+                }
             }
         }
     }

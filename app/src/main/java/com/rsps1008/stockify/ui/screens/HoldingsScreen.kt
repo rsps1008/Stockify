@@ -80,6 +80,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import android.widget.Toast
 import com.rsps1008.stockify.data.HomeDisplayMode
+import com.rsps1008.stockify.data.formatShareCount
 
 
 @OptIn(ExperimentalFoundationApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -486,10 +487,7 @@ fun HoldingCard(holding: HoldingInfo, navController: NavController) {
                         minTextSize = 11f
                     )
 
-                    Text(
-                        text = "${String.format("%,.0f", holding.shares)}股",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    Text(text = "${formatShareCount(holding.shares)}股", style = MaterialTheme.typography.bodySmall)
                 }
             }
 
@@ -635,10 +633,7 @@ fun ZeroHoldingCard(
                         minTextSize = 11f
                     )
 
-                    Text(
-                        text = "${String.format("%,.0f", holding.shares)}股",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    Text(text = "${formatShareCount(holding.shares)}股", style = MaterialTheme.typography.bodySmall)
                 }
             }
 

@@ -31,6 +31,7 @@ import com.rsps1008.stockify.ui.navigation.Screen
 import com.rsps1008.stockify.ui.theme.StockifyAppTheme
 import com.rsps1008.stockify.ui.viewmodel.TransactionsViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
+import com.rsps1008.stockify.data.formatShareCount
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -132,10 +133,10 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
         }
 
         val transactionText = when (transaction.transaction.type) {
-            "買進" -> "買${transaction.transaction.buyShares.toInt()}股"
-            "賣出" -> "賣${transaction.transaction.sellShares.toInt()}股"
+            "買進" -> "買${formatShareCount(transaction.transaction.buyShares)}股"
+            "賣出" -> "賣${formatShareCount(transaction.transaction.sellShares)}股"
             "配息" -> "配息${transaction.transaction.income.toInt()}元"
-            "配股" -> "配股${transaction.transaction.dividendShares.toInt()}股"
+            "配股" -> "配股${formatShareCount(transaction.transaction.dividendShares)}股"
             "減資" -> "減資${String.format("%.1f", transaction.transaction.capitalReductionRatio)}%"
             "分割" -> "分割(1→${transaction.transaction.stockSplitRatio.toInt()})"
             else -> transaction.transaction.type
