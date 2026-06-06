@@ -116,6 +116,8 @@
 - 設定頁在 `app/src/main/java/com/rsps1008/stockify/ui/screens/SettingsScreen.kt`
 - 如果某個設定已存在於 DataStore，更新該設定時要一起檢查對應的 ViewModel 與畫面
 - Compose 風格請盡量維持既有 Material 3 介面與目前版面結構
+- 設定頁最底部要顯示目前 App 版本，直接讀 `BuildConfig.VERSION_NAME` 即可。
+- `app` module 需要維持 `buildFeatures.buildConfig = true`，否則設定頁無法直接讀 `BuildConfig.VERSION_NAME`。
 
 ## 6. 開發規則
 

@@ -42,6 +42,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rsps1008.stockify.BuildConfig
 import com.rsps1008.stockify.R
 import com.rsps1008.stockify.StockifyApplication
 import com.rsps1008.stockify.ui.viewmodel.SettingsViewModel
@@ -502,6 +503,18 @@ fun SettingsScreen() {
                         }
                     }
                 }
+            }
+
+            item {
+                Text(
+                    text = "目前版本 v${BuildConfig.VERSION_NAME}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
             }
         }
     }
