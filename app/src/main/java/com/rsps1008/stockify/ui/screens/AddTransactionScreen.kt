@@ -556,9 +556,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         androidx.compose.material3.HorizontalDivider()
                         Spacer(modifier = Modifier.height(8.dp))
                         // 交易稅
-                        val taxLabel = "交易稅" + if (taxRate > 0) " (${(taxRate * 100).toBigDecimal().stripTrailingZeros().toPlainString()} %)" else ""
                         EditableTextStyled(
-                            label = "$taxLabel (點擊數字修改)",
+                            label = "交易稅 (點擊數字修改)",
                             value = if (tax > 0) tax.toInt().toString() else "",
                             onValueChange = { newTax ->
                                 viewModel.updateTax(
