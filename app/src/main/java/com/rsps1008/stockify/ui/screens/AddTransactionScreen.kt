@@ -382,7 +382,18 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         }
         if (showDatePicker) {
             val datePickerState = rememberDatePickerState(initialSelectedDateMillis = date)
-            DatePickerDialog(onDismissRequest = { showDatePicker = false }, confirmButton = { TextButton(onClick = { date = datePickerState.selectedDateMillis!!; showDatePicker = false }) { Text("確定") } }, dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("取消") } }) {
+            DatePickerDialog(
+                onDismissRequest = { showDatePicker = false },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            date = datePickerState.selectedDateMillis ?: date
+                            showDatePicker = false
+                        }
+                    ) { Text("確定") }
+                },
+                dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("取消") } }
+            ) {
                 DatePicker(state = datePickerState)
             }
         }

@@ -125,7 +125,10 @@ dependencies {
     ksp(libs.androidx.room.compiler)
 
     // Ktor
+    implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.cio)
+    implementation(libs.ktor.client.content.negotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
 
     // Jsoup
     implementation(libs.jsoup)
@@ -146,10 +149,4 @@ dependencies {
     implementation(libs.google.api.client.android)   // 提供 GoogleAccountCredential
     implementation(libs.google.api.services.drive)   // 提供 Drive API 服務
     implementation(libs.google.http.client.android)
-
-    //http-client
-    implementation("io.ktor:ktor-client-core:2.3.7")
-    implementation("io.ktor:ktor-client-cio:2.3.7")
-    implementation("io.ktor:ktor-client-content-negotiation:2.3.7")
-    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.7")
 }

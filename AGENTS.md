@@ -26,6 +26,7 @@
 - `app/src/main/java/com/rsps1008/stockify/ui/navigation/`
   - Compose 導航圖與 route 定義。
   - 頁面進入的 logger 由 `NavGraph` 統一處理，進入各 destination 時會記錄 `Enter XXXScreen`，帶參數頁會一起附上主要參數。
+  - Route 參數要透過 `Uri.encode()` 建立，避免美股 ticker 或其他保留字元讓 `NavController.navigate()` 直接丟 `IllegalArgumentException`。
 - `app/src/main/java/com/rsps1008/stockify/ui/screens/`
   - 各個畫面的 Compose UI。
 - `app/src/main/java/com/rsps1008/stockify/ui/viewmodel/`
@@ -75,6 +76,7 @@
 - `YahooStockInfoFetcher` 需要先移除千分位逗號再解析價格，否則像 `1,575` 這類字串會被視為失敗。
 - `YahooStockInfoFetcher` 目前有並發限制，單次最多 3 條同時抓取，並且對暫時性 `IOException` 會先重試一次，避免 Yahoo 在高並發或短暫斷線時出現 connect timeout。
 - `TwseStockInfoFetcher`、`NasdaqStockInfoFetcher`、`UsYahooStockInfoFetcher` 也都限制單次最多 3 條同時抓取，並對暫時性 `IOException` 做一次短 retry，降低 `Connection reset by peer` 造成的即時報價缺值。
+- `retryOnTransientNetworkFailure()` 是即時報價網路錯誤的共同防線，包含 Ktor CIO connect 階段可能丟出的 `IllegalStateException`，避免低階 client state 例外直接讓背景抓價 crash。
 - 台股即時報價是主要來源加一次 fallback，fallback 只會嘗試一次，不會在主要/備援來源之間反覆回圈。
 - 美股即時報價目前可在 Nasdaq / Yahoo 之間切換，主來源加一次 fallback，不會在來源間反覆回圈。
 - App 啟動時會先強制做一次全市場最新資料抓取，即使台股與美股都關盤也一樣，避免初始畫面只顯示過期快取。
@@ -162,6 +164,8 @@ Windows 指令範例：
 - 美股走 Nasdaq API 時會依 `stockType` 切換 `assetclass`，`ETF` 使用 `assetclass=etf`，一般股票使用 `assetclass=stocks`。
 - `StockListRepository.readStocks()` 在本機 `stocks.json` decode 失敗時會先刪掉壞檔，再從 asset 重建一次，避免舊快取格式不一致直接讓 App crash。
 - `retryOnTransientNetworkFailure()` 目前會把 `IOException`、`UnknownHostException`、`UnresolvedAddressException`、`ConnectException`、`SocketTimeoutException` 都視為可重試的暫時性網路錯誤，避免 Ktor 連線階段直接把背景抓價打崩。
+- Ktor 依賴版本統一走 `gradle/libs.versions.toml` 的 `ktor` version catalog；不要在 `app/build.gradle.kts` 另外手寫不同版本，避免 CIO/core/content-negotiation 混版。
+- `AddTransactionScreen` 的日期選擇不可用 `selectedDateMillis!!`，Material DatePicker 可能在未選日期時回傳 `null`，確認時應保留原日期或明確處理空值。
 - `scripts/update_stock_list.py` 可直接抓取 TWSE 上市/上櫃清單並輸出成 `app/src/main/assets/stocks.json` 相同格式的 JSON。
 - App 啟動時會比對 bundled `stocks.json` / `us_stocks.json` 的 checksum，必要時自動把新版 seed 同步進 Room 與本機快取；TW 內建 seed 只會在使用者沒有手動更新股票清單時自動套用，避免覆蓋 `SettingsDataStore.lastStockListUpdateTime` 代表的手動更新結果。
 

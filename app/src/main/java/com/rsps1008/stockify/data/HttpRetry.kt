@@ -98,6 +98,22 @@ suspend fun <T> retryOnTransientNetworkFailure(
                 "Timeout for $stockCode on attempt $attempt/$maxAttempts: ${e.message}; retrying"
             )
             delay(initialDelayMs * attempt)
+        } catch (e: IllegalStateException) {
+            if (attempt >= maxAttempts) {
+                Log.e(
+                    tag,
+                    "HTTP client state failure for $stockCode after $attempt attempts: ${e.message}",
+                    e
+                )
+                return null
+            }
+
+            Log.w(
+                tag,
+                "HTTP client state failure for $stockCode on attempt $attempt/$maxAttempts: ${e.message}; retrying",
+                e
+            )
+            delay(initialDelayMs * attempt)
         }
 
         attempt++

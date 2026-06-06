@@ -1,5 +1,7 @@
 package com.rsps1008.stockify.ui.navigation
 
+import android.net.Uri
+
 sealed class Screen(val route: String) {
     object Holdings : Screen("holdings")
     object Transactions : Screen("transactions")
@@ -15,7 +17,7 @@ sealed class Screen(val route: String) {
         ): String {
             val params = mutableListOf<String>()
             transactionId?.let { params.add("transactionId=$it") }
-            stockCode?.let { params.add("stockCode=$it") }
+            stockCode?.let { params.add("stockCode=${Uri.encode(it)}") }
             
             return if (params.isEmpty()) {
                 "add_transaction"
@@ -26,7 +28,7 @@ sealed class Screen(val route: String) {
     }
 
     object StockDetail : Screen("stock_detail/{stockCode}") {
-        fun createRoute(stockCode: String) = "stock_detail/$stockCode"
+        fun createRoute(stockCode: String) = "stock_detail/${Uri.encode(stockCode)}"
     }
 
     object TransactionDetail : Screen("transaction_detail/{transactionId}") {
