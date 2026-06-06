@@ -443,4 +443,11 @@ class AddTransactionViewModel(
         }
     }
 
+    fun updateTax(newTax: Double, price: Double, shares: Double, fee: Double = _fee.value) {
+        _tax.value = newTax
+
+        val transactionValue = price * shares
+        _income.value = (transactionValue - fee - newTax).roundToInt().toDouble()
+    }
+
 }

@@ -172,9 +172,9 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         }
     }
 
-    LaunchedEffect(transactionType) {
-        // 切換買進/賣出 → 清空 fee, tax, expense, income
-        if (transactionType == "買進" || transactionType == "賣出") {
+    LaunchedEffect(transactionType, transactionId) {
+        // Only reset transient calculated values when creating a new transaction.
+        if (transactionId == null && (transactionType == "買進" || transactionType == "賣出")) {
             viewModel.resetCalculatedValues()
         }
     }
@@ -557,11 +557,17 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         Spacer(modifier = Modifier.height(8.dp))
                         // 交易稅
                         val taxLabel = "交易稅" + if (taxRate > 0) " (${(taxRate * 100).toBigDecimal().stripTrailingZeros().toPlainString()} %)" else ""
-                        Text(taxLabel, style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            text = if (tax > 0) tax.toInt().toString() else "-",
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.padding(bottom = 12.dp)
+                        EditableTextStyled(
+                            label = "$taxLabel (點擊數字修改)",
+                            value = if (tax > 0) tax.toInt().toString() else "",
+                            onValueChange = { newTax ->
+                                viewModel.updateTax(
+                                    newTax = newTax.toDoubleOrNull() ?: 0.0,
+                                    price = price.toDoubleOrNull() ?: 0.0,
+                                    shares = shares.toDoubleOrNull() ?: 0.0
+                                )
+                            },
+                            style = MaterialTheme.typography.bodyLarge
                         )
                         androidx.compose.material3.HorizontalDivider()
                         Spacer(modifier = Modifier.height(8.dp))
