@@ -2,6 +2,7 @@ package com.rsps1008.stockify.ui.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -38,8 +39,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rsps1008.stockify.BuildConfig
@@ -70,6 +73,9 @@ fun SettingsScreen() {
     val isLoading by viewModel.isLoading.collectAsState()
     val message by viewModel.message.collectAsState()
     val lastUpdateTime by viewModel.lastStockListUpdateTime.collectAsState()
+    val lastUsUpdateTime by viewModel.lastUsStockListUpdateTime.collectAsState()
+    val finnhubApiKey by viewModel.finnhubApiKey.collectAsState()
+    val updatingStockListMarket by viewModel.updatingStockListMarket.collectAsState()
 
     val feeDiscount by viewModel.feeDiscount.collectAsState()
     val minFeeRegular by viewModel.minFeeRegular.collectAsState()
@@ -86,6 +92,7 @@ fun SettingsScreen() {
     val taxRateBondEtf by viewModel.taxRateBondEtf.collectAsState()
     val taxRateDayTrading by viewModel.taxRateDayTrading.collectAsState()
     val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
     var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
     val privacyPolicyText = remember {
         context.resources.openRawResource(R.raw.privacy_policy).bufferedReader().use { it.readText() }
@@ -171,26 +178,7 @@ fun SettingsScreen() {
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("股票資料更新", style = MaterialTheme.typography.titleLarge)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Button(onClick = { viewModel.updateStockListFromTwse() }, enabled = !isLoading) {
-                                Text("更新股票列表")
-                            }
-                            if (isLoading) CircularProgressIndicator()
-
-                            val updateTimeText = lastUpdateTime?.let { "(${formatTimestamp(it)})" } ?: "(預設列表)"
-                            Text(text = updateTimeText, style = MaterialTheme.typography.bodySmall)
-                        }
-                        Text(
-                            text = "*如果有新上市的股票可以自動新增。",
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-
+                        Text("股票資料來源", style = MaterialTheme.typography.titleLarge)
                         Spacer(modifier = Modifier.height(16.dp))
 
                         val dataSourceOptions = remember {
@@ -210,7 +198,7 @@ fun SettingsScreen() {
                             OutlinedTextField(
                                 value = dataSourceOptions[stockDataSource] ?: stockDataSource,
                                 onValueChange = { },
-                                label = { Text("即時資料來源") },
+                                label = { Text("台股即時資料來源") },
                                 readOnly = true,
                                 trailingIcon = {
                                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedDataSource)
@@ -330,6 +318,88 @@ fun SettingsScreen() {
                                             expandedInterval = false
                                         }
                                     )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("股票列表更新", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            text = "新上市的股票可透過此區自行新增。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text("台股股票列表", style = MaterialTheme.typography.titleMedium)
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Button(onClick = { viewModel.updateStockListFromTwse() }, enabled = !isLoading) {
+                                            Text("更新台股股票列表")
+                                        }
+                                        if (updatingStockListMarket == "TW") CircularProgressIndicator()
+
+                                        val updateTimeText = lastUpdateTime?.let { "(${formatTimestamp(it)})" } ?: "(預設列表)"
+                                        Text(text = updateTimeText, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
+                            }
+
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text("美股股票列表", style = MaterialTheme.typography.titleMedium)
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "更新前請先到 Finnhub 自行取得免費 API key，再填入下方欄位。",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    TextButton(onClick = { uriHandler.openUri("https://finnhub.io/register") }) {
+                                        Text("前往 Finnhub 取得免費 API key")
+                                    }
+                                    OutlinedTextField(
+                                        value = finnhubApiKey,
+                                        onValueChange = viewModel::setFinnhubApiKey,
+                                        label = { Text("Finnhub API key") },
+                                        singleLine = true,
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                        visualTransformation = PasswordVisualTransformation(),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Button(
+                                            onClick = { viewModel.updateStockListFromFinnhub() },
+                                            enabled = !isLoading && finnhubApiKey.isNotBlank()
+                                        ) {
+                                            Text("更新美股股票列表")
+                                        }
+                                        if (updatingStockListMarket == "US") CircularProgressIndicator()
+
+                                        val usUpdateTimeText = lastUsUpdateTime?.let { "(${formatTimestamp(it)})" } ?: "(預設列表)"
+                                        Text(text = usUpdateTimeText, style = MaterialTheme.typography.bodySmall)
+                                    }
                                 }
                             }
                         }

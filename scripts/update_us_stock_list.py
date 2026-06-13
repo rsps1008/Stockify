@@ -19,7 +19,7 @@ def build_data():
             "code": symbol,
             "market": "US",
             "industry": "",
-            "stockType": "ETF" if s.get("type") == "ETF" else "Stock"
+            "stockType": "ETF" if s.get("type") in ("ETF", "ETP") else "Stock"
         })
 
     return result

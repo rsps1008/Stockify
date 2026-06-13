@@ -30,11 +30,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.rsps1008.stockify.StockifyApplication
-import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.ui.navigation.Screen
 import com.rsps1008.stockify.ui.theme.StockifyAppTheme
 import com.rsps1008.stockify.ui.viewmodel.TransactionDetailViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
+import com.rsps1008.stockify.data.formatMarketAmount
 import com.rsps1008.stockify.data.formatShareCount
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -110,21 +110,21 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                     "買進" -> {
                         DetailRow(label = "買進價格", value = String.format("%,.2f", transaction.buyPrice))
                         DetailRow(label = "買進股數", value = formatShareCount(transaction.buyShares))
-                        DetailRow(label = "手續費", value = formatFeeValue(transaction.fee, uiState.market))
-                        DetailRow(label = "支出", value = String.format("%,.0f", transaction.expense), valueColor = StockifyAppTheme.stockColors.loss)
+                        DetailRow(label = "手續費", value = formatMarketAmount(transaction.fee, uiState.market))
+                        DetailRow(label = "支出", value = formatMarketAmount(transaction.expense, uiState.market), valueColor = StockifyAppTheme.stockColors.loss)
                     }
                     "賣出" -> {
                         DetailRow(label = "賣出價格", value = String.format("%,.2f", transaction.sellPrice))
                         DetailRow(label = "賣出股數", value = formatShareCount(transaction.sellShares))
-                        DetailRow(label = "手續費", value = formatFeeValue(transaction.fee, uiState.market))
-                        DetailRow(label = "交易稅", value = formatTaxValue(transaction.tax, uiState.market))
-                        DetailRow(label = "收入", value = String.format("%,.0f", transaction.income), valueColor = StockifyAppTheme.stockColors.gain)
+                        DetailRow(label = "手續費", value = formatMarketAmount(transaction.fee, uiState.market))
+                        DetailRow(label = "交易稅", value = formatMarketAmount(transaction.tax, uiState.market))
+                        DetailRow(label = "收入", value = formatMarketAmount(transaction.income, uiState.market), valueColor = StockifyAppTheme.stockColors.gain)
                     }
                     "配息" -> {
                         DetailRow(label = "每股股息", value = String.format("%,.4f", transaction.cashDividend))
                         DetailRow(label = "除息股數", value = formatShareCount(transaction.exDividendShares))
-                        DetailRow(label = "股息收入", value = String.format("%,.0f", transaction.income), valueColor = StockifyAppTheme.stockColors.gain)
-                        DetailRow(label = "手續費", value = String.format("%,.0f", transaction.fee))
+                        DetailRow(label = "股息收入", value = formatMarketAmount(transaction.income, uiState.market), valueColor = StockifyAppTheme.stockColors.gain)
+                        DetailRow(label = "手續費", value = formatMarketAmount(transaction.fee, uiState.market))
                     }
                     "配股" -> {
                         DetailRow(label = "股票股利", value = String.format("%,.4f", transaction.stockDividend))
@@ -156,21 +156,5 @@ fun DetailRow(label: String, value: String, valueColor: Color = Color.Unspecifie
     Row(modifier = Modifier.padding(vertical = 8.dp)) {
         Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Text(text = value, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), color = valueColor)
-    }
-}
-
-private fun formatFeeValue(fee: Double, market: String): String {
-    return if (StockMarket.isUs(market)) {
-        String.format(Locale.US, "%,.2f", fee)
-    } else {
-        String.format("%,.0f", fee)
-    }
-}
-
-private fun formatTaxValue(tax: Double, market: String): String {
-    return if (StockMarket.isUs(market)) {
-        String.format(Locale.US, "%,.2f", tax)
-    } else {
-        String.format("%,.0f", tax)
     }
 }

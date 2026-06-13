@@ -1,12 +1,25 @@
 package com.rsps1008.stockify.data
 
-import android.R
-import android.util.Log
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
+import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.jsoup.Jsoup
 
 class StockDataFetcher {
+    private val client = HttpClient(CIO) {
+        engine {
+            requestTimeout = 30000
+        }
+    }
+
     suspend fun fetchStockList(): List<Stock> = withContext(Dispatchers.IO) {
         val modes = listOf("2", "4")   // 同時抓上市跟上櫃
         val stocks = mutableListOf<Stock>()
@@ -42,7 +55,6 @@ class StockDataFetcher {
                             if (codeAndName.size >= 2) {
                                 val code = codeAndName[0].trim()
                                 val name = codeAndName[1].trim()
-                                val market = cols[3].text().trim()
                                 val industry = cols[4].text().trim()
 
                                 // 過濾掉不需要的分類
@@ -72,5 +84,39 @@ class StockDataFetcher {
             }
         }
         stocks
+    }
+
+    suspend fun fetchUsStockList(finnhubApiKey: String): List<Stock> = withContext(Dispatchers.IO) {
+        val apiKey = finnhubApiKey.trim()
+        require(apiKey.isNotBlank()) { "請先輸入 Finnhub API key" }
+
+        val url = "https://finnhub.io/api/v1/stock/symbol?exchange=US&token=$apiKey"
+        val responseText = client.get(url).bodyAsText()
+        val root = Json.parseToJsonElement(responseText)
+        val symbols = root as? JsonArray
+        if (symbols == null) {
+            val errorMessage = runCatching {
+                root.jsonObject["error"]?.jsonPrimitive?.contentOrNull
+            }.getOrNull()
+            throw IllegalStateException(errorMessage ?: "Finnhub 回傳格式不正確")
+        }
+
+        symbols.mapNotNull { item ->
+            val stockJson = item.jsonObject
+            val symbol = stockJson["symbol"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+            if (symbol.isBlank()) return@mapNotNull null
+
+            val description = stockJson["description"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+            val type = stockJson["type"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+
+            Stock(
+                id = 0,
+                code = symbol,
+                name = description.ifBlank { symbol },
+                market = StockMarket.US,
+                industry = "",
+                stockType = if (type == "ETF" || type == "ETP") "ETF" else "Stock"
+            )
+        }
     }
 }

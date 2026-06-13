@@ -59,6 +59,9 @@ class SettingsViewModel(
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val _updatingStockListMarket = MutableStateFlow<String?>(null)
+    val updatingStockListMarket: StateFlow<String?> = _updatingStockListMarket.asStateFlow()
+
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
@@ -89,6 +92,12 @@ class SettingsViewModel(
 
     val lastStockListUpdateTime: StateFlow<Long?> = settingsDataStore.lastStockListUpdateTimeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
+
+    val lastUsStockListUpdateTime: StateFlow<Long?> = settingsDataStore.lastUsStockListUpdateTimeFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
+
+    val finnhubApiKey: StateFlow<String> = settingsDataStore.finnhubApiKeyFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), "")
 
     val feeDiscount: StateFlow<Double> = settingsDataStore.feeDiscountFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 0.28)
@@ -522,6 +531,12 @@ class SettingsViewModel(
         }
     }
 
+    fun setFinnhubApiKey(apiKey: String) {
+        viewModelScope.launch {
+            settingsDataStore.setFinnhubApiKey(apiKey)
+        }
+    }
+
     fun setNotifyFallbackRepeatedly(shouldNotifyRepeatedly: Boolean) {
         viewModelScope.launch {
             settingsDataStore.setNotifyFallbackRepeatedly(shouldNotifyRepeatedly)
@@ -609,6 +624,7 @@ class SettingsViewModel(
     fun updateStockListFromTwse() {
         viewModelScope.launch {
             _isLoading.value = true
+            _updatingStockListMarket.value = StockMarket.TW
             try {
                 val stocks = stockDataFetcher.fetchStockList()
                 // Save to json file
@@ -621,6 +637,36 @@ class SettingsViewModel(
             } catch (e: Exception) {
                 _message.value = "更新失敗: ${e.message}"
             } finally {
+                _updatingStockListMarket.value = null
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun updateStockListFromFinnhub() {
+        val apiKey = finnhubApiKey.value.trim()
+        if (apiKey.isBlank()) {
+            _message.value = "請先到 Finnhub 取得免費 API key 並填入後再更新美股列表"
+            return
+        }
+
+        viewModelScope.launch {
+            _isLoading.value = true
+            _updatingStockListMarket.value = StockMarket.US
+            try {
+                val stocks = stockDataFetcher.fetchUsStockList(apiKey)
+                if (stocks.isEmpty()) {
+                    throw IllegalStateException("Finnhub 未回傳可用的美股資料")
+                }
+                stockDao.deleteStocksByMarket(StockMarket.US)
+                stockDao.insertStocks(stocks)
+                settingsDataStore.setLastUsStockListUpdateTime(System.currentTimeMillis())
+                _message.value = "美股股票列表更新成功！共 ${stocks.size} 筆"
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to update US stock list from Finnhub", e)
+                _message.value = "美股列表更新失敗: ${e.message}"
+            } finally {
+                _updatingStockListMarket.value = null
                 _isLoading.value = false
             }
         }

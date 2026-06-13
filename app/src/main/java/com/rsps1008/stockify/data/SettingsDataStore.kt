@@ -21,6 +21,7 @@ class SettingsDataStore(val context: Context) {
 
     private val fetchIntervalKey = intPreferencesKey("refresh_interval")
     private val lastStockListUpdateTimeKey = longPreferencesKey("last_stock_list_update_time")
+    private val lastUsStockListUpdateTimeKey = longPreferencesKey("last_us_stock_list_update_time")
     private val feeDiscountKey = doublePreferencesKey("fee_discount")
     private val minFeeRegularKey = intPreferencesKey("min_fee_regular")
     private val minFeeOddLotKey = intPreferencesKey("min_fee_odd_lot")
@@ -39,6 +40,7 @@ class SettingsDataStore(val context: Context) {
     private val usdToTwdRateKey = doublePreferencesKey("usd_to_twd_rate")
     private val usdToTwdRateUpdatedAtKey = longPreferencesKey("usd_to_twd_rate_updated_at")
     private val homeDisplayModeKey = stringPreferencesKey("home_display_mode")
+    private val finnhubApiKeyKey = stringPreferencesKey("finnhub_api_key")
 
     val fetchIntervalFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
@@ -48,6 +50,11 @@ class SettingsDataStore(val context: Context) {
     val lastStockListUpdateTimeFlow: Flow<Long?> = context.dataStore.data
         .map { preferences ->
             preferences[lastStockListUpdateTimeKey]
+        }
+
+    val lastUsStockListUpdateTimeFlow: Flow<Long?> = context.dataStore.data
+        .map { preferences ->
+            preferences[lastUsStockListUpdateTimeKey]
         }
 
     val feeDiscountFlow: Flow<Double> = context.dataStore.data
@@ -141,6 +148,11 @@ class SettingsDataStore(val context: Context) {
             preferences[homeDisplayModeKey] ?: HomeDisplayMode.COMBINED
         }
 
+    val finnhubApiKeyFlow: Flow<String> = context.dataStore.data
+        .map { preferences ->
+            preferences[finnhubApiKeyKey] ?: ""
+        }
+
     suspend fun setFetchInterval(interval: Int) {
         context.dataStore.edit {
             it[fetchIntervalKey] = interval
@@ -150,6 +162,12 @@ class SettingsDataStore(val context: Context) {
     suspend fun setLastStockListUpdateTime(time: Long) {
         context.dataStore.edit {
             it[lastStockListUpdateTimeKey] = time
+        }
+    }
+
+    suspend fun setLastUsStockListUpdateTime(time: Long) {
+        context.dataStore.edit {
+            it[lastUsStockListUpdateTimeKey] = time
         }
     }
 
@@ -259,6 +277,12 @@ class SettingsDataStore(val context: Context) {
     suspend fun setHomeDisplayMode(mode: String) {
         context.dataStore.edit {
             it[homeDisplayModeKey] = HomeDisplayMode.normalize(mode)
+        }
+    }
+
+    suspend fun setFinnhubApiKey(apiKey: String) {
+        context.dataStore.edit {
+            it[finnhubApiKeyKey] = apiKey.trim()
         }
     }
 }

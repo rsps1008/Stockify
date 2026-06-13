@@ -118,6 +118,9 @@
 - Compose 風格請盡量維持既有 Material 3 介面與目前版面結構
 - 設定頁最底部要顯示目前 App 版本，直接讀 `BuildConfig.VERSION_NAME` 即可。
 - `app` module 需要維持 `buildFeatures.buildConfig = true`，否則設定頁無法直接讀 `BuildConfig.VERSION_NAME`。
+- 設定頁的「股票資料來源」與「股票列表更新」要分成兩個獨立區塊，前者只放爬蟲/即時資料來源與相關刷新偏好，後者只放台股與美股股票列表更新操作。
+- 設定頁的「股票列表更新」區塊建議用主卡片包兩張子卡片的層級呈現，台股與美股更新流程要視覺上分開。
+- 設定頁的股票資料更新區同時提供台股與美股更新；美股更新需由使用者自行到 Finnhub 取得免費 API key，填入後才呼叫 Finnhub symbol API 更新 `US` 市場股票清單。
 
 ## 6. 開發規則
 
@@ -162,6 +165,7 @@ Windows 指令範例：
 - CSV 匯入與 Google Drive 還原完成後，會強制對這次匯入到的股票做一次即時價 refresh，即使當下台股關盤也會先塞入一筆價格。
 - 首頁「累積損益」卡右上角顯示的是目前已載入即時報價中的最新 `lastUpdated`，而且可以點擊該時間來強制刷新整個持股清單的報價。
 - 首頁「累積損益」卡右上角的刷新時間尾巴會顯示 refresh icon，讓使用者明確知道那裡可點擊更新。
+- 設定頁的股票資料來源與股票列表更新已拆成兩個獨立區塊，方便把爬蟲來源設定和更新動作分開。
 - `NasdaqStockInfoFetcher` 解析 Nasdaq API 時會先確認 `data` 和 `primaryData` 都真的是 `JsonObject`，避免 API 回傳 `null`、錯誤訊息或其他非物件結構時直接拋出 `JsonNull is not a JsonObject`。
 - 美股走 Nasdaq API 時會依 `stockType` 切換 `assetclass`，`ETF` 使用 `assetclass=etf`，一般股票使用 `assetclass=stocks`。
 - `StockListRepository.readStocks()` 在本機 `stocks.json` decode 失敗時會先刪掉壞檔，再從 asset 重建一次，避免舊快取格式不一致直接讓 App crash。
@@ -170,6 +174,8 @@ Windows 指令範例：
 - `AddTransactionScreen` 的日期選擇不可用 `selectedDateMillis!!`，Material DatePicker 可能在未選日期時回傳 `null`，確認時應保留原日期或明確處理空值。
 - `scripts/update_stock_list.py` 可直接抓取 TWSE 上市/上櫃清單並輸出成 `app/src/main/assets/stocks.json` 相同格式的 JSON。
 - App 啟動時會比對 bundled `stocks.json` / `us_stocks.json` 的 checksum，必要時自動把新版 seed 同步進 Room 與本機快取；TW 內建 seed 只會在使用者沒有手動更新股票清單時自動套用，避免覆蓋 `SettingsDataStore.lastStockListUpdateTime` 代表的手動更新結果。
+- 設定頁可用使用者填入的 Finnhub API key 手動更新美股股票列表；更新時只刪除並重建 Room 內 `market = US` 的股票資料，不會改動台股清單。
+- 底部功能列目前以 `ShowChart`、`Payments`、`Add`、`CloudSync`、`Settings` 對應持股、交易、快速新增、資料管理與設定入口；若之後更換 icon，請維持這組語意對應，不要只看原始 Material 預設名稱。
 
 - 資料管理頁新增 PDF 庫存匯入，支援使用者手動輸入 PDF 密碼後解密與抽取文字。
 - PDF 庫存匯入會先整理股票代號與庫存，再抓取目前價格做預覽，最後可選擇替代匯入或新增匯入。

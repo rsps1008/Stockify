@@ -22,12 +22,12 @@ val hasReleaseSigning = listOf(
 
 android {
     namespace = "com.rsps1008.stockify"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.rsps1008.stockify"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 134
         versionName = "1.3.4"
 
