@@ -1,6 +1,10 @@
 package com.rsps1008.stockify.ui.navigation
 
 import android.util.Log
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
@@ -30,11 +34,23 @@ fun NavGraph(
         startDestination = Screen.Holdings.route,
         modifier = modifier
     ) {
-        composable(Screen.Holdings.route) {
+        composable(
+            route = Screen.Holdings.route,
+            enterTransition = { fadeIn() },
+            exitTransition = { fadeOut() },
+            popEnterTransition = { fadeIn() },
+            popExitTransition = { fadeOut() }
+        ) {
             LogScreenEntry("HoldingsScreen")
             HoldingsScreen(navController = navController)
         }
-        composable(Screen.Transactions.route) {
+        composable(
+            route = Screen.Transactions.route,
+            enterTransition = { EnterTransition.None },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None }
+        ) {
             LogScreenEntry("TransactionsScreen")
             TransactionsScreen(navController = navController)
         }

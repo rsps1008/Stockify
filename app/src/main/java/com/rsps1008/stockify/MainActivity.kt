@@ -16,10 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Assessment
-import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -86,8 +83,9 @@ fun MainScreen() {
                             navigateToTopLevel(navController, Screen.Holdings.route)
                         }) {
                             Icon(
-                                imageVector = Icons.Filled.Assessment,
+                                painter = painterResource(R.drawable.ic_nav_holdings),
                                 contentDescription = "Holdings",
+                                modifier = Modifier.size(30.dp),
                                 tint = if (currentDestination?.hierarchy?.any { it.route == Screen.Holdings.route } == true) {
                                     MaterialTheme.colorScheme.primary
                                 } else {
@@ -99,8 +97,9 @@ fun MainScreen() {
                             navigateToTopLevel(navController, Screen.Transactions.route)
                         }) {
                             Icon(
-                                imageVector = Icons.Filled.History,
+                                painter = painterResource(R.drawable.ic_nav_transactions),
                                 contentDescription = "Transactions",
+                                modifier = Modifier.size(30.dp),
                                 tint = if (currentDestination?.hierarchy?.any { it.route == Screen.Transactions.route } == true) {
                                     MaterialTheme.colorScheme.primary
                                 } else {
@@ -134,8 +133,9 @@ fun MainScreen() {
                             navigateToTopLevel(navController, Screen.DataManagement.route)
                         }) {
                             Icon(
-                                imageVector = Icons.Filled.CloudUpload,
+                                painter = painterResource(R.drawable.ic_nav_data_management),
                                 contentDescription = "Data Management",
+                                modifier = Modifier.size(30.dp),
                                 tint = if (currentDestination?.hierarchy?.any { it.route == Screen.DataManagement.route } == true) {
                                     MaterialTheme.colorScheme.primary
                                 } else {
@@ -147,8 +147,9 @@ fun MainScreen() {
                             navigateToTopLevel(navController, Screen.Settings.route)
                         }) {
                             Icon(
-                                imageVector = Icons.Filled.Settings,
+                                painter = painterResource(R.drawable.ic_nav_settings),
                                 contentDescription = "Settings",
+                                modifier = Modifier.size(30.dp),
                                 tint = if (currentDestination?.hierarchy?.any { it.route == Screen.Settings.route } == true) {
                                     MaterialTheme.colorScheme.primary
                                 } else {
