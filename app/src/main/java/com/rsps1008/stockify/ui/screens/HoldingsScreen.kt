@@ -80,6 +80,8 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import android.widget.Toast
 import com.rsps1008.stockify.data.HomeDisplayMode
+import com.rsps1008.stockify.data.formatHomeAmount
+import com.rsps1008.stockify.data.formatMarketAmount
 import com.rsps1008.stockify.data.formatShareCount
 
 
@@ -172,7 +174,8 @@ fun HoldingsScreen(navController: NavController) {
             item {
                 HoldingsHeader(
                     count = unrealizedCount,
-                    unrealizedPL = unrealizedPL
+                    unrealizedPL = unrealizedPL,
+                    currentMode = homeDisplayMode
                 )
             }
 
@@ -188,7 +191,8 @@ fun HoldingsScreen(navController: NavController) {
                 item {
                     ClearedHoldingsHeader(
                         count = clearedCount,
-                        realizedPL = realizedPL
+                        realizedPL = realizedPL,
+                        currentMode = homeDisplayMode
                     )
                 }
                 stickyHeader {
@@ -315,7 +319,7 @@ fun SummarySection(
 
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
-                        text = String.format("%,.0f", uiState.cumulativePL),
+                        text = formatHomeAmount(uiState.cumulativePL, currentMode),
                         style = MaterialTheme.typography.headlineLarge,
                         color = cumulativePlColor,
                         modifier = Modifier.alignByBaseline()
@@ -342,7 +346,7 @@ fun SummarySection(
                     Column(modifier = Modifier.weight(3f)) {
                         Text("持股日損益", style = MaterialTheme.typography.bodySmall)
                         Text(
-                            String.format("%,.0f", kotlin.math.abs(uiState.dailyPL)),
+                            formatHomeAmount(kotlin.math.abs(uiState.dailyPL), currentMode),
                             style = MaterialTheme.typography.bodyLarge,
                             color = dailyPlColor
                         )
@@ -385,7 +389,7 @@ fun SummarySection(
                     Column(modifier = Modifier.weight(2.5f)) {
                         Text("股息收入", style = MaterialTheme.typography.bodySmall)
                         Text(
-                            String.format("%,.0f", uiState.dividendIncome),
+                            formatHomeAmount(uiState.dividendIncome, currentMode),
                             style = MaterialTheme.typography.bodyLarge
                         )
                     }
@@ -557,7 +561,7 @@ fun HoldingCard(holding: HoldingInfo, navController: NavController) {
                     )
                 }) { targetTotalPL ->
                     Text(
-                        text = String.format("%,.0f", targetTotalPL),
+                        text = formatMarketAmount(targetTotalPL, holding.stock.market),
                         style = MaterialTheme.typography.bodyLarge,
                         color = totalPlColor
                     )
@@ -703,7 +707,7 @@ fun ZeroHoldingCard(
                     )
                 }) { targetTotalPL ->
                     Text(
-                        text = String.format("%,.0f", targetTotalPL),
+                        text = formatMarketAmount(targetTotalPL, holding.stock.market),
                         style = MaterialTheme.typography.bodyLarge,
                         color = totalPlColor
                     )
@@ -734,7 +738,8 @@ fun ZeroHoldingCard(
 @Composable
 fun HoldingsHeader(
     count: Int,
-    unrealizedPL: Double
+    unrealizedPL: Double,
+    currentMode: String
 ) {
     val plColor =
         if (unrealizedPL >= 0)
@@ -778,7 +783,7 @@ fun HoldingsHeader(
             style = MaterialTheme.typography.bodySmall
         )
         Text(
-            text = "${String.format("%,.0f", kotlin.math.abs(unrealizedPL))}",
+            text = formatHomeAmount(kotlin.math.abs(unrealizedPL), currentMode),
             style = MaterialTheme.typography.bodySmall,
             color = plColor
         )
@@ -789,7 +794,8 @@ fun HoldingsHeader(
 fun ClearedHoldingsHeader
 (
     count: Int,
-    realizedPL: Double
+    realizedPL: Double,
+    currentMode: String
 ) {
     val plColor =
         if (realizedPL >= 0)
@@ -834,7 +840,7 @@ fun ClearedHoldingsHeader
             style = MaterialTheme.typography.bodySmall
         )
         Text(
-            text = "${String.format("%,.0f", kotlin.math.abs(realizedPL))}",
+            text = formatHomeAmount(kotlin.math.abs(realizedPL), currentMode),
             style = MaterialTheme.typography.bodySmall,
             color = plColor
         )

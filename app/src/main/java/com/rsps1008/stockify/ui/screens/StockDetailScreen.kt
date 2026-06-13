@@ -57,6 +57,7 @@ import com.rsps1008.stockify.ui.navigation.Screen
 import com.rsps1008.stockify.ui.theme.StockifyAppTheme
 import com.rsps1008.stockify.ui.viewmodel.StockDetailViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
+import com.rsps1008.stockify.data.formatMarketAmount
 import com.rsps1008.stockify.data.formatShareCount
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -156,7 +157,7 @@ private fun StockDetailSummary(holdingInfo: HoldingInfo) {
 
                 // 大字（累積損益）
                 AnimatedNumberText(
-                    text = String.format("%,.0f", holdingInfo.totalPL),
+                    text = formatMarketAmount(holdingInfo.totalPL, holdingInfo.stock.market),
                     color = totalPlColor,
                     style = MaterialTheme.typography.headlineLarge
                 )
@@ -191,7 +192,7 @@ private fun StockDetailSummary(holdingInfo: HoldingInfo) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = "持股日損益", style = MaterialTheme.typography.bodySmall)
                     AnimatedNumberText(
-                        text = String.format("%,.0f", kotlin.math.abs(holdingInfo.dailyChange * holdingInfo.shares)),
+                        text = formatMarketAmount(kotlin.math.abs(holdingInfo.dailyChange * holdingInfo.shares), holdingInfo.stock.market),
                         color = dailyPlColor,
                         style = MaterialTheme.typography.bodyLarge
                     )
@@ -202,7 +203,7 @@ private fun StockDetailSummary(holdingInfo: HoldingInfo) {
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = "股息收入", style = MaterialTheme.typography.bodySmall)
-                    Text(text = String.format("%,.0f", holdingInfo.dividendIncome), style = MaterialTheme.typography.bodyLarge)
+                    Text(text = formatMarketAmount(holdingInfo.dividendIncome, holdingInfo.stock.market), style = MaterialTheme.typography.bodyLarge)
                 }
             }
         }
@@ -361,9 +362,9 @@ fun AnimatedTimeText(text: String, color: Color) {
 @Composable
 private fun TransactionRow(transaction: TransactionUiState, navController: NavController) {
     val amountText = when (transaction.transaction.type) {
-        "買進" -> String.format("%,.0f", -transaction.transaction.expense)
-        "賣出" -> String.format("%,.0f", transaction.transaction.income)
-        "配息" -> String.format("%,.0f", transaction.transaction.income)
+        "買進" -> formatMarketAmount(-transaction.transaction.expense, transaction.market)
+        "賣出" -> formatMarketAmount(transaction.transaction.income, transaction.market)
+        "配息" -> formatMarketAmount(transaction.transaction.income, transaction.market)
         "配股" -> "${formatShareCount(transaction.transaction.dividendShares)}股"
         "減資" -> String.format("%,.1f", transaction.transaction.cashReturned)
         "分割" -> "-"

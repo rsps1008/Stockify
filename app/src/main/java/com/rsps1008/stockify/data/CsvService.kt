@@ -50,11 +50,11 @@ class CsvService {
 
         record["id"] = transaction.id
         record["交易"] = transaction.type
-        record["交易稅"] = transaction.tax.toInt()
+        record["交易稅"] = formatMarketPlainAmount(transaction.tax, stock.market)
         record["帳戶ID"] = transaction.accountId
-        record["手續費"] = transaction.fee.toInt()
-        record["支出"] = transaction.expense.toInt()
-        record["收入"] = transaction.income.toInt()
+        record["手續費"] = formatMarketPlainAmount(transaction.fee, stock.market)
+        record["支出"] = formatMarketPlainAmount(transaction.expense, stock.market)
+        record["收入"] = formatMarketPlainAmount(transaction.income, stock.market)
         record["日期"] = dateFormat.format(Date(transaction.date))
         record["現金股利"] = transaction.cashDividend
         record["筆記"] = transaction.note.ifEmpty { "" }
@@ -70,7 +70,7 @@ class CsvService {
         record["配發股數"] = formatShareInputValue(transaction.dividendShares)
         record["除息股數"] = formatShareInputValue(transaction.exDividendShares)
         record["除權股數"] = formatShareInputValue(transaction.exRightsShares)
-        record["股息收入"] = transaction.dividendIncome.toInt()
+        record["股息收入"] = formatMarketPlainAmount(transaction.dividendIncome, stock.market)
         record["減資比例"] = transaction.capitalReductionRatio
         record["減資前股數"] = formatShareInputValue(transaction.sharesBeforeReduction)
         record["減資後股數"] = formatShareInputValue(transaction.sharesAfterReduction)

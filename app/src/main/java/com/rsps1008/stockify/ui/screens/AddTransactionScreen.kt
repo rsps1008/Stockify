@@ -54,6 +54,7 @@ import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
 import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.StockMarket
+import com.rsps1008.stockify.data.formatMarketAmount
 import com.rsps1008.stockify.data.formatShareInputValue
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -206,7 +207,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                 "配息" -> {
                     cashDividend = if (it.cashDividend != 0.0) it.cashDividend.toString() else ""
                     exDividendShares = if (it.exDividendShares != 0.0) formatShareInputValue(it.exDividendShares) else ""
-                    price = it.income.toInt().toString()
+                    price = formatDividendAmountInput(it.income, stock?.market)
                     dividendFee = it.fee.toString()
                 }
                 "配股" -> {
@@ -251,7 +252,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             val pps = cashDividend.toDoubleOrNull()
             val s = exDividendShares.toDoubleOrNull()
             if (pps != null && s != null) {
-                price = (pps * s).roundToInt().toString()
+                val stock = allStocks.find { it.code == stockCode }
+                price = formatDividendAmountInput(pps * s, stock?.market)
             }
         }
     }
@@ -470,7 +472,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             style = MaterialTheme.typography.bodyLarge
                         )
                         Text(
-                            text = if (expense > 0) expense.toInt().toString() else "-",
+                            text = if (expense > 0) formatMarketAmount(expense, selectedStock?.market) else "-",
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
@@ -573,7 +575,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         // 收入金額
                         Text("收入金額", style = MaterialTheme.typography.bodyLarge)
                         Text(
-                            text = if (income > 0) income.toInt().toString() else "-",
+                            text = if (income > 0) formatMarketAmount(income, selectedStock?.market) else "-",
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
@@ -667,7 +669,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             label = "股息總額",
                             value = price,
                             onValueChange = { price = it },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                         )
                     }
                 }
@@ -943,6 +945,14 @@ private fun formatTaxDisplayValue(tax: Double, market: String?): String {
         String.format(Locale.US, "%.2f", tax)
     } else {
         tax.toInt().toString()
+    }
+}
+
+private fun formatDividendAmountInput(amount: Double, market: String?): String {
+    return if (StockMarket.isUs(market.orEmpty())) {
+        String.format(Locale.US, "%.2f", amount)
+    } else {
+        amount.roundToInt().toString()
     }
 }
 

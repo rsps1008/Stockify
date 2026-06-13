@@ -31,6 +31,7 @@ import com.rsps1008.stockify.ui.navigation.Screen
 import com.rsps1008.stockify.ui.theme.StockifyAppTheme
 import com.rsps1008.stockify.ui.viewmodel.TransactionsViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
+import com.rsps1008.stockify.data.formatMarketAmount
 import com.rsps1008.stockify.data.formatShareCount
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -98,9 +99,9 @@ private fun TransactionsListHeader() {
 @Composable
 private fun TransactionRow(transaction: TransactionUiState, navController: NavController) {
     val amountText = when (transaction.transaction.type) {
-        "買進" -> String.format("%,.0f", -transaction.transaction.expense)
-        "賣出" -> String.format("%,.0f", transaction.transaction.income)
-        "配息" -> String.format("%,.0f", transaction.transaction.income)
+        "買進" -> formatMarketAmount(-transaction.transaction.expense, transaction.market)
+        "賣出" -> formatMarketAmount(transaction.transaction.income, transaction.market)
+        "配息" -> formatMarketAmount(transaction.transaction.income, transaction.market)
         "配股" -> "0"
         "減資" -> String.format("%,.0f", transaction.transaction.cashReturned)
         "分割" -> "-"
@@ -135,7 +136,7 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
         val transactionText = when (transaction.transaction.type) {
             "買進" -> "買${formatShareCount(transaction.transaction.buyShares)}股"
             "賣出" -> "賣${formatShareCount(transaction.transaction.sellShares)}股"
-            "配息" -> "配息${transaction.transaction.income.toInt()}元"
+            "配息" -> "配息${formatMarketAmount(transaction.transaction.income, transaction.market)}元"
             "配股" -> "配股${formatShareCount(transaction.transaction.dividendShares)}股"
             "減資" -> "減資${String.format("%.1f", transaction.transaction.capitalReductionRatio)}%"
             "分割" -> "分割(1→${transaction.transaction.stockSplitRatio.toInt()})"

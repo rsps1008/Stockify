@@ -158,7 +158,7 @@ class AddTransactionViewModel(
         }
 
         if (StockMarket.isUs(market)) {
-            _expense.value = (price * shares + _fee.value).roundToInt().toDouble()
+            _expense.value = roundCurrency(price * shares + _fee.value)
             return
         }
 
@@ -185,7 +185,7 @@ class AddTransactionViewModel(
 
         if (StockMarket.isUs(market)) {
             _taxRate.value = 0.0
-            _income.value = (price * shares - _fee.value - _tax.value).roundToInt().toDouble()
+            _income.value = roundCurrency(price * shares - _fee.value - _tax.value)
             return
         }
 
@@ -445,6 +445,10 @@ class AddTransactionViewModel(
 
         val transactionValue = price * shares
         _income.value = (transactionValue - fee - newTax).roundToInt().toDouble()
+    }
+
+    private fun roundCurrency(value: Double): Double {
+        return (value * 100).roundToInt() / 100.0
     }
 
 }
