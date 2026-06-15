@@ -43,6 +43,8 @@ class SettingsDataStore(val context: Context) {
     private val finnhubApiKeyKey = stringPreferencesKey("finnhub_api_key")
     private val holdingsOrderKey = stringPreferencesKey("holdings_order")
     private val realizedHoldingsOrderKey = stringPreferencesKey("realized_holdings_order")
+    private val holdingsReorderHintShownKey = booleanPreferencesKey("holdings_reorder_hint_shown")
+    private val localCsvRestoreFeeHintShownKey = booleanPreferencesKey("local_csv_restore_fee_hint_shown")
 
     val fetchIntervalFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
@@ -169,6 +171,16 @@ class SettingsDataStore(val context: Context) {
                 ?.split("|")
                 ?.filter { it.isNotBlank() }
                 ?: emptyList()
+        }
+
+    val holdingsReorderHintShownFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[holdingsReorderHintShownKey] ?: false
+        }
+
+    val localCsvRestoreFeeHintShownFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[localCsvRestoreFeeHintShownKey] ?: false
         }
 
     suspend fun setFetchInterval(interval: Int) {
@@ -313,6 +325,18 @@ class SettingsDataStore(val context: Context) {
     suspend fun setRealizedHoldingsOrder(order: List<String>) {
         context.dataStore.edit {
             it[realizedHoldingsOrderKey] = order.joinToString("|")
+        }
+    }
+
+    suspend fun setHoldingsReorderHintShown(shown: Boolean) {
+        context.dataStore.edit {
+            it[holdingsReorderHintShownKey] = shown
+        }
+    }
+
+    suspend fun setLocalCsvRestoreFeeHintShown(shown: Boolean) {
+        context.dataStore.edit {
+            it[localCsvRestoreFeeHintShownKey] = shown
         }
     }
 }

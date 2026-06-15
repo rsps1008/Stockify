@@ -45,6 +45,13 @@ class HoldingsViewModel(
             initialValue = emptyList()
         )
 
+    val holdingsReorderHintShown: StateFlow<Boolean> = settingsDataStore.holdingsReorderHintShownFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000L),
+            initialValue = false
+        )
+
     fun setHomeDisplayMode(mode: String) {
         viewModelScope.launch {
             settingsDataStore.setHomeDisplayMode(mode)
@@ -66,6 +73,12 @@ class HoldingsViewModel(
     fun setRealizedHoldingsOrder(order: List<String>) {
         viewModelScope.launch {
             settingsDataStore.setRealizedHoldingsOrder(order)
+        }
+    }
+
+    fun markHoldingsReorderHintShown() {
+        viewModelScope.launch {
+            settingsDataStore.setHoldingsReorderHintShown(true)
         }
     }
 }

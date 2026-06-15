@@ -26,9 +26,12 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -65,6 +68,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CardDefaults
 import androidx.compose.ui.graphics.Color
+import com.rsps1008.stockify.BuildConfig
 import com.rsps1008.stockify.data.LimitState
 import com.rsps1008.stockify.data.RealtimeStockInfo
 import com.rsps1008.stockify.ui.theme.StockGain
@@ -106,6 +110,7 @@ fun HoldingsScreen(navController: NavController) {
     val homeDisplayMode by viewModel.homeDisplayMode.collectAsState()
     val holdingsOrder by viewModel.holdingsOrder.collectAsState()
     val realizedHoldingsOrder by viewModel.realizedHoldingsOrder.collectAsState()
+    val holdingsReorderHintShown by viewModel.holdingsReorderHintShown.collectAsState()
     val activeHoldings = uiState.holdings.filter { it.shares > 1e-6 }
     var orderedActiveHoldings by remember { mutableStateOf(emptyList<HoldingInfo>()) }
     val unrealizedCount = activeHoldings.size
@@ -122,6 +127,8 @@ fun HoldingsScreen(navController: NavController) {
         java.text.SimpleDateFormat("MM/dd HH:mm:ss", java.util.Locale.getDefault())
             .format(java.util.Date(it))
     } ?: "--:--"
+    val shouldShowReorderHint = !holdingsReorderHintShown &&
+            isVersionExactly(BuildConfig.VERSION_NAME, 1, 3, 6)
 
     LaunchedEffect(activeHoldings, holdingsOrder) {
         orderedActiveHoldings = activeHoldings.sortedByHoldingsOrder(holdingsOrder)
@@ -300,10 +307,77 @@ fun HoldingsScreen(navController: NavController) {
 //            }
         }
     }
+
+    if (shouldShowReorderHint) {
+        HoldingsReorderHintDialog(
+            onDismiss = viewModel::markHoldingsReorderHintShown
+        )
+    }
 }
 
 private fun HoldingInfo.holdingOrderKey(): String =
     "${stock.market}:${stock.code}"
+
+private fun isVersionExactly(versionName: String, major: Int, minor: Int, patch: Int): Boolean {
+    val parts = versionName
+        .substringBefore("-")
+        .split(".")
+        .map { it.toIntOrNull() ?: 0 }
+    return parts.getOrElse(0) { 0 } == major &&
+            parts.getOrElse(1) { 0 } == minor &&
+            parts.getOrElse(2) { 0 } == patch
+}
+
+@Composable
+private fun HoldingsReorderHintDialog(
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("🎉 新功能上線")
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "長按",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Column {
+                            Text("任一持股卡片", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                "拖曳到想要的位置後放開即可完成排序",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+                Text(
+                    text = "現在可以自由調整持股卡片順序！完成排序後，建議到「資料管理」備份排序設定，避免更換裝置或重新安裝後遺失。",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("知道了")
+            }
+        }
+    )
+}
 
 private fun List<HoldingInfo>.sortedByHoldingsOrder(order: List<String>): List<HoldingInfo> {
     val orderIndex = order.withIndex().associate { it.value to it.index }

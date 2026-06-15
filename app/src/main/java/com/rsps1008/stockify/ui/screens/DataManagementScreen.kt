@@ -77,6 +77,7 @@ fun DataManagementScreen() {
     val isLoading by viewModel.isLoading.collectAsState()
     val message by viewModel.message.collectAsState()
     val showImportConfirmDialog by viewModel.showImportConfirmDialog.collectAsState()
+    val showLocalCsvRestoreFeeHintDialog by viewModel.showLocalCsvRestoreFeeHintDialog.collectAsState()
     val googleSignInAccount by viewModel.googleSignInAccount.collectAsState()
     val showPdfPasswordDialog by viewModel.showPdfPasswordDialog.collectAsState()
     val pdfPassword by viewModel.pdfPassword.collectAsState()
@@ -225,6 +226,26 @@ fun DataManagementScreen() {
                     TextButton(onClick = viewModel::onImportCancel) {
                         Text("取消")
                     }
+                }
+            }
+        )
+    }
+
+    if (showLocalCsvRestoreFeeHintDialog) {
+        AlertDialog(
+            onDismissRequest = viewModel::onLocalCsvRestoreFeeHintCancel,
+            title = { Text("本地資料還原提醒") },
+            text = {
+                Text("手續費必須先在表格中計算完成。還原本地資料時，App 不會重新計算手續費、交易稅、支出或收入。")
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::onLocalCsvRestoreFeeHintConfirm) {
+                    Text("知道了，繼續")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::onLocalCsvRestoreFeeHintCancel) {
+                    Text("取消")
                 }
             }
         )

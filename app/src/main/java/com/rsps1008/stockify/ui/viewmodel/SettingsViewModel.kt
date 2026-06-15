@@ -70,6 +70,9 @@ class SettingsViewModel(
     private val _showImportConfirmDialog = MutableStateFlow(false)
     val showImportConfirmDialog: StateFlow<Boolean> = _showImportConfirmDialog.asStateFlow()
 
+    private val _showLocalCsvRestoreFeeHintDialog = MutableStateFlow(false)
+    val showLocalCsvRestoreFeeHintDialog: StateFlow<Boolean> = _showLocalCsvRestoreFeeHintDialog.asStateFlow()
+
     private var importUri: Uri? = null
     private var importData: ByteArray? = null
     private var pdfImportUri: Uri? = null
@@ -377,7 +380,26 @@ class SettingsViewModel(
 
     fun onImportRequest(uri: Uri) {
         importUri = uri
-        _showImportConfirmDialog.value = true
+        viewModelScope.launch {
+            if (settingsDataStore.localCsvRestoreFeeHintShownFlow.first()) {
+                _showImportConfirmDialog.value = true
+            } else {
+                _showLocalCsvRestoreFeeHintDialog.value = true
+            }
+        }
+    }
+
+    fun onLocalCsvRestoreFeeHintConfirm() {
+        viewModelScope.launch {
+            settingsDataStore.setLocalCsvRestoreFeeHintShown(true)
+            _showLocalCsvRestoreFeeHintDialog.value = false
+            _showImportConfirmDialog.value = true
+        }
+    }
+
+    fun onLocalCsvRestoreFeeHintCancel() {
+        _showLocalCsvRestoreFeeHintDialog.value = false
+        importUri = null
     }
 
     fun onImportConfirm(deleteOldData: Boolean) {
