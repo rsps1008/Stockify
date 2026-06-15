@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -61,6 +62,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+private val AddTransactionButtonShape: Shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -379,7 +381,10 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         Spacer(modifier = Modifier.height(16.dp))
         Text(text = "交易日期", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(4.dp))
-        Button(onClick = { showDatePicker = true }) {
+        Button(
+            onClick = { showDatePicker = true },
+            shape = AddTransactionButtonShape
+        ) {
             Text(text = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault()).format(Date(date)))
         }
         if (showDatePicker) {
@@ -404,12 +409,12 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         Text(text = "交易類型", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(4.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-            Button(onClick = { transactionType = "買進" }, enabled = transactionType != "買進") { Text("買進") }
-            Button(onClick = { transactionType = "賣出" }, enabled = transactionType != "賣出") { Text("賣出") }
-            Button(onClick = { transactionType = "配息" }, enabled = transactionType != "配息") { Text("配息") }
-            Button(onClick = { transactionType = "配股" }, enabled = transactionType != "配股") { Text("配股") }
-            Button(onClick = { transactionType = "減資" }, enabled = transactionType != "減資") { Text("減資") }
-            Button(onClick = { transactionType = "分割" }, enabled = transactionType != "分割") { Text("分割") }
+            Button(onClick = { transactionType = "買進" }, enabled = transactionType != "買進", shape = AddTransactionButtonShape) { Text("買進") }
+            Button(onClick = { transactionType = "賣出" }, enabled = transactionType != "賣出", shape = AddTransactionButtonShape) { Text("賣出") }
+            Button(onClick = { transactionType = "配息" }, enabled = transactionType != "配息", shape = AddTransactionButtonShape) { Text("配息") }
+            Button(onClick = { transactionType = "配股" }, enabled = transactionType != "配股", shape = AddTransactionButtonShape) { Text("配股") }
+            Button(onClick = { transactionType = "減資" }, enabled = transactionType != "減資", shape = AddTransactionButtonShape) { Text("減資") }
+            Button(onClick = { transactionType = "分割" }, enabled = transactionType != "分割", shape = AddTransactionButtonShape) { Text("分割") }
         }
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -616,7 +621,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         },
                         modifier = Modifier
                             .fillMaxWidth(0.6f) // 寬度 60%
-                            .align(Alignment.Center)     // ★ 置中
+                            .align(Alignment.Center),     // ★ 置中
+                        shape = AddTransactionButtonShape
                     ) {
                         Text("自動帶入最近一次配息")
                     }
@@ -701,7 +707,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             }
                         )
                     },
-                    modifier = Modifier.fillMaxWidth(0.6f).align(Alignment.CenterHorizontally)
+                    modifier = Modifier.fillMaxWidth(0.6f).align(Alignment.CenterHorizontally),
+                    shape = AddTransactionButtonShape
                 ) {
                     Text("自動帶入最近一次配股")
                 }
@@ -863,7 +870,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                 }
             },
             enabled = isFormValid,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            shape = AddTransactionButtonShape
         ) {
             val buttonText = if (transactionId == null) "新增交易" else "更新交易"
             Text(buttonText)
@@ -1033,7 +1041,8 @@ fun ShareInputWithStepper(
                 onClick = {
                     val current = value.toDoubleOrNull() ?: 0.0
                     onValueChange(formatShareInputValue(current + step))
-                }
+                },
+                shape = AddTransactionButtonShape
             ) {
                 Text("+")
             }
@@ -1043,7 +1052,8 @@ fun ShareInputWithStepper(
                     val current = value.toDoubleOrNull() ?: 0.0
                     val next = (current - step).coerceAtLeast(0.0)
                     onValueChange(formatShareInputValue(next))
-                }
+                },
+                shape = AddTransactionButtonShape
             ) {
                 Text("-")
             }

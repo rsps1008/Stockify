@@ -26,6 +26,7 @@ kotlinxSerialization = "1.6.3"
 ktor = "2.3.11"
 jsoup = "1.17.2"
 pdfboxAndroid = "2.0.27.0"
+reorderable = "3.1.0"
 
 # 測試
 junit = "4.13.2"
@@ -66,6 +67,7 @@ google-http-client-android = { group = "com.google.http-client", name = "google-
 guava = { group = "com.google.guava", name = "guava", version.ref = "guava" }
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 pdfbox-android = { group = "com.tom-roush", name = "pdfbox-android", version.ref = "pdfboxAndroid" }
+reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
 ktor-client-core = { group = "io.ktor", name = "ktor-client-core", version.ref = "ktor" }
 ktor-client-cio = { group = "io.ktor", name = "ktor-client-cio", version.ref = "ktor" }
 ktor-client-content-negotiation = { group = "io.ktor", name = "ktor-client-content-negotiation", version.ref = "ktor" }

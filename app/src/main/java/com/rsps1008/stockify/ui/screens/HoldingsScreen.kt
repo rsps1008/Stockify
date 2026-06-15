@@ -24,11 +24,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +52,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.rsps1008.stockify.R
 import com.rsps1008.stockify.StockifyApplication
 import com.rsps1008.stockify.ui.navigation.Screen
@@ -83,6 +86,8 @@ import com.rsps1008.stockify.data.HomeDisplayMode
 import com.rsps1008.stockify.data.formatHomeAmount
 import com.rsps1008.stockify.data.formatMarketAmount
 import com.rsps1008.stockify.data.formatShareCount
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 
 
 @OptIn(ExperimentalFoundationApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -99,10 +104,14 @@ fun HoldingsScreen(navController: NavController) {
     )
     val uiState by viewModel.uiState.collectAsState()
     val homeDisplayMode by viewModel.homeDisplayMode.collectAsState()
+    val holdingsOrder by viewModel.holdingsOrder.collectAsState()
+    val realizedHoldingsOrder by viewModel.realizedHoldingsOrder.collectAsState()
     val activeHoldings = uiState.holdings.filter { it.shares > 1e-6 }
+    var orderedActiveHoldings by remember { mutableStateOf(emptyList<HoldingInfo>()) }
     val unrealizedCount = activeHoldings.size
     val unrealizedPL = activeHoldings.sumOf { it.totalPL }
     val zeroHoldings = uiState.holdings.filter { kotlin.math.abs(it.shares) < 1e-6 }
+    var orderedZeroHoldings by remember { mutableStateOf(emptyList<HoldingInfo>()) }
     val clearedCount = zeroHoldings.size
     val realizedPL = zeroHoldings.sumOf { it.totalPL }
 
@@ -113,6 +122,38 @@ fun HoldingsScreen(navController: NavController) {
         java.text.SimpleDateFormat("MM/dd HH:mm:ss", java.util.Locale.getDefault())
             .format(java.util.Date(it))
     } ?: "--:--"
+
+    LaunchedEffect(activeHoldings, holdingsOrder) {
+        orderedActiveHoldings = activeHoldings.sortedByHoldingsOrder(holdingsOrder)
+    }
+
+    LaunchedEffect(zeroHoldings, realizedHoldingsOrder) {
+        orderedZeroHoldings = zeroHoldings.sortedByHoldingsOrder(realizedHoldingsOrder)
+    }
+
+    val lazyListState = rememberLazyListState()
+    val activeHoldingsStartIndex = 3
+    val reorderableLazyListState = rememberReorderableLazyListState(lazyListState) { from, to ->
+        val fromIndex = from.index - activeHoldingsStartIndex
+        val toIndex = to.index - activeHoldingsStartIndex
+        if (fromIndex in orderedActiveHoldings.indices && toIndex in orderedActiveHoldings.indices) {
+            orderedActiveHoldings = orderedActiveHoldings.toMutableList().apply {
+                add(toIndex, removeAt(fromIndex))
+            }
+            viewModel.setHoldingsOrder(orderedActiveHoldings.map { it.holdingOrderKey() })
+            return@rememberReorderableLazyListState
+        }
+
+        val zeroHoldingsStartIndex = activeHoldingsStartIndex + orderedActiveHoldings.size + 2
+        val zeroFromIndex = from.index - zeroHoldingsStartIndex
+        val zeroToIndex = to.index - zeroHoldingsStartIndex
+        if (zeroFromIndex in orderedZeroHoldings.indices && zeroToIndex in orderedZeroHoldings.indices) {
+            orderedZeroHoldings = orderedZeroHoldings.toMutableList().apply {
+                add(zeroToIndex, removeAt(zeroFromIndex))
+            }
+            viewModel.setRealizedHoldingsOrder(orderedZeroHoldings.map { it.holdingOrderKey() })
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
 
@@ -158,7 +199,8 @@ fun HoldingsScreen(navController: NavController) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 16.dp),
+            state = lazyListState
         ) {
             item {
                 // ★ 改成傳時間字串，不再把 viewModel 丟進去
@@ -183,8 +225,22 @@ fun HoldingsScreen(navController: NavController) {
                 HoldingsListHeaderSticky()
             }
 
-            items(activeHoldings) { holding ->
-                HoldingCard(holding, navController)
+            items(
+                items = orderedActiveHoldings,
+                key = { it.holdingOrderKey() }
+            ) { holding ->
+                ReorderableItem(
+                    state = reorderableLazyListState,
+                    key = holding.holdingOrderKey()
+                ) { isDragging ->
+                    HoldingCard(
+                        holding = holding,
+                        navController = navController,
+                        modifier = Modifier
+                            .zIndex(if (isDragging) 1f else 0f)
+                            .longPressDraggableHandle()
+                    )
+                }
             }
 
             if (zeroHoldings.isNotEmpty()) {
@@ -198,8 +254,22 @@ fun HoldingsScreen(navController: NavController) {
                 stickyHeader {
                     HoldingsListHeaderStickySells()
                 }
-                item {
-                    ZeroHoldingsSection(zeroHoldings, navController)
+                items(
+                    items = orderedZeroHoldings,
+                    key = { "realized-${it.holdingOrderKey()}" }
+                ) { holding ->
+                    ReorderableItem(
+                        state = reorderableLazyListState,
+                        key = "realized-${holding.holdingOrderKey()}"
+                    ) { isDragging ->
+                        ZeroHoldingCard(
+                            holding = holding,
+                            navController = navController,
+                            modifier = Modifier
+                                .zIndex(if (isDragging) 1f else 0f)
+                                .longPressDraggableHandle()
+                        )
+                    }
                 }
             }
             item {
@@ -230,6 +300,18 @@ fun HoldingsScreen(navController: NavController) {
 //            }
         }
     }
+}
+
+private fun HoldingInfo.holdingOrderKey(): String =
+    "${stock.market}:${stock.code}"
+
+private fun List<HoldingInfo>.sortedByHoldingsOrder(order: List<String>): List<HoldingInfo> {
+    val orderIndex = order.withIndex().associate { it.value to it.index }
+    return sortedWith(
+        compareBy<HoldingInfo> { orderIndex[it.holdingOrderKey()] ?: Int.MAX_VALUE }
+            .thenBy { it.stock.market }
+            .thenBy { it.stock.code }
+    )
 }
 
 @Composable
@@ -381,7 +463,7 @@ fun SummarySection(
 
                         val value = if (showMarketValue) uiState.marketValue else uiState.totalCost
                         Text(
-                            String.format("%,.0f", value),
+                            formatHomeAmount(value, currentMode),
                             style = MaterialTheme.typography.bodyLarge
                         )
                     }
@@ -458,13 +540,17 @@ fun AutoResizeNameText(
 }
 
 @Composable
-fun HoldingCard(holding: HoldingInfo, navController: NavController) {
+fun HoldingCard(
+    holding: HoldingInfo,
+    navController: NavController,
+    modifier: Modifier = Modifier
+) {
     val dailyChangeColor = if (holding.dailyChange >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
     val totalPlColor = if (holding.totalPL >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
     val dailyChangeSymbol = if (holding.dailyChange >= 0) "▴" else "▾"
 
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 2.5.dp)
             .clickable { navController.navigate(Screen.StockDetail.createRoute(holding.stock.code)) }
@@ -604,13 +690,14 @@ fun ZeroHoldingsSection(
 @Composable
 fun ZeroHoldingCard(
     holding: HoldingInfo,
-    navController: NavController
+    navController: NavController,
+    modifier: Modifier = Modifier
 ) {
     val dailyChangeColor = if (holding.dailyChange >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
     val totalPlColor = if (holding.totalPL >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
     val dailyChangeSymbol = if (holding.dailyChange >= 0) "▴" else "▾"
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 2.5.dp)
             .clickable { navController.navigate(Screen.StockDetail.createRoute(holding.stock.code)) }

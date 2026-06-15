@@ -30,12 +30,16 @@ class GoogleDriveService(context: Context, account: GoogleSignInAccount) {
         ).setApplicationName("Stockify").build()
     }
 
-    suspend fun uploadBackup(fileName: String, content: ByteArray): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun uploadBackup(
+        fileName: String,
+        content: ByteArray,
+        mimeType: String = "text/csv"
+    ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val fileMetadata = File().apply {
                 name = fileName
             }
-            val mediaContent = ByteArrayContent("text/csv", content)
+            val mediaContent = ByteArrayContent(mimeType, content)
 
             // Check for existing file in the appDataFolder
             val fileList = drive.files().list()
@@ -77,6 +81,21 @@ class GoogleDriveService(context: Context, account: GoogleSignInAccount) {
                 drive.files().get(fileId).executeMediaAndDownloadTo(outputStream)
                 Result.success(outputStream.toByteArray())
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getBackupModifiedTime(fileName: String): Result<Long?> = withContext(Dispatchers.IO) {
+        try {
+            val fileList = drive.files().list()
+                .setQ("name='$fileName' and 'appDataFolder' in parents")
+                .setSpaces("appDataFolder")
+                .setFields("files(id, name, modifiedTime)")
+                .execute()
+
+            Result.success(fileList.files.firstOrNull()?.modifiedTime?.value)
         } catch (e: Exception) {
             e.printStackTrace()
             Result.failure(e)

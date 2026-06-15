@@ -14,6 +14,7 @@ import com.google.api.services.drive.DriveScopes
 import com.rsps1008.stockify.data.CsvService
 import com.rsps1008.stockify.data.CsvTransaction
 import com.rsps1008.stockify.data.GoogleDriveService
+import com.rsps1008.stockify.data.HoldingsOrderBackupService
 import com.rsps1008.stockify.data.PdfHoldingImportService
 import com.rsps1008.stockify.data.PdfStockImportPreview
 import com.rsps1008.stockify.data.PdfStockImportPreviewItem
@@ -55,6 +56,7 @@ class SettingsViewModel(
     private val stockListRepository = StockListRepository(application)
     private val csvService = CsvService()
     private val pdfHoldingImportService = PdfHoldingImportService()
+    private val holdingsOrderBackupService = HoldingsOrderBackupService()
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -74,6 +76,12 @@ class SettingsViewModel(
 
     private val _googleSignInAccount = MutableStateFlow<GoogleSignInAccount?>(null)
     val googleSignInAccount: StateFlow<GoogleSignInAccount?> = _googleSignInAccount.asStateFlow()
+
+    private val _cloudDataBackupUpdatedAt = MutableStateFlow<Long?>(null)
+    val cloudDataBackupUpdatedAt: StateFlow<Long?> = _cloudDataBackupUpdatedAt.asStateFlow()
+
+    private val _cloudOrderBackupUpdatedAt = MutableStateFlow<Long?>(null)
+    val cloudOrderBackupUpdatedAt: StateFlow<Long?> = _cloudOrderBackupUpdatedAt.asStateFlow()
 
     private val _onSignOut = MutableSharedFlow<Unit>()
     val onSignOut = _onSignOut.asSharedFlow()
@@ -129,6 +137,9 @@ class SettingsViewModel(
     val skipPdfImportTutorial: StateFlow<Boolean> = settingsDataStore.skipPdfImportTutorialFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), false)
 
+    val holdingsOrder: StateFlow<List<String>> = settingsDataStore.holdingsOrderFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
     val taxRateNormalListedStock: StateFlow<Double> = settingsDataStore.taxRateNormalListedStockFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 0.003)
 
@@ -148,6 +159,7 @@ class SettingsViewModel(
 
         if (account != null && GoogleSignIn.hasPermissions(account, driveScope)) {
             _googleSignInAccount.value = account
+            refreshCloudBackupTimes(account)
         } else {
             // 如果登入成功但沒權限，可以發出一個訊息提示使用者要勾選權限
             _googleSignInAccount.value = null
@@ -168,6 +180,7 @@ class SettingsViewModel(
             if (account != null && GoogleSignIn.hasPermissions(account, driveScope)) {
                 _googleSignInAccount.value = account
                 _message.value = "Google 登入成功"
+                refreshCloudBackupTimes(account)
             } else {
                 _googleSignInAccount.value = null
                 _message.value = "Google 登入失敗，請授予 Google Drive 權限。"
@@ -185,7 +198,21 @@ class SettingsViewModel(
 
     fun onSignOutComplete() {
         _googleSignInAccount.value = null
+        _cloudDataBackupUpdatedAt.value = null
+        _cloudOrderBackupUpdatedAt.value = null
         _message.value = "Google 登出成功"
+    }
+
+    private fun refreshCloudBackupTimes(account: GoogleSignInAccount) {
+        viewModelScope.launch {
+            val driveService = GoogleDriveService(getApplication(), account)
+            _cloudDataBackupUpdatedAt.value = driveService
+                .getBackupModifiedTime("stockify_backup.csv")
+                .getOrNull()
+            _cloudOrderBackupUpdatedAt.value = driveService
+                .getBackupModifiedTime("stockify_holdings_order.json")
+                .getOrNull()
+        }
     }
 
     fun backupToGoogleDrive() {
@@ -202,9 +229,10 @@ class SettingsViewModel(
                     }
                     val driveService = GoogleDriveService(getApplication(), account)
                     driveService.uploadBackup("stockify_backup.csv", csvContent).getOrThrow()
-                    _message.value = "備份到 Google Drive 成功"
+                    refreshCloudBackupTimes(account)
+                    _message.value = "Google 雲端備份成功"
                 } catch (e: Exception) {
-                    _message.value = "備份到 Google Drive 失敗: ${e.message}"
+                    _message.value = "Google 雲端備份失敗: ${e.message}"
                 } finally {
                     _isLoading.value = false
                 }
@@ -224,7 +252,7 @@ class SettingsViewModel(
                     importData = csvContent
                     _showImportConfirmDialog.value = true
                 } catch (e: Exception) {
-                    _message.value = "從 Google Drive 還原失敗: ${e.message}"
+                    _message.value = "Google 雲端還原失敗: ${e.message}"
                 } finally {
                     _isLoading.value = false
                 }
@@ -244,11 +272,105 @@ class SettingsViewModel(
                         csvService.export(transactions, it)
                     }
                 }
-                _message.value = "匯出成功"
+                _message.value = "本地備份成功"
             } catch (e: Exception) {
-                _message.value = "匯出失敗: ${e.message}"
+                _message.value = "本地備份失敗: ${e.message}"
             } finally {
                 _isLoading.value = false
+            }
+        }
+    }
+
+    fun exportHoldingsOrder(uri: Uri) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val order = settingsDataStore.holdingsOrderFlow.first()
+                val realizedOrder = settingsDataStore.realizedHoldingsOrderFlow.first()
+                withContext(Dispatchers.IO) {
+                    getApplication<Application>().contentResolver.openOutputStream(uri)?.use {
+                        holdingsOrderBackupService.export(order, realizedOrder, it)
+                    }
+                }
+                _message.value = "持股排序本地備份成功"
+            } catch (e: Exception) {
+                _message.value = "持股排序本地備份失敗: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun importHoldingsOrder(uri: Uri) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val backup = withContext(Dispatchers.IO) {
+                    getApplication<Application>().contentResolver.openInputStream(uri)?.use {
+                        holdingsOrderBackupService.import(it)
+                    }
+                } ?: com.rsps1008.stockify.data.HoldingsOrderBackupData(emptyList(), emptyList())
+
+                settingsDataStore.setHoldingsOrder(backup.order)
+                settingsDataStore.setRealizedHoldingsOrder(backup.realizedOrder)
+                _message.value = "持股排序本地還原成功，共 ${backup.order.size + backup.realizedOrder.size} 筆"
+            } catch (e: Exception) {
+                _message.value = "持股排序本地還原失敗: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun backupHoldingsOrderToGoogleDrive() {
+        viewModelScope.launch {
+            _googleSignInAccount.value?.let { account ->
+                _isLoading.value = true
+                try {
+                    val order = settingsDataStore.holdingsOrderFlow.first()
+                    val realizedOrder = settingsDataStore.realizedHoldingsOrderFlow.first()
+                    val content = withContext(Dispatchers.IO) {
+                        holdingsOrderBackupService.exportToBytes(order, realizedOrder)
+                    }
+                    val driveService = GoogleDriveService(getApplication(), account)
+                    driveService.uploadBackup(
+                        fileName = "stockify_holdings_order.json",
+                        content = content,
+                        mimeType = "application/json"
+                    ).getOrThrow()
+                    refreshCloudBackupTimes(account)
+                    _message.value = "持股排序 Google 雲端備份成功"
+                } catch (e: Exception) {
+                    _message.value = "持股排序 Google 雲端備份失敗: ${e.message}"
+                } finally {
+                    _isLoading.value = false
+                }
+            } ?: run {
+                _message.value = "請先登入 Google 帳號"
+            }
+        }
+    }
+
+    fun restoreHoldingsOrderFromGoogleDrive() {
+        viewModelScope.launch {
+            _googleSignInAccount.value?.let { account ->
+                _isLoading.value = true
+                try {
+                    val driveService = GoogleDriveService(getApplication(), account)
+                    val content = driveService.restoreBackup("stockify_holdings_order.json").getOrThrow()
+                    val backup = withContext(Dispatchers.IO) {
+                        holdingsOrderBackupService.import(content)
+                    }
+                    settingsDataStore.setHoldingsOrder(backup.order)
+                    settingsDataStore.setRealizedHoldingsOrder(backup.realizedOrder)
+                    _message.value = "持股排序 Google 雲端還原成功，共 ${backup.order.size + backup.realizedOrder.size} 筆"
+                } catch (e: Exception) {
+                    _message.value = "持股排序 Google 雲端還原失敗: ${e.message}"
+                } finally {
+                    _isLoading.value = false
+                }
+            } ?: run {
+                _message.value = "請先登入 Google 帳號"
             }
         }
     }
@@ -424,7 +546,7 @@ class SettingsViewModel(
                 processImportedTransactions(csvTransactions)
                 
             } catch (e: Exception) {
-                _message.value = "匯入失敗: ${e.message}"
+                _message.value = "還原失敗: ${e.message}"
             } finally {
                 _isLoading.value = false
                 importUri = null
@@ -474,7 +596,7 @@ class SettingsViewModel(
                 processImportedTransactions(csvTransactions)
 
             } catch (e: Exception) {
-                _message.value = "匯入失敗: ${e.message}"
+                _message.value = "還原失敗: ${e.message}"
             } finally {
                 _isLoading.value = false
                 importData = null
@@ -504,7 +626,7 @@ class SettingsViewModel(
         }
 
         realtimeStockDataService.startFetching()
-        _message.value = "匯入成功，共 ${transactions.size} 筆紀錄"
+        _message.value = "還原成功，共 ${transactions.size} 筆紀錄"
     }
 
     fun setFetchInterval(interval: Int) {

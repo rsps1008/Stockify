@@ -134,6 +134,7 @@ dependencies {
     // Jsoup
     implementation(libs.jsoup)
     implementation(libs.pdfbox.android)
+    implementation(libs.reorderable)
 
     // DataStore
     implementation(libs.datastore.preferences)

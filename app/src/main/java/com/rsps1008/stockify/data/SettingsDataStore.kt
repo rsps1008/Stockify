@@ -41,6 +41,8 @@ class SettingsDataStore(val context: Context) {
     private val usdToTwdRateUpdatedAtKey = longPreferencesKey("usd_to_twd_rate_updated_at")
     private val homeDisplayModeKey = stringPreferencesKey("home_display_mode")
     private val finnhubApiKeyKey = stringPreferencesKey("finnhub_api_key")
+    private val holdingsOrderKey = stringPreferencesKey("holdings_order")
+    private val realizedHoldingsOrderKey = stringPreferencesKey("realized_holdings_order")
 
     val fetchIntervalFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
@@ -151,6 +153,22 @@ class SettingsDataStore(val context: Context) {
     val finnhubApiKeyFlow: Flow<String> = context.dataStore.data
         .map { preferences ->
             preferences[finnhubApiKeyKey] ?: ""
+        }
+
+    val holdingsOrderFlow: Flow<List<String>> = context.dataStore.data
+        .map { preferences ->
+            preferences[holdingsOrderKey]
+                ?.split("|")
+                ?.filter { it.isNotBlank() }
+                ?: emptyList()
+        }
+
+    val realizedHoldingsOrderFlow: Flow<List<String>> = context.dataStore.data
+        .map { preferences ->
+            preferences[realizedHoldingsOrderKey]
+                ?.split("|")
+                ?.filter { it.isNotBlank() }
+                ?: emptyList()
         }
 
     suspend fun setFetchInterval(interval: Int) {
@@ -283,6 +301,18 @@ class SettingsDataStore(val context: Context) {
     suspend fun setFinnhubApiKey(apiKey: String) {
         context.dataStore.edit {
             it[finnhubApiKeyKey] = apiKey.trim()
+        }
+    }
+
+    suspend fun setHoldingsOrder(order: List<String>) {
+        context.dataStore.edit {
+            it[holdingsOrderKey] = order.joinToString("|")
+        }
+    }
+
+    suspend fun setRealizedHoldingsOrder(order: List<String>) {
+        context.dataStore.edit {
+            it[realizedHoldingsOrderKey] = order.joinToString("|")
         }
     }
 }

@@ -159,6 +159,8 @@ Windows 指令範例：
 
 ## 9. 最近的重要變更
 
+- 首頁未實現與已實現持股清單都支援長按拖曳排序，使用 `Calvin-LL/Reorderable`；排序 key 使用 `market:code`，未實現保存到 `SettingsDataStore.holdingsOrderFlow`，已實現保存到 `SettingsDataStore.realizedHoldingsOrderFlow`，避免台股與美股代號衝突且兩個區塊排序互不影響。
+- 資料管理頁最上方有獨立 Google Drive 帳號卡，顯示目前帳號與雲端資料/排序資料最後備份時間；下方主區塊名稱為「持股資料管理」，備份/還原文案分成「雲端資料」與「本地資料」；另有獨立「持股排序管理」區塊，排序備份使用 `stockify_holdings_order*.json`，內容包含未實現 `order` 與已實現 `realizedOrder`，與交易 CSV / Google Drive 交易備份檔分開，Google Drive 固定檔名為 `stockify_holdings_order.json`，且「其他資料操作」維持在頁面最下面。
 - `RealtimeStockDataService` 的盤中更新已改成對齊下一個整數秒邊界。
 - 這是為了降低不同裝置之間的抓價時間漂移。
 - `UsdTwdExchangeRateService` 啟動時會先抓一次匯率，之後改為每 24 小時更新一次，不再每 6 小時刷新。
@@ -207,6 +209,7 @@ Windows 指令範例：
 - USD/TWD 匯率由 `open.er-api.com` 擷取，並快取到 `SettingsDataStore`，首頁與股票詳情共用同一份匯率。
 - 個股卡片與個股詳情頁維持原始幣別顯示；只有首頁最上方的總收益、總成本、市值等彙總值會把美股換算成台幣再加總。
 - 美股的損益、總損益與股息收入顯示要保留小數點後 2 位；新增/編輯美股配息總額、美股買賣收入/支出與 CSV 匯出金額也要保留到 cents，台股與台幣彙總仍維持整數顯示。
+- 首頁「持股市值/成本」也要走 `formatHomeAmount`，純美股模式顯示小數點後 2 位，台股與合併模式維持整數。
 
 ## 10. 美股擴充備註
 

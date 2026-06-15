@@ -38,6 +38,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
@@ -55,6 +56,8 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+private val SettingsButtonShape: Shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -348,7 +351,11 @@ fun SettingsScreen() {
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        Button(onClick = { viewModel.updateStockListFromTwse() }, enabled = !isLoading) {
+                                        Button(
+                                            onClick = { viewModel.updateStockListFromTwse() },
+                                            enabled = !isLoading,
+                                            shape = SettingsButtonShape
+                                        ) {
                                             Text("更新台股股票列表")
                                         }
                                         if (updatingStockListMarket == "TW") CircularProgressIndicator()
@@ -391,7 +398,8 @@ fun SettingsScreen() {
                                     ) {
                                         Button(
                                             onClick = { viewModel.updateStockListFromFinnhub() },
-                                            enabled = !isLoading && finnhubApiKey.isNotBlank()
+                                            enabled = !isLoading && finnhubApiKey.isNotBlank(),
+                                            shape = SettingsButtonShape
                                         ) {
                                             Text("更新美股股票列表")
                                         }
@@ -567,7 +575,8 @@ fun SettingsScreen() {
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
                             onClick = { showPrivacyPolicyDialog = true },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = SettingsButtonShape
                         ) {
                             Text("查看隱私政策")
                         }

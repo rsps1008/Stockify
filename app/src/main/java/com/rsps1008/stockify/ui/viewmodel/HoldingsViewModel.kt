@@ -31,6 +31,20 @@ class HoldingsViewModel(
             initialValue = com.rsps1008.stockify.data.HomeDisplayMode.COMBINED
         )
 
+    val holdingsOrder: StateFlow<List<String>> = settingsDataStore.holdingsOrderFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000L),
+            initialValue = emptyList()
+        )
+
+    val realizedHoldingsOrder: StateFlow<List<String>> = settingsDataStore.realizedHoldingsOrderFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000L),
+            initialValue = emptyList()
+        )
+
     fun setHomeDisplayMode(mode: String) {
         viewModelScope.launch {
             settingsDataStore.setHomeDisplayMode(mode)
@@ -40,6 +54,18 @@ class HoldingsViewModel(
     fun refreshAllHoldingsQuotes() {
         viewModelScope.launch {
             realtimeStockDataService.refreshAllHeldStockInfo()
+        }
+    }
+
+    fun setHoldingsOrder(order: List<String>) {
+        viewModelScope.launch {
+            settingsDataStore.setHoldingsOrder(order)
+        }
+    }
+
+    fun setRealizedHoldingsOrder(order: List<String>) {
+        viewModelScope.launch {
+            settingsDataStore.setRealizedHoldingsOrder(order)
         }
     }
 }
