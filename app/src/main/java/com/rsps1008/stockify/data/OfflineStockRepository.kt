@@ -6,7 +6,8 @@ import com.rsps1008.stockify.ui.screens.TransactionUiState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
+import kotlin.math.floor
+import kotlin.math.round
 
 class OfflineStockRepository(
     private val stockDao: StockDao,
@@ -166,12 +167,21 @@ class OfflineStockRepository(
         var totalSellIncome = 0.0
         var sellSharesTotal = 0.0
         var sellAmountBeforeFee = 0.0   // 成交金額（未扣費）
-        var sellIncomeTotal = 0.0
+        var totalSellFee = 0.0
+        var totalSellTax = 0.0
         var totalDividendIncome = 0.0
         var buySharesTotal = 0.0
         var buyCostTotal = 0.0
 
         val adjustedTransactions = adjustTransactionsForSplits(transactions)
+
+        fun roundByMarket(value: Double) : Double {
+            if (StockMarket.isTw(stock.market)) {
+                return round(value)
+            } else {
+                return round(value * 100) / 100.0
+            }
+        }
 
         for (it in adjustedTransactions) {
             when (it.type) {
@@ -179,13 +189,15 @@ class OfflineStockRepository(
                     shares += it.buyShares
                     totalBuyExpense += it.expense
                     buySharesTotal += it.buyShares
-                    buyCostTotal += it.expense
+                    buyCostTotal += roundByMarket(it.buyShares * it.buyPrice)
                 }
                 "賣出" -> {
                     shares -= it.sellShares
                     sellSharesTotal += it.sellShares
-                    sellAmountBeforeFee += it.sellPrice * it.sellShares
+                    sellAmountBeforeFee += roundByMarket(it.sellPrice * it.sellShares)
                     totalSellIncome += it.income
+                    totalSellFee += it.fee
+                    totalSellTax += it.tax
                 }
                 "配股" -> {
                     shares += it.dividendShares
@@ -202,20 +214,20 @@ class OfflineStockRepository(
 
         if (shares < 0) shares = 0.0
         val sellAverage = if (sellSharesTotal > 0) sellAmountBeforeFee / sellSharesTotal else 0.0
-        val costBasis = totalBuyExpense - totalSellIncome - totalDividendIncome
-        val averageCost = if (shares > 0) costBasis / shares else 0.0
+        val costBasis = totalBuyExpense + totalSellFee + totalSellTax
+        val averageCost = if (buySharesTotal > 0) costBasis / buySharesTotal else 0.0
         val buyAverage = if (buySharesTotal > 0) buyCostTotal / buySharesTotal else 0.0
-        val marketValue = shares * currentPrice
-        var totalPL = marketValue - costBasis
+        val marketValue = roundByMarket(shares * currentPrice)
+        var totalPL = sellAmountBeforeFee + totalDividendIncome + marketValue - costBasis
         val totalPLPercentage = if (costBasis > 0) (totalPL / costBasis) * 100 else 0.0
 
-        if (preDeductSellFees && !StockMarket.isUs(stock.market)) {
+        if (preDeductSellFees && !StockMarket.isUs(stock.market) && marketValue > 0.0) {
             val feeDiscount = settingsDataStore.feeDiscountFlow.first()
             val minFeeRegular = settingsDataStore.minFeeRegularFlow.first()
 
-            val sellFee = (marketValue * 0.001425 * feeDiscount).coerceAtLeast(minFeeRegular.toDouble())
+            val sellFee = roundByMarket(marketValue * 0.001425 * feeDiscount).coerceAtLeast(minFeeRegular.toDouble())
             val taxRate = if (stock.stockType == "ETF") 0.001 else 0.003
-            val sellTax = marketValue * taxRate
+            val sellTax = floor(marketValue * taxRate)
             totalPL -= (sellFee + sellTax)
         }
 

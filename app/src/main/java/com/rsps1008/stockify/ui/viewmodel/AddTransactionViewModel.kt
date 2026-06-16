@@ -20,7 +20,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import kotlin.math.floor
 import kotlin.math.max
+import kotlin.math.round
 import kotlin.math.roundToInt
 
 class AddTransactionViewModel(
@@ -163,8 +165,8 @@ class AddTransactionViewModel(
         }
 
         val (discount, minFeeRegular, minFeeOddLot) = feeSettings.value
-        val transactionValue = price * shares
-        val calculatedFee = transactionValue * 0.001425 * discount
+        val transactionValue = round(price * shares)
+        val calculatedFee = round(transactionValue * 0.001425 * discount)
         val minFee = if (shares % 1000 == 0.0) minFeeRegular else minFeeOddLot
         val finalFee = max(calculatedFee, minFee.toDouble()).roundToInt().toDouble()
 
@@ -190,9 +192,9 @@ class AddTransactionViewModel(
         }
 
         val (discount, minFeeRegular, minFeeOddLot) = feeSettings.value
-        val transactionValue = price * shares
+        val transactionValue = round(price * shares)
 
-        val calculatedFee = transactionValue * 0.001425 * discount
+        val calculatedFee = round(transactionValue * 0.001425 * discount)
         val minFee = if (shares % 1000 == 0.0) minFeeRegular else minFeeOddLot
         val autoFee = max(calculatedFee, minFee.toDouble()).roundToInt().toDouble()
         _fee.value = autoFee
@@ -205,7 +207,7 @@ class AddTransactionViewModel(
         }
 
         _taxRate.value = taxRateValue
-        val finalTax = (transactionValue * taxRateValue).roundToInt().toDouble()
+        val finalTax = floor(transactionValue * taxRateValue)
         _tax.value = finalTax
 
         _income.value = (transactionValue - _fee.value - finalTax).roundToInt().toDouble()
