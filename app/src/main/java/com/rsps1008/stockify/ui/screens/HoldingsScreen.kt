@@ -1,6 +1,5 @@
 package com.rsps1008.stockify.ui.screens
 
-import android.util.Log
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
@@ -14,7 +13,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -66,27 +64,22 @@ import kotlin.math.abs
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.CardDefaults
 import androidx.compose.ui.graphics.Color
 import com.rsps1008.stockify.BuildConfig
 import com.rsps1008.stockify.data.LimitState
-import com.rsps1008.stockify.data.RealtimeStockInfo
 import com.rsps1008.stockify.ui.theme.StockGain
 import com.rsps1008.stockify.ui.theme.StockLoss
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.PlainTooltip
-import androidx.compose.material3.TooltipBox
-import androidx.compose.material3.TooltipDefaults
-import androidx.compose.material3.rememberTooltipState
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import android.widget.Toast
+import androidx.compose.runtime.State
 import com.rsps1008.stockify.data.HomeDisplayMode
+import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.formatHomeAmount
 import com.rsps1008.stockify.data.formatMarketAmount
 import com.rsps1008.stockify.data.formatShareCount
@@ -114,11 +107,12 @@ fun HoldingsScreen(navController: NavController) {
     val activeHoldings = uiState.holdings.filter { it.shares > 1e-6 }
     var orderedActiveHoldings by remember { mutableStateOf(emptyList<HoldingInfo>()) }
     val unrealizedCount = activeHoldings.size
-    val unrealizedPL = activeHoldings.sumOf { it.totalPL }
+    val usdToTwdRate = application.exchangeRateService.usdToTwdRate.collectAsState()
+    val unrealizedPL = sumPL(activeHoldings, homeDisplayMode, usdToTwdRate)
     val zeroHoldings = uiState.holdings.filter { kotlin.math.abs(it.shares) < 1e-6 }
     var orderedZeroHoldings by remember { mutableStateOf(emptyList<HoldingInfo>()) }
     val clearedCount = zeroHoldings.size
-    val realizedPL = zeroHoldings.sumOf { it.totalPL }
+    val realizedPL = sumPL(zeroHoldings, homeDisplayMode, usdToTwdRate)
 
     // ★ 從 application 的 realtimeStockDataService 取得即時股價 Map
     val realtimeMap by application.realtimeStockDataService.realtimeStockInfo.collectAsState()
@@ -326,6 +320,16 @@ private fun isVersionExactly(versionName: String, major: Int, minor: Int, patch:
     return parts.getOrElse(0) { 0 } == major &&
             parts.getOrElse(1) { 0 } == minor &&
             parts.getOrElse(2) { 0 } == patch
+}
+
+private fun sumPL(holdings: List<HoldingInfo>, homeDisplayMode: String, usdToTwdRate: State<Double>): Double {
+    if (homeDisplayMode != HomeDisplayMode.COMBINED) {
+        return holdings.sumOf { it.totalPL }
+    }
+    return holdings.sumOf {
+        val rate = if (StockMarket.isUs(it.stock.market)) usdToTwdRate.value else 1.0
+        it.totalPL * rate
+    }
 }
 
 @Composable
