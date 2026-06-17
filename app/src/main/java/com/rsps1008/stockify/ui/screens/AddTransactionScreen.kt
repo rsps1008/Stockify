@@ -464,7 +464,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                                     newFee = newFee.toDoubleOrNull() ?: 0.0,
                                     price = price.toDoubleOrNull() ?: 0.0,
                                     shares = shares.toDoubleOrNull() ?: 0.0,
-                                    type = "買進"
+                                    type = "買進",
+                                    market = selectedStock?.market ?: "TW"
                                 )
                             },
                             style = MaterialTheme.typography.bodyLarge
@@ -554,7 +555,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                                     newFee = newFee.toDoubleOrNull() ?: 0.0,
                                     price = price.toDoubleOrNull() ?: 0.0,
                                     shares = shares.toDoubleOrNull() ?: 0.0,
-                                    type = "賣出"
+                                    type = "賣出",
+                                    market = selectedStock?.market ?: "TW"
                                 )
                             },
                             style = MaterialTheme.typography.bodyLarge
@@ -570,7 +572,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                                 viewModel.updateTax(
                                     newTax = newTax.toDoubleOrNull() ?: 0.0,
                                     price = price.toDoubleOrNull() ?: 0.0,
-                                    shares = shares.toDoubleOrNull() ?: 0.0
+                                    shares = shares.toDoubleOrNull() ?: 0.0,
+                                    market = selectedStock?.market ?: "TW"
                                 )
                             },
                             style = MaterialTheme.typography.bodyLarge

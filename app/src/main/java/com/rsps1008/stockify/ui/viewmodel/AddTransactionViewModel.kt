@@ -424,27 +424,28 @@ class AddTransactionViewModel(
         resetCalculatedValues()
     }
 
-    fun updateFee(newFee: Double, price: Double, shares: Double, type: String, tax: Double = _tax.value) {
+    fun updateFee(newFee: Double, price: Double, shares: Double, type: String, tax: Double = _tax.value, market: String) {
         _fee.value = newFee
+        var transactionValue = price * shares
+        if (StockMarket.isTw(market)) transactionValue = transactionValue.roundToInt().toDouble()
 
         when (type) {
             "買進" -> {
-                val transactionValue = price * shares
-                _expense.value = (transactionValue + newFee).roundToInt().toDouble()
+                _expense.value = transactionValue + newFee
             }
 
             "賣出" -> {
-                val transactionValue = price * shares
-                _income.value = (transactionValue - newFee - tax).roundToInt().toDouble()
+                _income.value = transactionValue - newFee - tax
             }
         }
     }
 
-    fun updateTax(newTax: Double, price: Double, shares: Double, fee: Double = _fee.value) {
+    fun updateTax(newTax: Double, price: Double, shares: Double, fee: Double = _fee.value, market: String) {
         _tax.value = newTax
 
-        val transactionValue = price * shares
-        _income.value = (transactionValue - fee - newTax).roundToInt().toDouble()
+        var transactionValue = price * shares
+        if (StockMarket.isTw(market)) transactionValue = transactionValue.roundToInt().toDouble()
+        _income.value = transactionValue - fee - newTax
     }
 
     private fun roundCurrency(value: Double): Double {
