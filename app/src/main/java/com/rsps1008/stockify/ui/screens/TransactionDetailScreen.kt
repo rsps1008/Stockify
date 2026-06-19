@@ -124,8 +124,8 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                     "配息" -> {
                         DetailRow(label = "每股股息", value = String.format("%,.4f", transaction.cashDividend))
                         DetailRow(label = "除息股數", value = formatShareCount(transaction.exDividendShares))
-                        DetailRow(label = "股息收入", value = formatMarketAmount(transaction.income, uiState.market), valueColor = StockifyAppTheme.stockColors.gain)
                         DetailRow(label = "手續費", value = formatMarketAmount(transaction.fee, uiState.market))
+                        DetailRow(label = "股息收入", value = formatMarketAmount(transaction.income, uiState.market), valueColor = StockifyAppTheme.stockColors.gain)
                     }
                     "配股" -> {
                         DetailRow(label = "股票股利", value = String.format("%,.4f", transaction.stockDividend))

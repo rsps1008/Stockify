@@ -239,7 +239,7 @@ class AddTransactionViewModel(
 
         val finalIncome = when (type) {
             "賣出" -> _income.value
-            "配息" -> price - finalFee
+            "配息" -> (price - finalFee).coerceAtLeast(0.0)
             "減資" -> cashReturned
             else -> 0.0
         }

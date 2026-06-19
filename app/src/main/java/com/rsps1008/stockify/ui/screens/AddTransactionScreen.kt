@@ -218,7 +218,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                 "配息" -> {
                     cashDividend = if (it.cashDividend != 0.0) it.cashDividend.toString() else ""
                     exDividendShares = if (it.exDividendShares != 0.0) formatShareInputValue(it.exDividendShares) else ""
-                    price = formatDividendAmountInput(it.income, stock?.market)
+                    price = formatDividendAmountInput(it.income + it.fee, stock?.market)
                     dividendFee = it.fee.toString()
                 }
                 "配股" -> {
@@ -274,10 +274,9 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         if (transactionType == "配股") {
             val rate = stockDividendRate.toDoubleOrNull()
             val baseShares = exRightsShares.toDoubleOrNull()
-            // Assuming Taiwan stock market rules: rate is NTD per 10 NTD par value share.
-            // So a 1 NTD stock dividend means 100 shares for every 1000 shares held.
+            // `rate` is treated as stock dividend shares per share.
             if (rate != null && baseShares != null) {
-                shares = formatShareInputValue(baseShares / 10 * rate)
+                shares = formatShareInputValue(baseShares * rate)
             }
         }
     }
@@ -672,19 +671,28 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                     )
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        LabeledOutlinedTextField(
+                        EditableTextStyled(
                             label = "配息手續費 (點擊數字修改)",
-                            value = dividendFee,
+                            value = formatFeeDisplayValue(dividendFee.toDoubleOrNull() ?: 0.0, selectedStock?.market),
+                            editValue = dividendFee,
                             onValueChange = { dividendFee = it },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            style = MaterialTheme.typography.bodyLarge,
+                            keyboardType = KeyboardType.Decimal
                         )
                         androidx.compose.material3.HorizontalDivider()
                         Spacer(modifier = Modifier.height(8.dp))
-                        LabeledOutlinedTextField(
-                            label = "股息總額",
-                            value = price,
-                            onValueChange = { price = it },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                        val grossDividendAmount = price.toDoubleOrNull() ?: 0.0
+                        val dividendFeeAmount = dividendFee.toDoubleOrNull() ?: 0.0
+                        val netDividendAmount = (grossDividendAmount - dividendFeeAmount).coerceAtLeast(0.0)
+                        Text("股息總額", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            text = if (grossDividendAmount > 0.0) {
+                                formatDividendAmountInput(netDividendAmount, selectedStock?.market)
+                            } else {
+                                "-"
+                            },
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(bottom = 12.dp)
                         )
                     }
                 }
@@ -757,13 +765,15 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                     )
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        LabeledOutlinedTextField(
-                            label = "配發股數",
-                            value = shares,
-                            onValueChange = { shares = it },
-                            keyboardOptions = KeyboardOptions(
-                                keyboardType = if (isUsStock) KeyboardType.Decimal else KeyboardType.Number
-                            )
+                        Text(
+                            text = "配發股數",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if (shares.isBlank()) "-" else formatShareInputValue(shares.toDoubleOrNull() ?: 0.0),
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(bottom = 12.dp)
                         )
                     }
                 }
@@ -1090,8 +1100,10 @@ private fun filterShareInput(input: String, allowDecimal: Boolean): String {
 fun EditableTextStyled(
     label: String,
     value: String,
+    editValue: String = value,
     onValueChange: (String) -> Unit,
-    style: androidx.compose.ui.text.TextStyle
+    style: androidx.compose.ui.text.TextStyle,
+    keyboardType: KeyboardType = KeyboardType.Number
 ) {
     var editing by remember { mutableStateOf(false) }
     var tempText by remember { mutableStateOf(value) }
@@ -1107,7 +1119,7 @@ fun EditableTextStyled(
                 modifier = Modifier
                     .padding(bottom = 12.dp)
                     .clickable {
-                        tempText = value
+                        tempText = editValue
                         editing = true
                     }
             )
@@ -1116,7 +1128,7 @@ fun EditableTextStyled(
                 value = tempText,
                 onValueChange = { tempText = it },
                 textStyle = style,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 trailingIcon = {
