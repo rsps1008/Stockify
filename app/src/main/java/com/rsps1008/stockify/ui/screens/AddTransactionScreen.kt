@@ -107,6 +107,15 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     var cashDividend by remember { mutableStateOf("") }
     var exDividendShares by remember { mutableStateOf("") }
 
+    val stockForDividendFee = allStocks.find { it.code == stockCode }
+    val defaultDividendFeeForStock = remember(stockForDividendFee?.market, defaultDividendFee) {
+        if (StockMarket.isUs(stockForDividendFee?.market) || StockMarket.isUs(StockMarket.inferFromCode(stockCode))) {
+            0
+        } else {
+            defaultDividendFee
+        }
+    }
+
     // Optional fields for stock dividend calculation
     var stockDividendRate by remember { mutableStateOf("") }
     var exRightsShares by remember { mutableStateOf("") }
@@ -231,7 +240,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     }
 
     // Reset fields when transaction type changes for a new transaction
-    LaunchedEffect(transactionType, defaultDividendFee) {
+    LaunchedEffect(transactionType, defaultDividendFeeForStock) {
         if (transactionId == null) { // Only for new transactions
             price = ""
             shares = ""
@@ -239,7 +248,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             exDividendShares = ""
             stockDividendRate = ""
             exRightsShares = ""
-            dividendFee = defaultDividendFee.toString()
+            dividendFee = defaultDividendFeeForStock.toString()
             capitalReductionRatio = ""
             sharesBeforeReduction = ""
             cashReturned = ""

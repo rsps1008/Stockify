@@ -1039,15 +1039,15 @@ fun HomeModeCyclePill(
 
             Text(
                 text = "TW",
-                fontSize = 8.sp,
-                lineHeight = 8.sp,
+                fontSize = 10.sp,
+                lineHeight = 10.sp,
                 fontWeight = if (twSelected) FontWeight.SemiBold else FontWeight.Normal,
                 color = if (twSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
                 text = "US",
-                fontSize = 8.sp,
-                lineHeight = 8.sp,
+                fontSize = 10.sp,
+                lineHeight = 10.sp,
                 fontWeight = if (usSelected) FontWeight.SemiBold else FontWeight.Normal,
                 color = if (usSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
             )

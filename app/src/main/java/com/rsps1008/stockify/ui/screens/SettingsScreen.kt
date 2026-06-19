@@ -437,7 +437,7 @@ fun SettingsScreen() {
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("手續費設定", style = MaterialTheme.typography.titleLarge)
+                        Text("台股手續費設定", style = MaterialTheme.typography.titleLarge)
                         Spacer(modifier = Modifier.height(16.dp))
 
                         var feeDiscountText by remember { mutableStateOf(feeDiscount.toString()) }
@@ -504,7 +504,7 @@ fun SettingsScreen() {
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("交易稅率設定", style = MaterialTheme.typography.titleLarge)
+                        Text("台股交易稅率設定", style = MaterialTheme.typography.titleLarge)
                         Spacer(modifier = Modifier.height(16.dp))
 
                         var taxRateNormalListedStockText by remember { mutableStateOf(taxRateNormalListedStock.toString()) }
