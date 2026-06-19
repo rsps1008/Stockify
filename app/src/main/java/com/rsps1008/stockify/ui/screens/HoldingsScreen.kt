@@ -127,7 +127,7 @@ fun HoldingsScreen(navController: NavController) {
             .format(java.util.Date(it))
     } ?: "--:--"
     val shouldShowReorderHint = !holdingsReorderHintShown &&
-            isVersionExactly(BuildConfig.VERSION_NAME, 1, 3, 6)
+            isVersionBefore(BuildConfig.VERSION_NAME, 1, 4, 0)
 
     LaunchedEffect(activeHoldings, holdingsOrder) {
         orderedActiveHoldings = activeHoldings.sortedByHoldingsOrder(holdingsOrder)
@@ -316,14 +316,19 @@ fun HoldingsScreen(navController: NavController) {
 private fun HoldingInfo.holdingOrderKey(): String =
     "${stock.market}:${stock.code}"
 
-private fun isVersionExactly(versionName: String, major: Int, minor: Int, patch: Int): Boolean {
+private fun isVersionBefore(versionName: String, major: Int, minor: Int, patch: Int): Boolean {
     val parts = versionName
         .substringBefore("-")
         .split(".")
         .map { it.toIntOrNull() ?: 0 }
-    return parts.getOrElse(0) { 0 } == major &&
-            parts.getOrElse(1) { 0 } == minor &&
-            parts.getOrElse(2) { 0 } == patch
+    val currentMajor = parts.getOrElse(0) { 0 }
+    val currentMinor = parts.getOrElse(1) { 0 }
+    val currentPatch = parts.getOrElse(2) { 0 }
+    return when {
+        currentMajor != major -> currentMajor < major
+        currentMinor != minor -> currentMinor < minor
+        else -> currentPatch < patch
+    }
 }
 
 @Composable

@@ -118,6 +118,7 @@
 - Compose 風格請盡量維持既有 Material 3 介面與目前版面結構
 - 設定頁最底部要顯示目前 App 版本，直接讀 `BuildConfig.VERSION_NAME` 即可。
 - `app` module 需要維持 `buildFeatures.buildConfig = true`，否則設定頁無法直接讀 `BuildConfig.VERSION_NAME`。
+- 目前 AGP 已升到 `8.11.1`，而 `gradle/wrapper/gradle-wrapper.properties` 已是 `8.13`；若之後再升 AGP，先確認官方對應的最低 Gradle 版本。
 - 持股、交易、資料管理、設定這幾個底部分頁的頂部 logo/header 盡量統一成相同的外層 `16.dp` padding 與 `6.dp` 標題間距，避免頁面切換時看起來上下沒有對齊。
 - 設定頁的「股票資料來源」與「股票列表更新」要分成兩個獨立區塊，前者只放爬蟲/即時資料來源與相關刷新偏好，後者只放台股與美股股票列表更新操作。
 - 設定頁的台股手續費與台股交易稅率要包在同一個「費稅設定」專區裡，裡面再放兩張子卡片，避免費用與稅率分散成兩個孤立區塊。
@@ -162,7 +163,7 @@ Windows 指令範例：
 ## 9. 最近的重要變更
 
 - 首頁未實現與已實現持股清單都支援長按拖曳排序，使用 `Calvin-LL/Reorderable`；排序 key 使用 `market:code`，未實現保存到 `SettingsDataStore.holdingsOrderFlow`，已實現保存到 `SettingsDataStore.realizedHoldingsOrderFlow`，避免台股與美股代號衝突且兩個區塊排序互不影響。
-- 只有版本剛好為 `1.3.6` 時，首次進入首頁且 `SettingsDataStore.holdingsReorderHintShownFlow` 尚未標記，才會顯示一次「長按卡片可拖曳排序」提示；`1.3.7` 以上不再顯示這個提示。
+- 只要版本仍低於 `1.4.0`，首次進入首頁且 `SettingsDataStore.holdingsReorderHintShownFlow` 尚未標記，就會顯示一次「長按卡片可拖曳排序」提示；達到 `1.4.0` 以上就不再顯示。
 - 資料管理頁最上方有獨立 Google Drive 帳號卡，顯示目前帳號與雲端資料/排序資料最後備份時間；下方主區塊名稱為「持股資料管理」，備份/還原文案分成「雲端資料」與「本地資料」；另有獨立「持股排序管理」區塊，排序備份使用 `stockify_holdings_order*.json`，內容包含未實現 `order` 與已實現 `realizedOrder`，與交易 CSV / Google Drive 交易備份檔分開，Google Drive 固定檔名為 `stockify_holdings_order.json`，且「其他資料操作」維持在頁面最下面。
 - 第一次還原本地 CSV 前，資料管理頁會顯示一次手續費提醒：CSV 內的手續費、交易稅、支出與收入必須已在表格中算好，App 還原時不會重新計算；提示狀態存在 `SettingsDataStore.localCsvRestoreFeeHintShownFlow`，不做版本判斷，雲端還原不顯示這個提示。
 - `RealtimeStockDataService` 的盤中更新已改成對齊下一個整數秒邊界。
