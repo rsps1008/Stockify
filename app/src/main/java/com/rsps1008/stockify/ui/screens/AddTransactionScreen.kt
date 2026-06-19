@@ -89,7 +89,11 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     val income by viewModel.income.collectAsState()
     val feeSettings by viewModel.feeSettings.collectAsState()
     val defaultDividendFee by viewModel.defaultDividendFee.collectAsState()
+    val calculationRoundingMode by viewModel.calculationRoundingMode.collectAsState()
     var dividendFee by remember { mutableStateOf("") }
+    var dividendIncome by remember { mutableStateOf("") }
+    var isDividendIncomeManuallyEdited by remember { mutableStateOf(false) }
+    var isDividendSharesManuallyEdited by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
     var stockName by remember { mutableStateOf("") }
@@ -149,6 +153,10 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         }
     }
 
+    val selectedStock = allStocks.find { it.code == stockCode }
+    val isUsStock = StockMarket.isUs(selectedStock?.market.orEmpty())
+    val shareStep = if (isUsStock) 1.0 else 1000.0
+
     LaunchedEffect(prefillStockCode, allStocks) {
         if (transactionId == null && prefillStockCode != null) {
             val stock = allStocks.find { it.code == prefillStockCode }
@@ -160,7 +168,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         }
     }
 
-    LaunchedEffect(price, shares, transactionType, stockCode, feeSettings) {
+    LaunchedEffect(price, shares, transactionType, stockCode, feeSettings, calculationRoundingMode) {
         when (transactionType) {
             "買進" -> {
                 val stock = allStocks.find { it.code == stockCode }
@@ -219,12 +227,15 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                     cashDividend = if (it.cashDividend != 0.0) it.cashDividend.toString() else ""
                     exDividendShares = if (it.exDividendShares != 0.0) formatShareInputValue(it.exDividendShares) else ""
                     price = formatDividendAmountInput(it.income + it.fee, stock?.market)
+                    dividendIncome = formatDividendAmountInput(it.income, stock?.market)
+                    isDividendIncomeManuallyEdited = true
                     dividendFee = it.fee.toString()
                 }
                 "配股" -> {
                     stockDividendRate = if (it.stockDividend != 0.0) it.stockDividend.toString() else ""
                     exRightsShares = if (it.exRightsShares != 0.0) formatShareInputValue(it.exRightsShares) else ""
                     shares = formatShareInputValue(it.dividendShares)
+                    isDividendSharesManuallyEdited = true
                 }
                 "減資" -> {
                     capitalReductionRatio = it.capitalReductionRatio.toString()
@@ -249,6 +260,9 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             stockDividendRate = ""
             exRightsShares = ""
             dividendFee = defaultDividendFeeForStock.toString()
+            dividendIncome = ""
+            isDividendIncomeManuallyEdited = false
+            isDividendSharesManuallyEdited = false
             capitalReductionRatio = ""
             sharesBeforeReduction = ""
             cashReturned = ""
@@ -258,25 +272,37 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     }
 
     // Auto-calculate total dividend amount
-    LaunchedEffect(cashDividend, exDividendShares) {
+    LaunchedEffect(cashDividend, exDividendShares, dividendFee, selectedStock?.market, calculationRoundingMode) {
         if (transactionType == "配息") {
             val pps = cashDividend.toDoubleOrNull()
             val s = exDividendShares.toDoubleOrNull()
             if (pps != null && s != null) {
                 val stock = allStocks.find { it.code == stockCode }
-                price = formatDividendAmountInput(pps * s, stock?.market)
+                val grossAmount = viewModel.roundCalculatedCurrency(pps * s, stock?.market)
+                price = formatDividendAmountInput(grossAmount, stock?.market)
+                if (!isDividendIncomeManuallyEdited) {
+                    val feeAmount = dividendFee.toDoubleOrNull() ?: 0.0
+                    val netAmount = viewModel.roundCalculatedCurrency(
+                        (grossAmount - feeAmount).coerceAtLeast(0.0),
+                        stock?.market
+                    )
+                    dividendIncome = formatDividendAmountInput(netAmount, stock?.market)
+                }
             }
         }
     }
 
     // Auto-calculate total stock dividend shares
-    LaunchedEffect(stockDividendRate, exRightsShares) {
-        if (transactionType == "配股") {
+    LaunchedEffect(stockDividendRate, exRightsShares, calculationRoundingMode, isUsStock) {
+        if (transactionType == "配股" && !isDividendSharesManuallyEdited) {
             val rate = stockDividendRate.toDoubleOrNull()
             val baseShares = exRightsShares.toDoubleOrNull()
             // `rate` is treated as stock dividend shares per share.
             if (rate != null && baseShares != null) {
-                shares = formatShareInputValue(baseShares * rate)
+                val calculatedShares = baseShares * rate
+                shares = formatShareInputValue(
+                    if (isUsStock) calculatedShares else viewModel.roundCalculatedAmount(calculatedShares)
+                )
             }
         }
     }
@@ -290,7 +316,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         "配息" ->
             stockName.isNotBlank() &&
             stockCode.isNotBlank() &&
-            (price.toDoubleOrNull() ?: -1.0) >= 0.0
+            ((price.toDoubleOrNull() ?: -1.0) >= 0.0 ||
+                (dividendIncome.toDoubleOrNull() ?: -1.0) >= 0.0)
         "配股" ->
             stockName.isNotBlank() &&
             stockCode.isNotBlank() &&
@@ -310,9 +337,6 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     }
 
     val filteredStocks = prioritizeStockSearchResults(allStocks, stockName)
-    val selectedStock = allStocks.find { it.code == stockCode }
-    val isUsStock = StockMarket.isUs(selectedStock?.market.orEmpty())
-    val shareStep = if (isUsStock) 1.0 else 1000.0
 
     Column(
         modifier = Modifier
@@ -480,14 +504,15 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         androidx.compose.material3.HorizontalDivider()
                         Spacer(modifier = Modifier.height(8.dp))
                         // 支出金額
-                        Text(
-                            text = "支出金額",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Text(
-                            text = if (expense > 0) formatMarketAmount(expense, selectedStock?.market) else "-",
+                        EditableTextStyled(
+                            label = "支出金額 (點擊數字修改)",
+                            value = if (expense > 0) formatMarketAmount(expense, selectedStock?.market) else "",
+                            editValue = formatEditableAmountValue(expense, selectedStock?.market),
+                            onValueChange = { newExpense ->
+                                viewModel.updateExpense(newExpense.toDoubleOrNull() ?: 0.0)
+                            },
                             style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.padding(bottom = 12.dp)
+                            keyboardType = KeyboardType.Decimal
                         )
                         androidx.compose.material3.Divider()
                     }
@@ -586,11 +611,15 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         androidx.compose.material3.HorizontalDivider()
                         Spacer(modifier = Modifier.height(8.dp))
                         // 收入金額
-                        Text("收入金額", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            text = if (income > 0) formatMarketAmount(income, selectedStock?.market) else "-",
+                        EditableTextStyled(
+                            label = "收入金額 (點擊數字修改)",
+                            value = if (income > 0) formatMarketAmount(income, selectedStock?.market) else "",
+                            editValue = formatEditableAmountValue(income, selectedStock?.market),
+                            onValueChange = { newIncome ->
+                                viewModel.updateIncome(newIncome.toDoubleOrNull() ?: 0.0)
+                            },
                             style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.padding(bottom = 12.dp)
+                            keyboardType = KeyboardType.Decimal
                         )
                         androidx.compose.material3.HorizontalDivider()
                     }
@@ -612,6 +641,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             viewModel.autoFillDividendCashFromYahooUsingHolding(
                                 stockCode,
                                 onResult = { perShare, holdingShares, dateStr ->
+                                    isDividendIncomeManuallyEdited = false
                                     cashDividend = perShare.toString()
                                     exDividendShares = formatShareInputValue(holdingShares)
 
@@ -681,18 +711,16 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         )
                         androidx.compose.material3.HorizontalDivider()
                         Spacer(modifier = Modifier.height(8.dp))
-                        val grossDividendAmount = price.toDoubleOrNull() ?: 0.0
-                        val dividendFeeAmount = dividendFee.toDoubleOrNull() ?: 0.0
-                        val netDividendAmount = (grossDividendAmount - dividendFeeAmount).coerceAtLeast(0.0)
-                        Text("股息總額", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            text = if (grossDividendAmount > 0.0) {
-                                formatDividendAmountInput(netDividendAmount, selectedStock?.market)
-                            } else {
-                                "-"
+                        EditableTextStyled(
+                            label = "股息總額 (點擊數字修改)",
+                            value = dividendIncome,
+                            editValue = dividendIncome,
+                            onValueChange = {
+                                dividendIncome = it
+                                isDividendIncomeManuallyEdited = true
                             },
                             style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.padding(bottom = 12.dp)
+                            keyboardType = KeyboardType.Decimal
                         )
                     }
                 }
@@ -709,6 +737,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         viewModel.autoFillDividendStockFromYahooUsingHolding(
                             stockCode,
                             onResult = { rate, holdingShares, dateStr ->
+                                isDividendSharesManuallyEdited = false
                                 stockDividendRate = rate.toString()
                                 exRightsShares = formatShareInputValue(holdingShares)
 
@@ -765,15 +794,16 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                     )
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "配發股數",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = if (shares.isBlank()) "-" else formatShareInputValue(shares.toDoubleOrNull() ?: 0.0),
+                        EditableTextStyled(
+                            label = "配發股數 (點擊數字修改)",
+                            value = if (shares.isBlank()) "" else formatShareInputValue(shares.toDoubleOrNull() ?: 0.0),
+                            editValue = shares,
+                            onValueChange = {
+                                shares = filterShareInput(it, isUsStock)
+                                isDividendSharesManuallyEdited = true
+                            },
                             style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.padding(bottom = 12.dp)
+                            keyboardType = if (isUsStock) KeyboardType.Decimal else KeyboardType.Number
                         )
                     }
                 }
@@ -880,7 +910,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         cashReturned = cashReturned.toDoubleOrNull() ?: 0.0,
                         stockSplitRatio = stockSplitRatio.toDoubleOrNull() ?: 0.0,
                         sharesBeforeSplit = sharesBeforeSplit.toDoubleOrNull() ?: 0.0,
-                        sharesAfterSplit = sharesAfterSplit.toDoubleOrNull() ?: 0.0
+                        sharesAfterSplit = sharesAfterSplit.toDoubleOrNull() ?: 0.0,
+                        dividendIncome = dividendIncome.toDoubleOrNull()
                     )
                     val message = if (transactionId == null) "新增成功" else "更新成功"
                     Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
@@ -972,6 +1003,15 @@ private fun formatTaxDisplayValue(tax: Double, market: String?): String {
         String.format(Locale.US, "%.2f", tax)
     } else {
         tax.toInt().toString()
+    }
+}
+
+private fun formatEditableAmountValue(amount: Double, market: String?): String {
+    if (amount <= 0.0) return ""
+    return if (StockMarket.isUs(market.orEmpty())) {
+        String.format(Locale.US, "%.2f", amount)
+    } else {
+        amount.toInt().toString()
     }
 }
 

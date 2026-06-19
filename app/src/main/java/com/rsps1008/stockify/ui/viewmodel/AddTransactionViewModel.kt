@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rsps1008.stockify.data.RealtimeStockDataService
+import com.rsps1008.stockify.data.CalculationRoundingMode
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.StockDao
@@ -21,7 +22,6 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import kotlin.math.max
-import kotlin.math.roundToInt
 
 class AddTransactionViewModel(
     private val stockDao: StockDao,
@@ -63,6 +63,12 @@ class AddTransactionViewModel(
 
     private val _income = MutableStateFlow(0.0)
     val income = _income.asStateFlow()
+
+    private val _isExpenseManuallyEdited = MutableStateFlow(false)
+    private val _isIncomeManuallyEdited = MutableStateFlow(false)
+
+    val calculationRoundingMode: StateFlow<String> = settingsDataStore.calculationRoundingModeFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), CalculationRoundingMode.ROUND)
 
     val defaultDividendFee: StateFlow<Int> = settingsDataStore.dividendFeeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 10)
@@ -158,7 +164,9 @@ class AddTransactionViewModel(
         }
 
         if (StockMarket.isUs(market)) {
-            _expense.value = roundCurrency(price * shares + _fee.value)
+            if (!_isExpenseManuallyEdited.value) {
+                _expense.value = roundCalculatedCurrency(price * shares + _fee.value, market)
+            }
             return
         }
 
@@ -166,10 +174,12 @@ class AddTransactionViewModel(
         val transactionValue = price * shares
         val calculatedFee = transactionValue * 0.001425 * discount
         val minFee = if (shares % 1000 == 0.0) minFeeRegular else minFeeOddLot
-        val finalFee = max(calculatedFee, minFee.toDouble()).roundToInt().toDouble()
+        val finalFee = roundCalculatedAmount(max(calculatedFee, minFee.toDouble()))
 
         _fee.value = finalFee
-        _expense.value = (transactionValue + _fee.value).roundToInt().toDouble()
+        if (!_isExpenseManuallyEdited.value) {
+            _expense.value = roundCalculatedAmount(transactionValue + _fee.value)
+        }
     }
 
 
@@ -185,7 +195,9 @@ class AddTransactionViewModel(
 
         if (StockMarket.isUs(market)) {
             _taxRate.value = 0.0
-            _income.value = roundCurrency(price * shares - _fee.value - _tax.value)
+            if (!_isIncomeManuallyEdited.value) {
+                _income.value = roundCalculatedCurrency(price * shares - _fee.value - _tax.value, market)
+            }
             return
         }
 
@@ -194,7 +206,7 @@ class AddTransactionViewModel(
 
         val calculatedFee = transactionValue * 0.001425 * discount
         val minFee = if (shares % 1000 == 0.0) minFeeRegular else minFeeOddLot
-        val autoFee = max(calculatedFee, minFee.toDouble()).roundToInt().toDouble()
+        val autoFee = roundCalculatedAmount(max(calculatedFee, minFee.toDouble()))
         _fee.value = autoFee
 
         val taxRateValue = when {
@@ -205,10 +217,12 @@ class AddTransactionViewModel(
         }
 
         _taxRate.value = taxRateValue
-        val finalTax = (transactionValue * taxRateValue).roundToInt().toDouble()
+        val finalTax = roundCalculatedAmount(transactionValue * taxRateValue)
         _tax.value = finalTax
 
-        _income.value = (transactionValue - _fee.value - finalTax).roundToInt().toDouble()
+        if (!_isIncomeManuallyEdited.value) {
+            _income.value = roundCalculatedAmount(transactionValue - _fee.value - finalTax)
+        }
     }
 
     suspend fun addOrUpdateTransaction(
@@ -230,7 +244,8 @@ class AddTransactionViewModel(
         cashReturned: Double = 0.0,
         stockSplitRatio: Double = 0.0,
         sharesBeforeSplit: Double = 0.0,
-        sharesAfterSplit: Double = 0.0
+        sharesAfterSplit: Double = 0.0,
+        dividendIncome: Double? = null
     ) {
         val finalFee = when (type) {
             "配息" -> dividendFee
@@ -239,7 +254,7 @@ class AddTransactionViewModel(
 
         val finalIncome = when (type) {
             "賣出" -> _income.value
-            "配息" -> (price - finalFee).coerceAtLeast(0.0)
+            "配息" -> dividendIncome ?: (price - finalFee).coerceAtLeast(0.0)
             "減資" -> cashReturned
             else -> 0.0
         }
@@ -413,6 +428,8 @@ class AddTransactionViewModel(
         _expense.value = 0.0
         _income.value = 0.0
         _taxRate.value = 0.0
+        _isExpenseManuallyEdited.value = false
+        _isIncomeManuallyEdited.value = false
     }
 
     fun resetEditState() {
@@ -430,12 +447,16 @@ class AddTransactionViewModel(
         when (type) {
             "買進" -> {
                 val transactionValue = price * shares
-                _expense.value = (transactionValue + newFee).roundToInt().toDouble()
+                if (!_isExpenseManuallyEdited.value) {
+                    _expense.value = roundCalculatedAmount(transactionValue + newFee)
+                }
             }
 
             "賣出" -> {
                 val transactionValue = price * shares
-                _income.value = (transactionValue - newFee - tax).roundToInt().toDouble()
+                if (!_isIncomeManuallyEdited.value) {
+                    _income.value = roundCalculatedAmount(transactionValue - newFee - tax)
+                }
             }
         }
     }
@@ -444,11 +465,27 @@ class AddTransactionViewModel(
         _tax.value = newTax
 
         val transactionValue = price * shares
-        _income.value = (transactionValue - fee - newTax).roundToInt().toDouble()
+        if (!_isIncomeManuallyEdited.value) {
+            _income.value = roundCalculatedAmount(transactionValue - fee - newTax)
+        }
     }
 
-    private fun roundCurrency(value: Double): Double {
-        return (value * 100).roundToInt() / 100.0
+    fun updateExpense(newExpense: Double) {
+        _expense.value = newExpense
+        _isExpenseManuallyEdited.value = true
+    }
+
+    fun updateIncome(newIncome: Double) {
+        _income.value = newIncome
+        _isIncomeManuallyEdited.value = true
+    }
+
+    fun roundCalculatedAmount(value: Double): Double {
+        return CalculationRoundingMode.apply(value, calculationRoundingMode.value)
+    }
+
+    fun roundCalculatedCurrency(value: Double, market: String?): Double {
+        return CalculationRoundingMode.applyCurrency(value, market, calculationRoundingMode.value)
     }
 
 }

@@ -53,6 +53,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rsps1008.stockify.BuildConfig
 import com.rsps1008.stockify.R
 import com.rsps1008.stockify.StockifyApplication
+import com.rsps1008.stockify.data.CalculationRoundingMode
 import com.rsps1008.stockify.ui.viewmodel.SettingsViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import kotlinx.coroutines.delay
@@ -90,6 +91,7 @@ fun SettingsScreen() {
     val dividendFee by viewModel.dividendFee.collectAsState()
     val preDeductSellFees by viewModel.preDeductSellFees.collectAsState()
     val useCumulativeReturnRate by viewModel.useCumulativeReturnRate.collectAsState()
+    val calculationRoundingMode by viewModel.calculationRoundingMode.collectAsState()
     val fetchInterval by viewModel.fetchInterval.collectAsState()
     val theme by viewModel.theme.collectAsState()
     val stockDataSource by viewModel.stockDataSource.collectAsState()
@@ -469,6 +471,54 @@ fun SettingsScreen() {
                                 onCheckedChange = { viewModel.setUseCumulativeReturnRate(it) }
                             )
                         }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("自動計算取整方式", style = MaterialTheme.typography.titleMedium)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        val roundingModeOptions = remember {
+                            mapOf(
+                                CalculationRoundingMode.ROUND to "四捨五入",
+                                CalculationRoundingMode.FLOOR to "無條件捨去"
+                            )
+                        }
+                        var expandedRoundingMode by remember { mutableStateOf(false) }
+                        ExposedDropdownMenuBox(
+                            expanded = expandedRoundingMode,
+                            onExpandedChange = { expandedRoundingMode = !expandedRoundingMode },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = roundingModeOptions[calculationRoundingMode] ?: "四捨五入",
+                                onValueChange = { },
+                                label = { Text("支出、收入、股息與配股計算") },
+                                readOnly = true,
+                                trailingIcon = {
+                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedRoundingMode)
+                                },
+                                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = expandedRoundingMode,
+                                onDismissRequest = { expandedRoundingMode = false },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                roundingModeOptions.forEach { (key, value) ->
+                                    DropdownMenuItem(
+                                        text = { Text(value) },
+                                        onClick = {
+                                            viewModel.setCalculationRoundingMode(key)
+                                            expandedRoundingMode = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            "預設維持原本的四捨五入；改成無條件捨去後，新增/編輯頁的自動計算結果會依此取整。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
                         Spacer(modifier = Modifier.height(16.dp))
                         Row(
                             verticalAlignment = Alignment.CenterVertically,

@@ -128,6 +128,9 @@ class SettingsViewModel(
     val useCumulativeReturnRate: StateFlow<Boolean> = settingsDataStore.useCumulativeReturnRateFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), false)
 
+    val calculationRoundingMode: StateFlow<String> = settingsDataStore.calculationRoundingModeFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), com.rsps1008.stockify.data.CalculationRoundingMode.ROUND)
+
     val theme: StateFlow<String> = settingsDataStore.themeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), "System")
 
@@ -730,6 +733,12 @@ class SettingsViewModel(
     fun setUseCumulativeReturnRate(useCumulative: Boolean) {
         viewModelScope.launch {
             settingsDataStore.setUseCumulativeReturnRate(useCumulative)
+        }
+    }
+
+    fun setCalculationRoundingMode(mode: String) {
+        viewModelScope.launch {
+            settingsDataStore.setCalculationRoundingMode(mode)
         }
     }
 

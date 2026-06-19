@@ -46,6 +46,7 @@ class SettingsDataStore(val context: Context) {
     private val realizedHoldingsOrderKey = stringPreferencesKey("realized_holdings_order")
     private val holdingsReorderHintShownKey = booleanPreferencesKey("holdings_reorder_hint_shown")
     private val localCsvRestoreFeeHintShownKey = booleanPreferencesKey("local_csv_restore_fee_hint_shown")
+    private val calculationRoundingModeKey = stringPreferencesKey("calculation_rounding_mode")
 
     val fetchIntervalFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
@@ -89,6 +90,11 @@ class SettingsDataStore(val context: Context) {
     val useCumulativeReturnRateFlow: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
             preferences[useCumulativeReturnRateKey] ?: false
+        }
+
+    val calculationRoundingModeFlow: Flow<String> = context.dataStore.data
+        .map { preferences ->
+            CalculationRoundingMode.normalize(preferences[calculationRoundingModeKey])
         }
 
     val realtimeStockInfoCacheFlow: Flow<Map<String, RealtimeStockInfo>> = context.dataStore.data
@@ -240,6 +246,12 @@ class SettingsDataStore(val context: Context) {
     suspend fun setUseCumulativeReturnRate(useCumulative: Boolean) {
         context.dataStore.edit {
             it[useCumulativeReturnRateKey] = useCumulative
+        }
+    }
+
+    suspend fun setCalculationRoundingMode(mode: String) {
+        context.dataStore.edit {
+            it[calculationRoundingModeKey] = CalculationRoundingMode.normalize(mode)
         }
     }
 
