@@ -28,6 +28,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -39,11 +40,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rsps1008.stockify.BuildConfig
@@ -96,12 +100,14 @@ fun SettingsScreen() {
     val taxRateDayTrading by viewModel.taxRateDayTrading.collectAsState()
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
+    val focusManager = LocalFocusManager.current
     var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
     val privacyPolicyText = remember {
         context.resources.openRawResource(R.raw.privacy_policy).bufferedReader().use { it.readText() }
     }
 
     val scope = rememberCoroutineScope()
+    var finnhubApiKeyText by remember(finnhubApiKey) { mutableStateOf(finnhubApiKey) }
 
     LaunchedEffect(message) {
         message?.let {
@@ -383,13 +389,29 @@ fun SettingsScreen() {
                                         Text("前往 Finnhub 取得免費 API key")
                                     }
                                     OutlinedTextField(
-                                        value = finnhubApiKey,
-                                        onValueChange = viewModel::setFinnhubApiKey,
+                                        value = finnhubApiKeyText,
+                                        onValueChange = { finnhubApiKeyText = it },
                                         label = { Text("Finnhub API key") },
                                         singleLine = true,
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                                        visualTransformation = PasswordVisualTransformation(),
-                                        modifier = Modifier.fillMaxWidth()
+                                        keyboardOptions = KeyboardOptions(
+                                            keyboardType = KeyboardType.Ascii,
+                                            autoCorrectEnabled = false,
+                                            imeAction = ImeAction.Done
+                                        ),
+                                        keyboardActions = KeyboardActions(
+                                            onDone = {
+                                                focusManager.clearFocus()
+                                                viewModel.setFinnhubApiKey(finnhubApiKeyText.trim())
+                                            }
+                                        ),
+                                        visualTransformation = VisualTransformation.None,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .onFocusChanged { focusState ->
+                                                if (!focusState.isFocused) {
+                                                    viewModel.setFinnhubApiKey(finnhubApiKeyText.trim())
+                                                }
+                                            }
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Row(
@@ -437,133 +459,140 @@ fun SettingsScreen() {
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("台股手續費設定", style = MaterialTheme.typography.titleLarge)
+                        Text("台股費稅設定", style = MaterialTheme.typography.titleLarge)
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        var feeDiscountText by remember { mutableStateOf(feeDiscount.toString()) }
-                        LaunchedEffect(feeDiscount) { feeDiscountText = feeDiscount.toString() }
-                        OutlinedTextField(
-                            value = feeDiscountText,
-                            onValueChange = {
-                                feeDiscountText = it
-                                it.toDoubleOrNull()?.let { discount -> viewModel.setFeeDiscount(discount) }
-                            },
-                            label = { Text("手續費折數 (例如 0.28)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text("台股手續費", style = MaterialTheme.typography.titleLarge)
+                                Spacer(modifier = Modifier.height(16.dp))
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                                var feeDiscountText by remember { mutableStateOf(feeDiscount.toString()) }
+                                LaunchedEffect(feeDiscount) { feeDiscountText = feeDiscount.toString() }
+                                OutlinedTextField(
+                                    value = feeDiscountText,
+                                    onValueChange = {
+                                        feeDiscountText = it
+                                        it.toDoubleOrNull()?.let { discount -> viewModel.setFeeDiscount(discount) }
+                                    },
+                                    label = { Text("手續費折數 (例如 0.28)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
 
-                        var minFeeRegularText by remember { mutableStateOf(minFeeRegular.toString()) }
-                        LaunchedEffect(minFeeRegular) { minFeeRegularText = minFeeRegular.toString() }
-                        OutlinedTextField(
-                            value = minFeeRegularText,
-                            onValueChange = {
-                                minFeeRegularText = it
-                                it.toIntOrNull()?.let { fee -> viewModel.setMinFeeRegular(fee) }
-                            },
-                            label = { Text("整股最低手續費 (元) - 股數為1000倍數時生效") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                                Spacer(modifier = Modifier.height(8.dp))
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                                var minFeeRegularText by remember { mutableStateOf(minFeeRegular.toString()) }
+                                LaunchedEffect(minFeeRegular) { minFeeRegularText = minFeeRegular.toString() }
+                                OutlinedTextField(
+                                    value = minFeeRegularText,
+                                    onValueChange = {
+                                        minFeeRegularText = it
+                                        it.toIntOrNull()?.let { fee -> viewModel.setMinFeeRegular(fee) }
+                                    },
+                                    label = { Text("整股最低手續費 (元) - 股數為1000倍數時生效") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
 
-                        var minFeeOddLotText by remember { mutableStateOf(minFeeOddLot.toString()) }
-                        LaunchedEffect(minFeeOddLot) { minFeeOddLotText = minFeeOddLot.toString() }
-                        OutlinedTextField(
-                            value = minFeeOddLotText,
-                            onValueChange = {
-                                minFeeOddLotText = it
-                                it.toIntOrNull()?.let { fee -> viewModel.setMinFeeOddLot(fee) }
-                            },
-                            label = { Text("零股最低手續費 (元)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                                Spacer(modifier = Modifier.height(8.dp))
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                                var minFeeOddLotText by remember { mutableStateOf(minFeeOddLot.toString()) }
+                                LaunchedEffect(minFeeOddLot) { minFeeOddLotText = minFeeOddLot.toString() }
+                                OutlinedTextField(
+                                    value = minFeeOddLotText,
+                                    onValueChange = {
+                                        minFeeOddLotText = it
+                                        it.toIntOrNull()?.let { fee -> viewModel.setMinFeeOddLot(fee) }
+                                    },
+                                    label = { Text("零股最低手續費 (元)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
 
-                        var dividendFeeText by remember { mutableStateOf(dividendFee.toString()) }
-                        LaunchedEffect(dividendFee) { dividendFeeText = dividendFee.toString() }
-                        OutlinedTextField(
-                            value = dividendFeeText,
-                            onValueChange = {
-                                dividendFeeText = it
-                                it.toIntOrNull()?.let { fee -> viewModel.setDividendFee(fee) }
-                            },
-                            label = { Text("除息手續費 (元)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
+                                Spacer(modifier = Modifier.height(8.dp))
 
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("台股交易稅率設定", style = MaterialTheme.typography.titleLarge)
+                                var dividendFeeText by remember { mutableStateOf(dividendFee.toString()) }
+                                LaunchedEffect(dividendFee) { dividendFeeText = dividendFee.toString() }
+                                OutlinedTextField(
+                                    value = dividendFeeText,
+                                    onValueChange = {
+                                        dividendFeeText = it
+                                        it.toIntOrNull()?.let { fee -> viewModel.setDividendFee(fee) }
+                                    },
+                                    label = { Text("除息手續費 (元)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        var taxRateNormalListedStockText by remember { mutableStateOf(taxRateNormalListedStock.toString()) }
-                        LaunchedEffect(taxRateNormalListedStock) { taxRateNormalListedStockText = taxRateNormalListedStock.toString() }
-                        OutlinedTextField(
-                            value = taxRateNormalListedStockText,
-                            onValueChange = {
-                                taxRateNormalListedStockText = it
-                                it.toDoubleOrNull()?.let { rate -> viewModel.setTaxRateNormalListedStock(rate) }
-                            },
-                            label = { Text("一般上市股票稅率 (例如 0.003)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text("台股交易稅率", style = MaterialTheme.typography.titleLarge)
+                                Spacer(modifier = Modifier.height(16.dp))
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                                var taxRateNormalListedStockText by remember { mutableStateOf(taxRateNormalListedStock.toString()) }
+                                LaunchedEffect(taxRateNormalListedStock) { taxRateNormalListedStockText = taxRateNormalListedStock.toString() }
+                                OutlinedTextField(
+                                    value = taxRateNormalListedStockText,
+                                    onValueChange = {
+                                        taxRateNormalListedStockText = it
+                                        it.toDoubleOrNull()?.let { rate -> viewModel.setTaxRateNormalListedStock(rate) }
+                                    },
+                                    label = { Text("一般上市股票稅率 (例如 0.003)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
 
-                        var taxRateDomesticStockEtfText by remember { mutableStateOf(taxRateDomesticStockEtf.toString()) }
-                        LaunchedEffect(taxRateDomesticStockEtf) { taxRateDomesticStockEtfText = taxRateDomesticStockEtf.toString() }
-                        OutlinedTextField(
-                            value = taxRateDomesticStockEtfText,
-                            onValueChange = {
-                                taxRateDomesticStockEtfText = it
-                                it.toDoubleOrNull()?.let { rate -> viewModel.setTaxRateDomesticStockEtf(rate) }
-                            },
-                            label = { Text("國內股票型 ETF 稅率 (例如 0.001)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                                Spacer(modifier = Modifier.height(8.dp))
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                                var taxRateDomesticStockEtfText by remember { mutableStateOf(taxRateDomesticStockEtf.toString()) }
+                                LaunchedEffect(taxRateDomesticStockEtf) { taxRateDomesticStockEtfText = taxRateDomesticStockEtf.toString() }
+                                OutlinedTextField(
+                                    value = taxRateDomesticStockEtfText,
+                                    onValueChange = {
+                                        taxRateDomesticStockEtfText = it
+                                        it.toDoubleOrNull()?.let { rate -> viewModel.setTaxRateDomesticStockEtf(rate) }
+                                    },
+                                    label = { Text("國內股票型 ETF 稅率 (例如 0.001)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
 
-                        var taxRateBondEtfText by remember { mutableStateOf(taxRateBondEtf.toString()) }
-                        LaunchedEffect(taxRateBondEtf) { taxRateBondEtfText = taxRateBondEtf.toString() }
-                        OutlinedTextField(
-                            value = taxRateBondEtfText,
-                            onValueChange = {
-                                taxRateBondEtfText = it
-                                it.toDoubleOrNull()?.let { rate -> viewModel.setTaxRateBondEtf(rate) }
-                            },
-                            label = { Text("債券 ETF 稅率 (例如 0)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                                Spacer(modifier = Modifier.height(8.dp))
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                                var taxRateBondEtfText by remember { mutableStateOf(taxRateBondEtf.toString()) }
+                                LaunchedEffect(taxRateBondEtf) { taxRateBondEtfText = taxRateBondEtf.toString() }
+                                OutlinedTextField(
+                                    value = taxRateBondEtfText,
+                                    onValueChange = {
+                                        taxRateBondEtfText = it
+                                        it.toDoubleOrNull()?.let { rate -> viewModel.setTaxRateBondEtf(rate) }
+                                    },
+                                    label = { Text("債券 ETF 稅率 (例如 0)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
 
-                        var taxRateDayTradingText by remember { mutableStateOf(taxRateDayTrading.toString()) }
-                        LaunchedEffect(taxRateDayTrading) { taxRateDayTradingText = taxRateDayTrading.toString() }
-                        OutlinedTextField(
-                            value = taxRateDayTradingText,
-                            onValueChange = {
-                                taxRateDayTradingText = it
-                                it.toDoubleOrNull()?.let { rate -> viewModel.setTaxRateDayTrading(rate) }
-                            },
-                            label = { Text("現股當沖稅率 (例如 0.0015)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                var taxRateDayTradingText by remember { mutableStateOf(taxRateDayTrading.toString()) }
+                                LaunchedEffect(taxRateDayTrading) { taxRateDayTradingText = taxRateDayTrading.toString() }
+                                OutlinedTextField(
+                                    value = taxRateDayTradingText,
+                                    onValueChange = {
+                                        taxRateDayTradingText = it
+                                        it.toDoubleOrNull()?.let { rate -> viewModel.setTaxRateDayTrading(rate) }
+                                    },
+                                    label = { Text("現股當沖稅率 (例如 0.0015)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
                     }
                 }
             }
