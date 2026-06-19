@@ -118,6 +118,7 @@
 - Compose 風格請盡量維持既有 Material 3 介面與目前版面結構
 - 設定頁最底部要顯示目前 App 版本，直接讀 `BuildConfig.VERSION_NAME` 即可。
 - `app` module 需要維持 `buildFeatures.buildConfig = true`，否則設定頁無法直接讀 `BuildConfig.VERSION_NAME`。
+- 持股、交易、資料管理、設定這幾個底部分頁的頂部 logo/header 盡量統一成相同的外層 `16.dp` padding 與 `6.dp` 標題間距，避免頁面切換時看起來上下沒有對齊。
 - 設定頁的「股票資料來源」與「股票列表更新」要分成兩個獨立區塊，前者只放爬蟲/即時資料來源與相關刷新偏好，後者只放台股與美股股票列表更新操作。
 - 設定頁的「股票列表更新」區塊建議用主卡片包兩張子卡片的層級呈現，台股與美股更新流程要視覺上分開。
 - 設定頁的股票資料更新區同時提供台股與美股更新；美股更新需由使用者自行到 Finnhub 取得免費 API key，填入後才呼叫 Finnhub symbol API 更新 `US` 市場股票清單。

@@ -163,27 +163,24 @@ fun HoldingsScreen(navController: NavController) {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-
-        // ★★★★★ 這裡是固定最上方的圖片，不會滑動 ★★★★★
-        // ★★★★★ 這裡是固定最上方的圖片，不會滑動 ★★★★★
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(horizontal = 16.dp)
                 .padding(top = 16.dp),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.TopCenter
         ) {
             Image(
                 painter = painterResource(id = R.drawable.stockify),
                 contentDescription = "Stockify Logo",
-                modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(0.35f)
+                modifier = Modifier.fillMaxWidth(0.35f)
             )
 
             val context = LocalContext.current
             IconButton(
                 onClick = { navController.navigate(Screen.DividendInfo.route) },
                 modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 16.dp)
+                    .align(Alignment.TopEnd)
                     .pointerInput(Unit) {
                         detectTapGestures(
                             onLongPress = {
@@ -201,6 +198,8 @@ fun HoldingsScreen(navController: NavController) {
                 )
             }
         }
+
+        Spacer(modifier = Modifier.height(6.dp))
 
         // ★ LazyColumn 會在圖片下方滑動
         LazyColumn(

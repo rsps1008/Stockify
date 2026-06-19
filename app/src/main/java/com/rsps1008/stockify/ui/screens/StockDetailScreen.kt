@@ -125,7 +125,8 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
                     IconButton(onClick = { viewModel.onDeleteTransactionsClicked() }) {
                         Icon(Icons.Default.Delete, contentDescription = "Delete all transactions")
                     }
-                }
+                },
+                windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)
             )
         }
     ) { paddingValues ->
