@@ -92,8 +92,6 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     val calculationRoundingMode by viewModel.calculationRoundingMode.collectAsState()
     var dividendFee by remember { mutableStateOf("") }
     var dividendIncome by remember { mutableStateOf("") }
-    var isDividendIncomeManuallyEdited by remember { mutableStateOf(false) }
-    var isDividendSharesManuallyEdited by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
     var stockName by remember { mutableStateOf("") }
@@ -228,14 +226,12 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                     exDividendShares = if (it.exDividendShares != 0.0) formatShareInputValue(it.exDividendShares) else ""
                     price = formatDividendAmountInput(it.income + it.fee, stock?.market)
                     dividendIncome = formatDividendAmountInput(it.income, stock?.market)
-                    isDividendIncomeManuallyEdited = true
                     dividendFee = it.fee.toString()
                 }
                 "配股" -> {
                     stockDividendRate = if (it.stockDividend != 0.0) it.stockDividend.toString() else ""
                     exRightsShares = if (it.exRightsShares != 0.0) formatShareInputValue(it.exRightsShares) else ""
                     shares = formatShareInputValue(it.dividendShares)
-                    isDividendSharesManuallyEdited = true
                 }
                 "減資" -> {
                     capitalReductionRatio = it.capitalReductionRatio.toString()
@@ -261,8 +257,6 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             exRightsShares = ""
             dividendFee = defaultDividendFeeForStock.toString()
             dividendIncome = ""
-            isDividendIncomeManuallyEdited = false
-            isDividendSharesManuallyEdited = false
             capitalReductionRatio = ""
             sharesBeforeReduction = ""
             cashReturned = ""
@@ -280,21 +274,19 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                 val stock = allStocks.find { it.code == stockCode }
                 val grossAmount = viewModel.roundCalculatedCurrency(pps * s, stock?.market)
                 price = formatDividendAmountInput(grossAmount, stock?.market)
-                if (!isDividendIncomeManuallyEdited) {
-                    val feeAmount = dividendFee.toDoubleOrNull() ?: 0.0
-                    val netAmount = viewModel.roundCalculatedCurrency(
-                        (grossAmount - feeAmount).coerceAtLeast(0.0),
-                        stock?.market
-                    )
-                    dividendIncome = formatDividendAmountInput(netAmount, stock?.market)
-                }
+                val feeAmount = dividendFee.toDoubleOrNull() ?: 0.0
+                val netAmount = viewModel.roundCalculatedCurrency(
+                    (grossAmount - feeAmount).coerceAtLeast(0.0),
+                    stock?.market
+                )
+                dividendIncome = formatDividendAmountInput(netAmount, stock?.market)
             }
         }
     }
 
     // Auto-calculate total stock dividend shares
     LaunchedEffect(stockDividendRate, exRightsShares, calculationRoundingMode, isUsStock) {
-        if (transactionType == "配股" && !isDividendSharesManuallyEdited) {
+        if (transactionType == "配股") {
             val rate = stockDividendRate.toDoubleOrNull()
             val baseShares = exRightsShares.toDoubleOrNull()
             // `rate` is treated as stock dividend shares per share.
@@ -496,7 +488,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                                     newFee = newFee.toDoubleOrNull() ?: 0.0,
                                     price = price.toDoubleOrNull() ?: 0.0,
                                     shares = shares.toDoubleOrNull() ?: 0.0,
-                                    type = "買進"
+                                    type = "買進",
+                                    market = selectedStock?.market ?: StockMarket.TW
                                 )
                             },
                             style = MaterialTheme.typography.bodyLarge
@@ -587,7 +580,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                                     newFee = newFee.toDoubleOrNull() ?: 0.0,
                                     price = price.toDoubleOrNull() ?: 0.0,
                                     shares = shares.toDoubleOrNull() ?: 0.0,
-                                    type = "賣出"
+                                    type = "賣出",
+                                    market = selectedStock?.market ?: StockMarket.TW
                                 )
                             },
                             style = MaterialTheme.typography.bodyLarge
@@ -603,7 +597,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                                 viewModel.updateTax(
                                     newTax = newTax.toDoubleOrNull() ?: 0.0,
                                     price = price.toDoubleOrNull() ?: 0.0,
-                                    shares = shares.toDoubleOrNull() ?: 0.0
+                                    shares = shares.toDoubleOrNull() ?: 0.0,
+                                    market = selectedStock?.market ?: StockMarket.TW
                                 )
                             },
                             style = MaterialTheme.typography.bodyLarge
@@ -641,7 +636,6 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             viewModel.autoFillDividendCashFromYahooUsingHolding(
                                 stockCode,
                                 onResult = { perShare, holdingShares, dateStr ->
-                                    isDividendIncomeManuallyEdited = false
                                     cashDividend = perShare.toString()
                                     exDividendShares = formatShareInputValue(holdingShares)
 
@@ -717,7 +711,6 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             editValue = dividendIncome,
                             onValueChange = {
                                 dividendIncome = it
-                                isDividendIncomeManuallyEdited = true
                             },
                             style = MaterialTheme.typography.bodyLarge,
                             keyboardType = KeyboardType.Decimal
@@ -737,7 +730,6 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         viewModel.autoFillDividendStockFromYahooUsingHolding(
                             stockCode,
                             onResult = { rate, holdingShares, dateStr ->
-                                isDividendSharesManuallyEdited = false
                                 stockDividendRate = rate.toString()
                                 exRightsShares = formatShareInputValue(holdingShares)
 
@@ -800,7 +792,6 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             editValue = shares,
                             onValueChange = {
                                 shares = filterShareInput(it, isUsStock)
-                                isDividendSharesManuallyEdited = true
                             },
                             style = MaterialTheme.typography.bodyLarge,
                             keyboardType = if (isUsStock) KeyboardType.Decimal else KeyboardType.Number

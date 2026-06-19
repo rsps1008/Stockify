@@ -89,6 +89,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import android.widget.Toast
 import com.rsps1008.stockify.data.HomeDisplayMode
+import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.formatHomeAmount
 import com.rsps1008.stockify.data.formatMarketAmount
 import com.rsps1008.stockify.data.formatShareCount
@@ -115,14 +116,15 @@ fun HoldingsScreen(navController: NavController) {
     val holdingsReorderHintShown by viewModel.holdingsReorderHintShown.collectAsState()
     var showUnrealizedHoldings by rememberSaveable { mutableStateOf(true) }
     var showRealizedHoldings by rememberSaveable { mutableStateOf(true) }
+    val usdToTwdRate by application.exchangeRateService.usdToTwdRate.collectAsState()
     val activeHoldings = uiState.holdings.filter { it.shares > 1e-6 }
     var orderedActiveHoldings by remember { mutableStateOf(emptyList<HoldingInfo>()) }
     val unrealizedCount = activeHoldings.size
-    val unrealizedPL = activeHoldings.sumOf { it.totalPL }
+    val unrealizedPL = sumDisplayPL(activeHoldings, homeDisplayMode, usdToTwdRate)
     val zeroHoldings = uiState.holdings.filter { kotlin.math.abs(it.shares) < 1e-6 }
     var orderedZeroHoldings by remember { mutableStateOf(emptyList<HoldingInfo>()) }
     val clearedCount = zeroHoldings.size
-    val realizedPL = zeroHoldings.sumOf { it.totalPL }
+    val realizedPL = sumDisplayPL(zeroHoldings, homeDisplayMode, usdToTwdRate)
 
     // ★ 從 application 的 realtimeStockDataService 取得即時股價 Map
     val realtimeMap by application.realtimeStockDataService.realtimeStockInfo.collectAsState()
@@ -328,6 +330,22 @@ fun HoldingsScreen(navController: NavController) {
 
 private fun HoldingInfo.holdingOrderKey(): String =
     "${stock.market}:${stock.code}"
+
+private fun sumDisplayPL(
+    holdings: List<HoldingInfo>,
+    homeDisplayMode: String,
+    usdToTwdRate: Double
+): Double {
+    val mode = HomeDisplayMode.normalize(homeDisplayMode)
+    return holdings.sumOf { holding ->
+        val rate = if (mode == HomeDisplayMode.COMBINED && StockMarket.isUs(holding.stock.market)) {
+            usdToTwdRate
+        } else {
+            1.0
+        }
+        holding.totalPL * rate
+    }
+}
 
 private fun isVersionBefore(versionName: String, major: Int, minor: Int, patch: Int): Boolean {
     val parts = versionName

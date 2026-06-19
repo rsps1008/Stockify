@@ -64,9 +64,6 @@ class AddTransactionViewModel(
     private val _income = MutableStateFlow(0.0)
     val income = _income.asStateFlow()
 
-    private val _isExpenseManuallyEdited = MutableStateFlow(false)
-    private val _isIncomeManuallyEdited = MutableStateFlow(false)
-
     val calculationRoundingMode: StateFlow<String> = settingsDataStore.calculationRoundingModeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), CalculationRoundingMode.ROUND)
 
@@ -164,9 +161,7 @@ class AddTransactionViewModel(
         }
 
         if (StockMarket.isUs(market)) {
-            if (!_isExpenseManuallyEdited.value) {
-                _expense.value = roundCalculatedCurrency(price * shares + _fee.value, market)
-            }
+            _expense.value = roundCalculatedCurrency(price * shares + _fee.value, market)
             return
         }
 
@@ -177,9 +172,7 @@ class AddTransactionViewModel(
         val finalFee = roundCalculatedAmount(max(calculatedFee, minFee.toDouble()))
 
         _fee.value = finalFee
-        if (!_isExpenseManuallyEdited.value) {
-            _expense.value = roundCalculatedAmount(transactionValue + _fee.value)
-        }
+        _expense.value = roundCalculatedAmount(transactionValue + _fee.value)
     }
 
 
@@ -195,9 +188,7 @@ class AddTransactionViewModel(
 
         if (StockMarket.isUs(market)) {
             _taxRate.value = 0.0
-            if (!_isIncomeManuallyEdited.value) {
-                _income.value = roundCalculatedCurrency(price * shares - _fee.value - _tax.value, market)
-            }
+            _income.value = roundCalculatedCurrency(price * shares - _fee.value - _tax.value, market)
             return
         }
 
@@ -220,9 +211,7 @@ class AddTransactionViewModel(
         val finalTax = roundCalculatedAmount(transactionValue * taxRateValue)
         _tax.value = finalTax
 
-        if (!_isIncomeManuallyEdited.value) {
-            _income.value = roundCalculatedAmount(transactionValue - _fee.value - finalTax)
-        }
+        _income.value = roundCalculatedAmount(transactionValue - _fee.value - finalTax)
     }
 
     suspend fun addOrUpdateTransaction(
@@ -428,8 +417,6 @@ class AddTransactionViewModel(
         _expense.value = 0.0
         _income.value = 0.0
         _taxRate.value = 0.0
-        _isExpenseManuallyEdited.value = false
-        _isIncomeManuallyEdited.value = false
     }
 
     fun resetEditState() {
@@ -441,43 +428,48 @@ class AddTransactionViewModel(
         resetCalculatedValues()
     }
 
-    fun updateFee(newFee: Double, price: Double, shares: Double, type: String, tax: Double = _tax.value) {
+    fun updateFee(
+        newFee: Double,
+        price: Double,
+        shares: Double,
+        type: String,
+        tax: Double = _tax.value,
+        market: String = StockMarket.TW
+    ) {
         _fee.value = newFee
 
         when (type) {
             "買進" -> {
                 val transactionValue = price * shares
-                if (!_isExpenseManuallyEdited.value) {
-                    _expense.value = roundCalculatedAmount(transactionValue + newFee)
-                }
+                _expense.value = roundCalculatedCurrency(transactionValue + newFee, market)
             }
 
             "賣出" -> {
                 val transactionValue = price * shares
-                if (!_isIncomeManuallyEdited.value) {
-                    _income.value = roundCalculatedAmount(transactionValue - newFee - tax)
-                }
+                _income.value = roundCalculatedCurrency(transactionValue - newFee - tax, market)
             }
         }
     }
 
-    fun updateTax(newTax: Double, price: Double, shares: Double, fee: Double = _fee.value) {
+    fun updateTax(
+        newTax: Double,
+        price: Double,
+        shares: Double,
+        fee: Double = _fee.value,
+        market: String = StockMarket.TW
+    ) {
         _tax.value = newTax
 
         val transactionValue = price * shares
-        if (!_isIncomeManuallyEdited.value) {
-            _income.value = roundCalculatedAmount(transactionValue - fee - newTax)
-        }
+        _income.value = roundCalculatedCurrency(transactionValue - fee - newTax, market)
     }
 
     fun updateExpense(newExpense: Double) {
         _expense.value = newExpense
-        _isExpenseManuallyEdited.value = true
     }
 
     fun updateIncome(newIncome: Double) {
         _income.value = newIncome
-        _isIncomeManuallyEdited.value = true
     }
 
     fun roundCalculatedAmount(value: Double): Double {
