@@ -74,7 +74,6 @@ import com.rsps1008.stockify.data.RealtimeStockInfo
 import com.rsps1008.stockify.ui.theme.StockGain
 import com.rsps1008.stockify.ui.theme.StockLoss
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -193,7 +192,7 @@ fun HoldingsScreen(navController: NavController) {
                     }
             ) {
                 Icon(
-                    imageVector = Icons.Default.AttachMoney,
+                    painter = painterResource(id = R.drawable.ic_dividend_info),
                     contentDescription = "Dividend Info"
                 )
             }
