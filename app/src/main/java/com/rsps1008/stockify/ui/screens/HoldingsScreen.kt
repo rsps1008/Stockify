@@ -38,6 +38,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,6 +75,8 @@ import com.rsps1008.stockify.data.RealtimeStockInfo
 import com.rsps1008.stockify.ui.theme.StockGain
 import com.rsps1008.stockify.ui.theme.StockLoss
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -110,6 +113,8 @@ fun HoldingsScreen(navController: NavController) {
     val holdingsOrder by viewModel.holdingsOrder.collectAsState()
     val realizedHoldingsOrder by viewModel.realizedHoldingsOrder.collectAsState()
     val holdingsReorderHintShown by viewModel.holdingsReorderHintShown.collectAsState()
+    var showUnrealizedHoldings by rememberSaveable { mutableStateOf(true) }
+    var showRealizedHoldings by rememberSaveable { mutableStateOf(true) }
     val activeHoldings = uiState.holdings.filter { it.shares > 1e-6 }
     var orderedActiveHoldings by remember { mutableStateOf(emptyList<HoldingInfo>()) }
     val unrealizedCount = activeHoldings.size
@@ -222,29 +227,33 @@ fun HoldingsScreen(navController: NavController) {
                 HoldingsHeader(
                     count = unrealizedCount,
                     unrealizedPL = unrealizedPL,
-                    currentMode = homeDisplayMode
+                    currentMode = homeDisplayMode,
+                    expanded = showUnrealizedHoldings,
+                    onToggleExpanded = { showUnrealizedHoldings = !showUnrealizedHoldings }
                 )
             }
 
-            stickyHeader {
-                HoldingsListHeaderSticky()
-            }
+            if (showUnrealizedHoldings) {
+                stickyHeader {
+                    HoldingsListHeaderSticky()
+                }
 
-            items(
-                items = orderedActiveHoldings,
-                key = { it.holdingOrderKey() }
-            ) { holding ->
-                ReorderableItem(
-                    state = reorderableLazyListState,
-                    key = holding.holdingOrderKey()
-                ) { isDragging ->
-                    HoldingCard(
-                        holding = holding,
-                        navController = navController,
-                        modifier = Modifier
-                            .zIndex(if (isDragging) 1f else 0f)
-                            .longPressDraggableHandle()
-                    )
+                items(
+                    items = orderedActiveHoldings,
+                    key = { it.holdingOrderKey() }
+                ) { holding ->
+                    ReorderableItem(
+                        state = reorderableLazyListState,
+                        key = holding.holdingOrderKey()
+                    ) { isDragging ->
+                        HoldingCard(
+                            holding = holding,
+                            navController = navController,
+                            modifier = Modifier
+                                .zIndex(if (isDragging) 1f else 0f)
+                                .longPressDraggableHandle()
+                        )
+                    }
                 }
             }
 
@@ -253,27 +262,31 @@ fun HoldingsScreen(navController: NavController) {
                     ClearedHoldingsHeader(
                         count = clearedCount,
                         realizedPL = realizedPL,
-                        currentMode = homeDisplayMode
+                        currentMode = homeDisplayMode,
+                        expanded = showRealizedHoldings,
+                        onToggleExpanded = { showRealizedHoldings = !showRealizedHoldings }
                     )
                 }
-                stickyHeader {
-                    HoldingsListHeaderStickySells()
-                }
-                items(
-                    items = orderedZeroHoldings,
-                    key = { "realized-${it.holdingOrderKey()}" }
-                ) { holding ->
-                    ReorderableItem(
-                        state = reorderableLazyListState,
-                        key = "realized-${holding.holdingOrderKey()}"
-                    ) { isDragging ->
-                        ZeroHoldingCard(
-                            holding = holding,
-                            navController = navController,
-                            modifier = Modifier
-                                .zIndex(if (isDragging) 1f else 0f)
-                                .longPressDraggableHandle()
-                        )
+                if (showRealizedHoldings) {
+                    stickyHeader {
+                        HoldingsListHeaderStickySells()
+                    }
+                    items(
+                        items = orderedZeroHoldings,
+                        key = { "realized-${it.holdingOrderKey()}" }
+                    ) { holding ->
+                        ReorderableItem(
+                            state = reorderableLazyListState,
+                            key = "realized-${holding.holdingOrderKey()}"
+                        ) { isDragging ->
+                            ZeroHoldingCard(
+                                holding = holding,
+                                navController = navController,
+                                modifier = Modifier
+                                    .zIndex(if (isDragging) 1f else 0f)
+                                    .longPressDraggableHandle()
+                            )
+                        }
                     }
                 }
             }
@@ -903,7 +916,9 @@ fun ZeroHoldingCard(
 fun HoldingsHeader(
     count: Int,
     unrealizedPL: Double,
-    currentMode: String
+    currentMode: String,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit
 ) {
     val plColor =
         if (unrealizedPL >= 0)
@@ -915,6 +930,11 @@ fun HoldingsHeader(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 12.dp, bottom = 4.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onToggleExpanded
+            )
             .background(
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
             )
@@ -951,6 +971,11 @@ fun HoldingsHeader(
             style = MaterialTheme.typography.bodySmall,
             color = plColor
         )
+        Icon(
+            imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+            contentDescription = if (expanded) "收起未實現區塊" else "展開未實現區塊",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -959,7 +984,9 @@ fun ClearedHoldingsHeader
 (
     count: Int,
     realizedPL: Double,
-    currentMode: String
+    currentMode: String,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit
 ) {
     val plColor =
         if (realizedPL >= 0)
@@ -971,6 +998,11 @@ fun ClearedHoldingsHeader
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 12.dp, bottom = 4.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onToggleExpanded
+            )
             .background(
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
             )
@@ -1007,6 +1039,11 @@ fun ClearedHoldingsHeader
             text = formatHomeAmount(kotlin.math.abs(realizedPL), currentMode),
             style = MaterialTheme.typography.bodySmall,
             color = plColor
+        )
+        Icon(
+            imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+            contentDescription = if (expanded) "收起已實現區塊" else "展開已實現區塊",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

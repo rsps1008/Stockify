@@ -200,7 +200,10 @@ private fun StockDetailSummary(holdingInfo: HoldingInfo) {
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = "持股市值", style = MaterialTheme.typography.bodySmall)
-                    Text(text = String.format("%,.0f", holdingInfo.marketValue), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        text = formatMarketAmount(holdingInfo.marketValue, holdingInfo.stock.market),
+                        style = MaterialTheme.typography.bodyLarge
+                    )
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = "股息收入", style = MaterialTheme.typography.bodySmall)
