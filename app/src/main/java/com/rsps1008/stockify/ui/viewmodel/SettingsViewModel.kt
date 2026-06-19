@@ -125,6 +125,9 @@ class SettingsViewModel(
     val preDeductSellFees: StateFlow<Boolean> = settingsDataStore.preDeductSellFeesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), true)
 
+    val useCumulativeReturnRate: StateFlow<Boolean> = settingsDataStore.useCumulativeReturnRateFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), false)
+
     val theme: StateFlow<String> = settingsDataStore.themeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), "System")
 
@@ -721,6 +724,12 @@ class SettingsViewModel(
     fun setPreDeductSellFees(preDeduct: Boolean) {
         viewModelScope.launch {
             settingsDataStore.setPreDeductSellFees(preDeduct)
+        }
+    }
+
+    fun setUseCumulativeReturnRate(useCumulative: Boolean) {
+        viewModelScope.launch {
+            settingsDataStore.setUseCumulativeReturnRate(useCumulative)
         }
     }
 

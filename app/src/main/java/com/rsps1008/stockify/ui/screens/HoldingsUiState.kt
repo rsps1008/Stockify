@@ -20,6 +20,7 @@ data class HoldingInfo(
     val currentPrice: Double = 0.0,
     val averageCost: Double = 0.0,
     val buyAverage: Double = 0.0,
+    val totalInvestment: Double = 0.0,
     val sellAverage: Double = 0.0,
     val totalPL: Double = 0.0,
     val totalPLPercentage: Double = 0.0,

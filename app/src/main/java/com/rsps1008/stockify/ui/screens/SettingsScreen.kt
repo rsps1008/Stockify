@@ -89,6 +89,7 @@ fun SettingsScreen() {
     val minFeeOddLot by viewModel.minFeeOddLot.collectAsState()
     val dividendFee by viewModel.dividendFee.collectAsState()
     val preDeductSellFees by viewModel.preDeductSellFees.collectAsState()
+    val useCumulativeReturnRate by viewModel.useCumulativeReturnRate.collectAsState()
     val fetchInterval by viewModel.fetchInterval.collectAsState()
     val theme by viewModel.theme.collectAsState()
     val stockDataSource by viewModel.stockDataSource.collectAsState()
@@ -441,6 +442,33 @@ fun SettingsScreen() {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("損益計算設定", style = MaterialTheme.typography.titleLarge)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("報酬率計算方式", style = MaterialTheme.typography.titleMedium)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "預設使用剩餘部位報酬率，會以目前還留在這檔股票中的有效成本作為分母，適合看手上部位的資金效率。開啟累積報酬率後，會改用這檔股票歷來投入成本作為分母，適合看整段交易的總報酬，部分賣出後百分比會較保守。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("使用累積報酬率")
+                                Text(
+                                    if (useCumulativeReturnRate) "目前：整段交易的總投入報酬"
+                                    else "目前：手上剩餘部位的資金效率",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = useCumulativeReturnRate,
+                                onCheckedChange = { viewModel.setUseCumulativeReturnRate(it) }
+                            )
+                        }
                         Spacer(modifier = Modifier.height(16.dp))
                         Row(
                             verticalAlignment = Alignment.CenterVertically,

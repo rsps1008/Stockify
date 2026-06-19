@@ -27,6 +27,7 @@ class SettingsDataStore(val context: Context) {
     private val minFeeOddLotKey = intPreferencesKey("min_fee_odd_lot")
     private val dividendFeeKey = intPreferencesKey("dividend_fee")
     private val preDeductSellFeesKey = booleanPreferencesKey("pre_deduct_sell_fees")
+    private val useCumulativeReturnRateKey = booleanPreferencesKey("use_cumulative_return_rate")
     private val realtimeStockInfoCacheKey = stringPreferencesKey("realtime_stock_info_cache")
     private val themeKey = stringPreferencesKey("theme")
     private val stockDataSourceKey = stringPreferencesKey("stock_data_source")
@@ -83,6 +84,11 @@ class SettingsDataStore(val context: Context) {
     val preDeductSellFeesFlow: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
             preferences[preDeductSellFeesKey] ?: true
+        }
+
+    val useCumulativeReturnRateFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[useCumulativeReturnRateKey] ?: false
         }
 
     val realtimeStockInfoCacheFlow: Flow<Map<String, RealtimeStockInfo>> = context.dataStore.data
@@ -228,6 +234,12 @@ class SettingsDataStore(val context: Context) {
     suspend fun setPreDeductSellFees(preDeduct: Boolean) {
         context.dataStore.edit {
             it[preDeductSellFeesKey] = preDeduct
+        }
+    }
+
+    suspend fun setUseCumulativeReturnRate(useCumulative: Boolean) {
+        context.dataStore.edit {
+            it[useCumulativeReturnRateKey] = useCumulative
         }
     }
 

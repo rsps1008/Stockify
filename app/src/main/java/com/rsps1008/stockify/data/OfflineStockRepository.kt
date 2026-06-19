@@ -23,7 +23,8 @@ class OfflineStockRepository(
             realtimeStockDataService.realtimeStockInfo,
             settingsDataStore.preDeductSellFeesFlow,
             exchangeRateService.usdToTwdRate,
-            settingsDataStore.homeDisplayModeFlow
+            settingsDataStore.homeDisplayModeFlow,
+            settingsDataStore.useCumulativeReturnRateFlow
         ) { values ->
             val stocks = values[0] as List<Stock>
             val transactions = values[1] as List<StockTransaction>
@@ -31,6 +32,7 @@ class OfflineStockRepository(
             val preDeductSellFees = values[3] as Boolean
             val usdToTwdRate = values[4] as Double
             val homeDisplayMode = values[5] as String
+            val useCumulativeReturnRate = values[6] as Boolean
 
             val mode = HomeDisplayMode.normalize(homeDisplayMode)
             val filteredStocks = when (mode) {
@@ -46,7 +48,7 @@ class OfflineStockRepository(
                 val dailyChange = realTimeData[stock.code]?.change ?: 0.0
                 val dailyChangePercentage = realTimeData[stock.code]?.changePercent ?: 0.0
                 val limitState = realtime?.limitState ?: LimitState.NONE
-                calculateHoldingInfo(stock, stockTransactions, currentPrice, dailyChange, dailyChangePercentage, limitState, preDeductSellFees)
+                calculateHoldingInfo(stock, stockTransactions, currentPrice, dailyChange, dailyChangePercentage, limitState, preDeductSellFees, useCumulativeReturnRate)
             }
 
             val summaryIsCombined = mode == HomeDisplayMode.COMBINED
@@ -62,7 +64,11 @@ class OfflineStockRepository(
                 val rate = if (summaryIsCombined && StockMarket.isUs(holding.stock.market)) usdToTwdRate else 1.0
                 (holding.averageCost * holding.shares) * rate
             }
-            val totalInvestment = totalCost
+            val totalInvestment = holdingInfos.sumOf { holding ->
+                val rate = if (summaryIsCombined && StockMarket.isUs(holding.stock.market)) usdToTwdRate else 1.0
+                val basis = if (useCumulativeReturnRate) holding.totalInvestment else holding.averageCost * holding.shares
+                basis * rate
+            }
             val cumulativePLPercentage = if (totalInvestment > 0) (cumulativePL / totalInvestment) * 100 else 0.0
             val dividendIncome = holdingInfos.sumOf { holding ->
                 val rate = if (summaryIsCombined && StockMarket.isUs(holding.stock.market)) usdToTwdRate else 1.0
@@ -89,14 +95,20 @@ class OfflineStockRepository(
         val stockFlow = stockDao.getStockByCodeFlow(stockCode)
         val transactionsFlow = stockDao.getTransactionsForStock(stockCode)
 
-        return combine(stockFlow, transactionsFlow, realtimeStockDataService.realtimeStockInfo, settingsDataStore.preDeductSellFeesFlow) { stock, transactions, realTimeData, preDeductSellFees ->
+        return combine(
+            stockFlow,
+            transactionsFlow,
+            realtimeStockDataService.realtimeStockInfo,
+            settingsDataStore.preDeductSellFeesFlow,
+            settingsDataStore.useCumulativeReturnRateFlow
+        ) { stock, transactions, realTimeData, preDeductSellFees, useCumulativeReturnRate ->
             stock?.let {
                 val realtime = realTimeData[stock.code]
                 val currentPrice = realTimeData[it.code]?.currentPrice ?: 0.0
                 val dailyChange = realTimeData[it.code]?.change ?: 0.0
                 val dailyChangePercentage = realTimeData[it.code]?.changePercent ?: 0.0
                 val limitState = realtime?.limitState ?: LimitState.NONE
-                calculateHoldingInfo(it, transactions, currentPrice, dailyChange, dailyChangePercentage, limitState, preDeductSellFees)
+                calculateHoldingInfo(it, transactions, currentPrice, dailyChange, dailyChangePercentage, limitState, preDeductSellFees, useCumulativeReturnRate)
             }
         }
     }
@@ -159,14 +171,15 @@ class OfflineStockRepository(
         dailyChange: Double,
         dailyChangePercentage: Double,
         limitState: LimitState,
-        preDeductSellFees: Boolean
+        preDeductSellFees: Boolean,
+        useCumulativeReturnRate: Boolean
     ): HoldingInfo {
         var shares = 0.0
         var totalBuyExpense = 0.0
         var totalSellIncome = 0.0
+        var totalSellNetIncome = 0.0
         var sellSharesTotal = 0.0
         var sellAmountBeforeFee = 0.0   // 成交金額（未扣費）
-        var sellIncomeTotal = 0.0
         var totalDividendIncome = 0.0
         var buySharesTotal = 0.0
         var buyCostTotal = 0.0
@@ -186,6 +199,7 @@ class OfflineStockRepository(
                     sellSharesTotal += it.sellShares
                     sellAmountBeforeFee += it.sellPrice * it.sellShares
                     totalSellIncome += it.income
+                    totalSellNetIncome += it.income
                 }
                 "配股" -> {
                     shares += it.dividendShares
@@ -203,11 +217,12 @@ class OfflineStockRepository(
         if (shares < 0) shares = 0.0
         val sellAverage = if (sellSharesTotal > 0) sellAmountBeforeFee / sellSharesTotal else 0.0
         val costBasis = totalBuyExpense - totalSellIncome - totalDividendIncome
+        val totalSellFeeAndTax = (sellAmountBeforeFee - totalSellNetIncome).coerceAtLeast(0.0)
+        val totalInvestment = totalBuyExpense + totalSellFeeAndTax
         val averageCost = if (shares > 0) costBasis / shares else 0.0
         val buyAverage = if (buySharesTotal > 0) buyCostTotal / buySharesTotal else 0.0
         val marketValue = shares * currentPrice
         var totalPL = marketValue - costBasis
-        val totalPLPercentage = if (costBasis > 0) (totalPL / costBasis) * 100 else 0.0
 
         if (preDeductSellFees && !StockMarket.isUs(stock.market)) {
             val feeDiscount = settingsDataStore.feeDiscountFlow.first()
@@ -219,12 +234,15 @@ class OfflineStockRepository(
             totalPL -= (sellFee + sellTax)
         }
 
+        val percentageBasis = if (useCumulativeReturnRate) totalInvestment else costBasis
+        val totalPLPercentage = if (percentageBasis > 0) (totalPL / percentageBasis) * 100 else 0.0
 
         return HoldingInfo(
             stock = stock,
             shares = shares,
             averageCost = averageCost,
             buyAverage = buyAverage,
+            totalInvestment = totalInvestment,
             sellAverage = sellAverage,
             dividendIncome = totalDividendIncome,
             currentPrice = currentPrice,
