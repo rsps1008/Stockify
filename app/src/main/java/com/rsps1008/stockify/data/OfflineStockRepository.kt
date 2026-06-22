@@ -224,7 +224,7 @@ class OfflineStockRepository(
         val marketValue = shares * currentPrice
         var totalPL = marketValue - costBasis
 
-        if (preDeductSellFees && !StockMarket.isUs(stock.market)) {
+        if (preDeductSellFees && marketValue > 0.0 && !StockMarket.isUs(stock.market)) {
             val feeDiscount = settingsDataStore.feeDiscountFlow.first()
             val minFeeRegular = settingsDataStore.minFeeRegularFlow.first()
 
