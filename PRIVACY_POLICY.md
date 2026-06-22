@@ -6,7 +6,7 @@
 
 ## 1. 開發者資訊
 
-- 開發者名稱：韭菜記帳本[Stockify] / rsps1008
+- 開發者名稱：韭菜記帳本（Stockify） / rsps1008
 - 聯絡方式：[GitHub Repository](https://github.com/rsps1008/Stockify)
 - 專案／網站：[GitHub Repository](https://github.com/rsps1008/Stockify)
 
