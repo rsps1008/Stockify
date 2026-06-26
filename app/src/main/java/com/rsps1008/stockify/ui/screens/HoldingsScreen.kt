@@ -301,6 +301,11 @@ fun HoldingsScreen(navController: NavController) {
                         HoldingCard(
                             holding = holding,
                             navController = navController,
+                            longPressDisabledMessage = if (isSortingMode) {
+                                "無法在排序模式下自定義排序"
+                            } else {
+                                null
+                            },
                             modifier = Modifier.zIndex(if (isDragging) 1f else 0f).let { base ->
                                 if (isSortingMode) base else base.longPressDraggableHandle()
                             }
@@ -338,6 +343,11 @@ fun HoldingsScreen(navController: NavController) {
                             ZeroHoldingCard(
                                 holding = holding,
                                 navController = navController,
+                                longPressDisabledMessage = if (isSortingMode) {
+                                    "不能在這種排序模式下長按排序"
+                                } else {
+                                    null
+                                },
                                 modifier = Modifier.zIndex(if (isDragging) 1f else 0f).let { base ->
                                     if (isSortingMode) base else base.longPressDraggableHandle()
                                 }
@@ -484,7 +494,8 @@ private enum class HoldingsSortColumn {
     AVERAGE_COST,
     SELL_AVERAGE,
     BUY_AVERAGE,
-    TOTAL_PL
+    TOTAL_PL,
+    TOTAL_PL_PERCENTAGE
 }
 
 private fun HoldingsSortColumn.displayLabel(): String = when (this) {
@@ -496,6 +507,7 @@ private fun HoldingsSortColumn.displayLabel(): String = when (this) {
     HoldingsSortColumn.SELL_AVERAGE -> "賣均"
     HoldingsSortColumn.BUY_AVERAGE -> "買均"
     HoldingsSortColumn.TOTAL_PL -> "總損益"
+    HoldingsSortColumn.TOTAL_PL_PERCENTAGE -> "%"
 }
 
 private fun holdingsSortColumnFromName(name: String?): HoldingsSortColumn =
@@ -503,6 +515,7 @@ private fun holdingsSortColumnFromName(name: String?): HoldingsSortColumn =
 
 private const val HOME_HOLDINGS_SORT_MODE_MANUAL = "MANUAL"
 private const val HOME_HOLDINGS_SORT_MODE_COLUMN = "COLUMN"
+private var hasShownSortingModeLongPressHintThisProcess = false
 
 private fun normalizeHomeHoldingsSortMode(mode: String?): String =
     when (mode) {
@@ -553,6 +566,11 @@ private fun List<HoldingInfo>.applySort(
         )
         HoldingsSortColumn.TOTAL_PL -> compareBy<HoldingInfo>(
             { it.totalPL.toSortableAmount(it.stock.market, usdToTwdRate) },
+            { it.stock.market },
+            { it.stock.code }
+        )
+        HoldingsSortColumn.TOTAL_PL_PERCENTAGE -> compareBy<HoldingInfo>(
+            { it.totalPLPercentage },
             { it.stock.market },
             { it.stock.code }
         )
@@ -608,9 +626,11 @@ private fun HoldingsListHeaderSticky(
             textAlign = TextAlign.End,
             onSortClick = onSortClick
         )
-        SingleSortableHeaderText(
-            text = "總損益",
-            column = HoldingsSortColumn.TOTAL_PL,
+        DualSortableHeaderText(
+            primaryText = "總損益",
+            primaryColumn = HoldingsSortColumn.TOTAL_PL,
+            secondaryText = "%",
+            secondaryColumn = HoldingsSortColumn.TOTAL_PL_PERCENTAGE,
             selectedSortColumn = selectedSortColumn,
             isSortAscending = isSortAscending,
             modifier = Modifier.weight(1f),
@@ -662,9 +682,11 @@ private fun HoldingsListHeaderStickySells(
             textAlign = TextAlign.End,
             onSortClick = onSortClick
         )
-        SingleSortableHeaderText(
-            text = "總損益",
-            column = HoldingsSortColumn.TOTAL_PL,
+        DualSortableHeaderText(
+            primaryText = "總損益",
+            primaryColumn = HoldingsSortColumn.TOTAL_PL,
+            secondaryText = "%",
+            secondaryColumn = HoldingsSortColumn.TOTAL_PL_PERCENTAGE,
             selectedSortColumn = selectedSortColumn,
             isSortAscending = isSortAscending,
             modifier = Modifier.weight(1f),
@@ -970,8 +992,10 @@ fun AutoResizeNameText(
 fun HoldingCard(
     holding: HoldingInfo,
     navController: NavController,
+    longPressDisabledMessage: String? = null,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val dailyChangeColor = if (holding.dailyChange >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
     val totalPlColor = if (holding.totalPL >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
     val dailyChangeSymbol = if (holding.dailyChange >= 0) "▴" else "▾"
@@ -980,7 +1004,25 @@ fun HoldingCard(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 2.5.dp)
-            .clickable { navController.navigate(Screen.StockDetail.createRoute(holding.stock.code)) }
+            .then(
+                if (longPressDisabledMessage != null) {
+                    Modifier.pointerInput(longPressDisabledMessage, holding.stock.code) {
+                        detectTapGestures(
+                            onLongPress = {
+                                if (!hasShownSortingModeLongPressHintThisProcess) {
+                                    hasShownSortingModeLongPressHintThisProcess = true
+                                    Toast.makeText(context, longPressDisabledMessage, Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onTap = {
+                                navController.navigate(Screen.StockDetail.createRoute(holding.stock.code))
+                            }
+                        )
+                    }
+                } else {
+                    Modifier.clickable { navController.navigate(Screen.StockDetail.createRoute(holding.stock.code)) }
+                }
+            )
     ) {
         Row(modifier = Modifier.padding(16.dp, 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -1118,8 +1160,10 @@ fun ZeroHoldingsSection(
 fun ZeroHoldingCard(
     holding: HoldingInfo,
     navController: NavController,
+    longPressDisabledMessage: String? = null,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val dailyChangeColor = if (holding.dailyChange >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
     val totalPlColor = if (holding.totalPL >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
     val dailyChangeSymbol = if (holding.dailyChange >= 0) "▴" else "▾"
@@ -1127,7 +1171,25 @@ fun ZeroHoldingCard(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 2.5.dp)
-            .clickable { navController.navigate(Screen.StockDetail.createRoute(holding.stock.code)) }
+            .then(
+                if (longPressDisabledMessage != null) {
+                    Modifier.pointerInput(longPressDisabledMessage, holding.stock.code) {
+                        detectTapGestures(
+                            onLongPress = {
+                                if (!hasShownSortingModeLongPressHintThisProcess) {
+                                    hasShownSortingModeLongPressHintThisProcess = true
+                                    Toast.makeText(context, longPressDisabledMessage, Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onTap = {
+                                navController.navigate(Screen.StockDetail.createRoute(holding.stock.code))
+                            }
+                        )
+                    }
+                } else {
+                    Modifier.clickable { navController.navigate(Screen.StockDetail.createRoute(holding.stock.code)) }
+                }
+            )
     ) {
         Row(modifier = Modifier.padding(16.dp, 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(

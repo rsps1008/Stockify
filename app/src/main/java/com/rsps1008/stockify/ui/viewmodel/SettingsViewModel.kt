@@ -50,6 +50,7 @@ class SettingsViewModel(
 
     private companion object {
         const val TAG = "SettingsViewModel"
+        var hasShownLocalCsvRestoreFeeHintThisProcess = false
     }
 
     private val stockDataFetcher = StockDataFetcher()
@@ -387,7 +388,7 @@ class SettingsViewModel(
     fun onImportRequest(uri: Uri) {
         importUri = uri
         viewModelScope.launch {
-            if (settingsDataStore.localCsvRestoreFeeHintShownFlow.first()) {
+            if (hasShownLocalCsvRestoreFeeHintThisProcess) {
                 _showImportConfirmDialog.value = true
             } else {
                 _showLocalCsvRestoreFeeHintDialog.value = true
@@ -396,11 +397,9 @@ class SettingsViewModel(
     }
 
     fun onLocalCsvRestoreFeeHintConfirm() {
-        viewModelScope.launch {
-            settingsDataStore.setLocalCsvRestoreFeeHintShown(true)
-            _showLocalCsvRestoreFeeHintDialog.value = false
-            _showImportConfirmDialog.value = true
-        }
+        hasShownLocalCsvRestoreFeeHintThisProcess = true
+        _showLocalCsvRestoreFeeHintDialog.value = false
+        _showImportConfirmDialog.value = true
     }
 
     fun onLocalCsvRestoreFeeHintCancel() {
