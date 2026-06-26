@@ -67,7 +67,6 @@ import kotlin.math.abs
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.CardDefaults
 import androidx.compose.ui.graphics.Color
 import com.rsps1008.stockify.BuildConfig
 import com.rsps1008.stockify.data.LimitState
@@ -75,6 +74,8 @@ import com.rsps1008.stockify.data.RealtimeStockInfo
 import com.rsps1008.stockify.ui.theme.StockGain
 import com.rsps1008.stockify.ui.theme.StockLoss
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Refresh
@@ -114,6 +115,9 @@ fun HoldingsScreen(navController: NavController) {
     val holdingsOrder by viewModel.holdingsOrder.collectAsState()
     val realizedHoldingsOrder by viewModel.realizedHoldingsOrder.collectAsState()
     val holdingsReorderHintShown by viewModel.holdingsReorderHintShown.collectAsState()
+    val persistedSortMode by viewModel.homeHoldingsSortMode.collectAsState()
+    val persistedSortColumnName by viewModel.homeHoldingsSortColumn.collectAsState()
+    val persistedSortAscending by viewModel.homeHoldingsSortAscending.collectAsState()
     var showUnrealizedHoldings by rememberSaveable { mutableStateOf(true) }
     var showRealizedHoldings by rememberSaveable { mutableStateOf(true) }
     val usdToTwdRate by application.exchangeRateService.usdToTwdRate.collectAsState()
@@ -135,6 +139,48 @@ fun HoldingsScreen(navController: NavController) {
     } ?: "--:--"
     val shouldShowReorderHint = !holdingsReorderHintShown &&
             isVersionBefore(BuildConfig.VERSION_NAME, 1, 4, 0)
+    val homeHoldingsSortMode = normalizeHomeHoldingsSortMode(persistedSortMode)
+    val isSortingMode = homeHoldingsSortMode == HOME_HOLDINGS_SORT_MODE_COLUMN
+    val persistedSortColumn = holdingsSortColumnFromName(persistedSortColumnName)
+    val selectedSortColumn = if (isSortingMode && persistedSortColumn != HoldingsSortColumn.NONE) {
+        persistedSortColumn
+    } else {
+        HoldingsSortColumn.NONE
+    }
+    val isSortAscending = if (isSortingMode && persistedSortColumn != HoldingsSortColumn.NONE) {
+        persistedSortAscending
+    } else {
+        true
+    }
+    val normalizedUsdToTwdRate = usdToTwdRate.takeIf { it > 0.0 } ?: 1.0
+    val displayedActiveHoldings = remember(orderedActiveHoldings, selectedSortColumn, isSortAscending) {
+        orderedActiveHoldings.applySort(
+            column = selectedSortColumn,
+            ascending = isSortAscending,
+            usdToTwdRate = normalizedUsdToTwdRate
+        )
+    }
+    val displayedZeroHoldings = remember(orderedZeroHoldings, selectedSortColumn, isSortAscending) {
+        orderedZeroHoldings.applySort(
+            column = selectedSortColumn,
+            ascending = isSortAscending,
+            usdToTwdRate = normalizedUsdToTwdRate
+        )
+    }
+
+    fun toggleSort(column: HoldingsSortColumn) {
+        when {
+            selectedSortColumn != column -> {
+                viewModel.setHomeHoldingsFixedSort(column.name, true)
+            }
+            isSortAscending -> {
+                viewModel.setHomeHoldingsFixedSort(column.name, false)
+            }
+            else -> {
+                viewModel.setHomeHoldingsManualSort()
+            }
+        }
+    }
 
     LaunchedEffect(activeHoldings, holdingsOrder) {
         orderedActiveHoldings = activeHoldings.sortedByHoldingsOrder(holdingsOrder)
@@ -237,11 +283,15 @@ fun HoldingsScreen(navController: NavController) {
 
             if (showUnrealizedHoldings) {
                 stickyHeader {
-                    HoldingsListHeaderSticky()
+                    HoldingsListHeaderSticky(
+                        selectedSortColumn = selectedSortColumn,
+                        isSortAscending = isSortAscending,
+                        onSortClick = ::toggleSort
+                    )
                 }
 
                 items(
-                    items = orderedActiveHoldings,
+                    items = displayedActiveHoldings,
                     key = { it.holdingOrderKey() }
                 ) { holding ->
                     ReorderableItem(
@@ -251,9 +301,9 @@ fun HoldingsScreen(navController: NavController) {
                         HoldingCard(
                             holding = holding,
                             navController = navController,
-                            modifier = Modifier
-                                .zIndex(if (isDragging) 1f else 0f)
-                                .longPressDraggableHandle()
+                            modifier = Modifier.zIndex(if (isDragging) 1f else 0f).let { base ->
+                                if (isSortingMode) base else base.longPressDraggableHandle()
+                            }
                         )
                     }
                 }
@@ -271,10 +321,14 @@ fun HoldingsScreen(navController: NavController) {
                 }
                 if (showRealizedHoldings) {
                     stickyHeader {
-                        HoldingsListHeaderStickySells()
+                        HoldingsListHeaderStickySells(
+                            selectedSortColumn = selectedSortColumn,
+                            isSortAscending = isSortAscending,
+                            onSortClick = ::toggleSort
+                        )
                     }
                     items(
-                        items = orderedZeroHoldings,
+                        items = displayedZeroHoldings,
                         key = { "realized-${it.holdingOrderKey()}" }
                     ) { holding ->
                         ReorderableItem(
@@ -284,9 +338,9 @@ fun HoldingsScreen(navController: NavController) {
                             ZeroHoldingCard(
                                 holding = holding,
                                 navController = navController,
-                                modifier = Modifier
-                                    .zIndex(if (isDragging) 1f else 0f)
-                                    .longPressDraggableHandle()
+                                modifier = Modifier.zIndex(if (isDragging) 1f else 0f).let { base ->
+                                    if (isSortingMode) base else base.longPressDraggableHandle()
+                                }
                             )
                         }
                     }
@@ -422,33 +476,298 @@ private fun List<HoldingInfo>.sortedByHoldingsOrder(order: List<String>): List<H
     )
 }
 
+private enum class HoldingsSortColumn {
+    NONE,
+    STOCK,
+    SHARES,
+    PRICE,
+    AVERAGE_COST,
+    SELL_AVERAGE,
+    BUY_AVERAGE,
+    TOTAL_PL
+}
+
+private fun HoldingsSortColumn.displayLabel(): String = when (this) {
+    HoldingsSortColumn.NONE -> "手動拖曳"
+    HoldingsSortColumn.STOCK -> "股票"
+    HoldingsSortColumn.SHARES -> "股數"
+    HoldingsSortColumn.PRICE -> "股價"
+    HoldingsSortColumn.AVERAGE_COST -> "成本均"
+    HoldingsSortColumn.SELL_AVERAGE -> "賣均"
+    HoldingsSortColumn.BUY_AVERAGE -> "買均"
+    HoldingsSortColumn.TOTAL_PL -> "總損益"
+}
+
+private fun holdingsSortColumnFromName(name: String?): HoldingsSortColumn =
+    HoldingsSortColumn.entries.firstOrNull { it.name == name } ?: HoldingsSortColumn.NONE
+
+private const val HOME_HOLDINGS_SORT_MODE_MANUAL = "MANUAL"
+private const val HOME_HOLDINGS_SORT_MODE_COLUMN = "COLUMN"
+
+private fun normalizeHomeHoldingsSortMode(mode: String?): String =
+    when (mode) {
+        HOME_HOLDINGS_SORT_MODE_COLUMN -> HOME_HOLDINGS_SORT_MODE_COLUMN
+        else -> HOME_HOLDINGS_SORT_MODE_MANUAL
+    }
+
+private fun List<HoldingInfo>.applySort(
+    column: HoldingsSortColumn,
+    ascending: Boolean,
+    usdToTwdRate: Double
+): List<HoldingInfo> {
+    if (column == HoldingsSortColumn.NONE) return this
+
+    val comparator = when (column) {
+        HoldingsSortColumn.NONE -> compareBy<HoldingInfo> { 0 }
+        HoldingsSortColumn.STOCK -> compareBy<HoldingInfo>(
+            { it.stock.code.uppercase() },
+            { it.stock.market },
+            { it.stock.name.uppercase() }
+        )
+        HoldingsSortColumn.SHARES -> compareBy<HoldingInfo>(
+            { it.shares },
+            { it.stock.market },
+            { it.stock.code }
+        )
+        HoldingsSortColumn.PRICE -> compareBy<HoldingInfo>(
+            { it.currentPrice.toSortableAmount(it.stock.market, usdToTwdRate) },
+            { it.stock.market },
+            { it.stock.code }
+        )
+        HoldingsSortColumn.AVERAGE_COST -> compareBy<HoldingInfo>(
+            { it.averageCost.toSortableAmount(it.stock.market, usdToTwdRate) },
+            { it.buyAverage.toSortableAmount(it.stock.market, usdToTwdRate) },
+            { it.stock.market },
+            { it.stock.code }
+        )
+        HoldingsSortColumn.SELL_AVERAGE -> compareBy<HoldingInfo>(
+            { it.sellAverage.toSortableAmount(it.stock.market, usdToTwdRate) },
+            { it.buyAverage.toSortableAmount(it.stock.market, usdToTwdRate) },
+            { it.stock.market },
+            { it.stock.code }
+        )
+        HoldingsSortColumn.BUY_AVERAGE -> compareBy<HoldingInfo>(
+            { it.buyAverage.toSortableAmount(it.stock.market, usdToTwdRate) },
+            { it.stock.market },
+            { it.stock.code }
+        )
+        HoldingsSortColumn.TOTAL_PL -> compareBy<HoldingInfo>(
+            { it.totalPL.toSortableAmount(it.stock.market, usdToTwdRate) },
+            { it.stock.market },
+            { it.stock.code }
+        )
+    }
+
+    return if (ascending) sortedWith(comparator) else sortedWith(comparator.reversed())
+}
+
+private fun Double.toSortableAmount(
+    market: String,
+    usdToTwdRate: Double
+): Double = if (market == StockMarket.US) this * usdToTwdRate else this
+
 @Composable
-fun HoldingsListHeaderSticky() {
+private fun HoldingsListHeaderSticky(
+    selectedSortColumn: HoldingsSortColumn,
+    isSortAscending: Boolean,
+    onSortClick: (HoldingsSortColumn) -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background) // ★ 必加，避免透明
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        Text("股票/股數", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-        Text("股價", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
-        Text("成本均/買均", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
-        Text("總損益", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+        DualSortableHeaderText(
+            primaryText = "股票",
+            primaryColumn = HoldingsSortColumn.STOCK,
+            secondaryText = "股數",
+            secondaryColumn = HoldingsSortColumn.SHARES,
+            selectedSortColumn = selectedSortColumn,
+            isSortAscending = isSortAscending,
+            modifier = Modifier.weight(1f),
+            onSortClick = onSortClick
+        )
+        SingleSortableHeaderText(
+            text = "股價",
+            column = HoldingsSortColumn.PRICE,
+            selectedSortColumn = selectedSortColumn,
+            isSortAscending = isSortAscending,
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.End,
+            onSortClick = onSortClick
+        )
+        DualSortableHeaderText(
+            primaryText = "成本均",
+            primaryColumn = HoldingsSortColumn.AVERAGE_COST,
+            secondaryText = "買均",
+            secondaryColumn = HoldingsSortColumn.BUY_AVERAGE,
+            selectedSortColumn = selectedSortColumn,
+            isSortAscending = isSortAscending,
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.End,
+            onSortClick = onSortClick
+        )
+        SingleSortableHeaderText(
+            text = "總損益",
+            column = HoldingsSortColumn.TOTAL_PL,
+            selectedSortColumn = selectedSortColumn,
+            isSortAscending = isSortAscending,
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.End,
+            onSortClick = onSortClick
+        )
     }
 }
 
 @Composable
-fun HoldingsListHeaderStickySells() {
+private fun HoldingsListHeaderStickySells(
+    selectedSortColumn: HoldingsSortColumn,
+    isSortAscending: Boolean,
+    onSortClick: (HoldingsSortColumn) -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background) // ★ 必加，避免透明
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        Text("股票/股數", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-        Text("股價", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
-        Text("賣均/買均", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
-        Text("總損益", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+        DualSortableHeaderText(
+            primaryText = "股票",
+            primaryColumn = HoldingsSortColumn.STOCK,
+            secondaryText = "股數",
+            secondaryColumn = HoldingsSortColumn.SHARES,
+            selectedSortColumn = selectedSortColumn,
+            isSortAscending = isSortAscending,
+            modifier = Modifier.weight(1f),
+            onSortClick = onSortClick
+        )
+        SingleSortableHeaderText(
+            text = "股價",
+            column = HoldingsSortColumn.PRICE,
+            selectedSortColumn = selectedSortColumn,
+            isSortAscending = isSortAscending,
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.End,
+            onSortClick = onSortClick
+        )
+        DualSortableHeaderText(
+            primaryText = "賣均",
+            primaryColumn = HoldingsSortColumn.SELL_AVERAGE,
+            secondaryText = "買均",
+            secondaryColumn = HoldingsSortColumn.BUY_AVERAGE,
+            selectedSortColumn = selectedSortColumn,
+            isSortAscending = isSortAscending,
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.End,
+            onSortClick = onSortClick
+        )
+        SingleSortableHeaderText(
+            text = "總損益",
+            column = HoldingsSortColumn.TOTAL_PL,
+            selectedSortColumn = selectedSortColumn,
+            isSortAscending = isSortAscending,
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.End,
+            onSortClick = onSortClick
+        )
+    }
+}
+
+@Composable
+private fun SingleSortableHeaderText(
+    text: String,
+    column: HoldingsSortColumn,
+    selectedSortColumn: HoldingsSortColumn,
+    isSortAscending: Boolean,
+    modifier: Modifier = Modifier,
+    textAlign: TextAlign = TextAlign.Start,
+    onSortClick: (HoldingsSortColumn) -> Unit
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = if (textAlign == TextAlign.End) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        SortableHeaderLabel(
+            text = text,
+            column = column,
+            selectedSortColumn = selectedSortColumn,
+            isSortAscending = isSortAscending,
+            textAlign = textAlign,
+            onSortClick = onSortClick
+        )
+    }
+}
+
+@Composable
+private fun DualSortableHeaderText(
+    primaryText: String,
+    primaryColumn: HoldingsSortColumn,
+    secondaryText: String,
+    secondaryColumn: HoldingsSortColumn,
+    selectedSortColumn: HoldingsSortColumn,
+    isSortAscending: Boolean,
+    modifier: Modifier = Modifier,
+    textAlign: TextAlign = TextAlign.Start,
+    onSortClick: (HoldingsSortColumn) -> Unit
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = if (textAlign == TextAlign.End) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        SortableHeaderLabel(
+            text = primaryText,
+            column = primaryColumn,
+            selectedSortColumn = selectedSortColumn,
+            isSortAscending = isSortAscending,
+            textAlign = textAlign,
+            onSortClick = onSortClick
+        )
+        Text("/", style = MaterialTheme.typography.bodySmall)
+        SortableHeaderLabel(
+            text = secondaryText,
+            column = secondaryColumn,
+            selectedSortColumn = selectedSortColumn,
+            isSortAscending = isSortAscending,
+            textAlign = textAlign,
+            onSortClick = onSortClick
+        )
+    }
+}
+
+@Composable
+private fun SortableHeaderLabel(
+    text: String,
+    column: HoldingsSortColumn,
+    selectedSortColumn: HoldingsSortColumn,
+    isSortAscending: Boolean,
+    textAlign: TextAlign,
+    onSortClick: (HoldingsSortColumn) -> Unit
+) {
+    val isSelected = selectedSortColumn == column
+
+    Row(
+        modifier = Modifier.clickable { onSortClick(column) },
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            textAlign = textAlign
+        )
+
+        if (isSelected) {
+            Icon(
+                imageVector = if (isSortAscending) Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward,
+                contentDescription = if (isSortAscending) "Ascending sort" else "Descending sort",
+                modifier = Modifier
+                    .padding(start = 1.dp)
+                    .height(12.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
     }
 }
 

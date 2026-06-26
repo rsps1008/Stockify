@@ -45,6 +45,9 @@ class SettingsDataStore(val context: Context) {
     private val holdingsOrderKey = stringPreferencesKey("holdings_order")
     private val realizedHoldingsOrderKey = stringPreferencesKey("realized_holdings_order")
     private val holdingsReorderHintShownKey = booleanPreferencesKey("holdings_reorder_hint_shown")
+    private val homeHoldingsSortModeKey = stringPreferencesKey("home_holdings_sort_mode")
+    private val homeHoldingsSortColumnKey = stringPreferencesKey("home_holdings_sort_column")
+    private val homeHoldingsSortAscendingKey = booleanPreferencesKey("home_holdings_sort_ascending")
     private val localCsvRestoreFeeHintShownKey = booleanPreferencesKey("local_csv_restore_fee_hint_shown")
     private val calculationRoundingModeKey = stringPreferencesKey("calculation_rounding_mode")
 
@@ -188,6 +191,21 @@ class SettingsDataStore(val context: Context) {
     val holdingsReorderHintShownFlow: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
             preferences[holdingsReorderHintShownKey] ?: false
+        }
+
+    val homeHoldingsSortModeFlow: Flow<String> = context.dataStore.data
+        .map { preferences ->
+            preferences[homeHoldingsSortModeKey] ?: "MANUAL"
+        }
+
+    val homeHoldingsSortColumnFlow: Flow<String> = context.dataStore.data
+        .map { preferences ->
+            preferences[homeHoldingsSortColumnKey] ?: "NONE"
+        }
+
+    val homeHoldingsSortAscendingFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[homeHoldingsSortAscendingKey] ?: true
         }
 
     val localCsvRestoreFeeHintShownFlow: Flow<Boolean> = context.dataStore.data
@@ -355,6 +373,24 @@ class SettingsDataStore(val context: Context) {
     suspend fun setHoldingsReorderHintShown(shown: Boolean) {
         context.dataStore.edit {
             it[holdingsReorderHintShownKey] = shown
+        }
+    }
+
+    suspend fun setHomeHoldingsSortMode(mode: String) {
+        context.dataStore.edit {
+            it[homeHoldingsSortModeKey] = mode
+        }
+    }
+
+    suspend fun setHomeHoldingsSortPreference(
+        mode: String,
+        column: String,
+        ascending: Boolean
+    ) {
+        context.dataStore.edit {
+            it[homeHoldingsSortModeKey] = mode
+            it[homeHoldingsSortColumnKey] = column
+            it[homeHoldingsSortAscendingKey] = ascending
         }
     }
 

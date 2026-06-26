@@ -52,6 +52,27 @@ class HoldingsViewModel(
             initialValue = false
         )
 
+    val homeHoldingsSortMode: StateFlow<String> = settingsDataStore.homeHoldingsSortModeFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000L),
+            initialValue = "MANUAL"
+        )
+
+    val homeHoldingsSortColumn: StateFlow<String> = settingsDataStore.homeHoldingsSortColumnFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000L),
+            initialValue = "NONE"
+        )
+
+    val homeHoldingsSortAscending: StateFlow<Boolean> = settingsDataStore.homeHoldingsSortAscendingFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000L),
+            initialValue = true
+        )
+
     fun setHomeDisplayMode(mode: String) {
         viewModelScope.launch {
             settingsDataStore.setHomeDisplayMode(mode)
@@ -79,6 +100,26 @@ class HoldingsViewModel(
     fun markHoldingsReorderHintShown() {
         viewModelScope.launch {
             settingsDataStore.setHoldingsReorderHintShown(true)
+        }
+    }
+
+    fun setHomeHoldingsManualSort() {
+        viewModelScope.launch {
+            settingsDataStore.setHomeHoldingsSortPreference(
+                mode = "MANUAL",
+                column = "NONE",
+                ascending = true
+            )
+        }
+    }
+
+    fun setHomeHoldingsFixedSort(column: String, ascending: Boolean) {
+        viewModelScope.launch {
+            settingsDataStore.setHomeHoldingsSortPreference(
+                mode = "COLUMN",
+                column = column,
+                ascending = ascending
+            )
         }
     }
 }
