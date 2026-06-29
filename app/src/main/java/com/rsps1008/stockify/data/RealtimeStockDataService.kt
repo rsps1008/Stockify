@@ -35,6 +35,7 @@ import com.rsps1008.stockify.data.StockMarket
 class RealtimeStockDataService(
     private val stockDao: StockDao,
     private val settingsDataStore: SettingsDataStore,
+    private val taiwanWeightedIndexService: TaiwanWeightedIndexService,
     private val applicationContext: Context,
 ) {
     private val _realtimeStockInfo = MutableStateFlow<Map<String, RealtimeStockInfo>>(emptyMap())
@@ -126,6 +127,7 @@ class RealtimeStockDataService(
                 isContinuous = false,
                 refreshRegardlessOfMarketOpen = true
             )
+            refreshTaiwanWeightedIndex(refreshRegardlessOfMarketOpen = true)
 
             settingsDataStore.fetchIntervalFlow.collectLatest { interval ->
                 while (true) {
@@ -134,6 +136,7 @@ class RealtimeStockDataService(
                         continue
                     }
                     fetchAllStockInfo(isContinuous = true)
+                    refreshTaiwanWeightedIndex()
                     delay(delayUntilNextAlignedFetch(interval))
                 }
             }
@@ -239,6 +242,7 @@ class RealtimeStockDataService(
             forceSave = true,
             refreshRegardlessOfMarketOpen = true
         )
+        refreshTaiwanWeightedIndex(refreshRegardlessOfMarketOpen = true)
     }
 
     suspend fun refreshStocks(stockCodes: Collection<String>) {
@@ -347,6 +351,20 @@ class RealtimeStockDataService(
         if (isTaiwanHoliday(date)) return false
 
         return true
+    }
+
+    private suspend fun refreshTaiwanWeightedIndex(
+        refreshRegardlessOfMarketOpen: Boolean = false
+    ) {
+        if (!refreshRegardlessOfMarketOpen && !isTaiwanMarketOpen()) {
+            Log.d(
+                "RealtimeStockDataService",
+                "Skipping Taiwan weighted index refresh because TW market is closed"
+            )
+            return
+        }
+
+        taiwanWeightedIndexService.refreshOnce(preferredStockDataSource.value)
     }
 
     @SuppressLint("UnsafeOptInUsageError")

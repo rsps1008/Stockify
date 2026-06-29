@@ -135,6 +135,9 @@ class SettingsViewModel(
     val theme: StateFlow<String> = settingsDataStore.themeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), "System")
 
+    val showTaiwanWeightedIndex: StateFlow<Boolean> = settingsDataStore.showTaiwanWeightedIndexFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), true)
+
     val stockDataSource: StateFlow<String> = settingsDataStore.stockDataSourceFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), "TWSE")
 
@@ -665,6 +668,12 @@ class SettingsViewModel(
     fun setTheme(theme: String) {
         viewModelScope.launch {
             settingsDataStore.setTheme(theme)
+        }
+    }
+
+    fun setShowTaiwanWeightedIndex(show: Boolean) {
+        viewModelScope.launch {
+            settingsDataStore.setShowTaiwanWeightedIndex(show)
         }
     }
 

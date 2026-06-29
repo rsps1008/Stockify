@@ -94,6 +94,7 @@ fun SettingsScreen() {
     val calculationRoundingMode by viewModel.calculationRoundingMode.collectAsState()
     val fetchInterval by viewModel.fetchInterval.collectAsState()
     val theme by viewModel.theme.collectAsState()
+    val showTaiwanWeightedIndex by viewModel.showTaiwanWeightedIndex.collectAsState()
     val stockDataSource by viewModel.stockDataSource.collectAsState()
     val usStockDataSource by viewModel.usStockDataSource.collectAsState()
     val notifyFallbackRepeatedly by viewModel.notifyFallbackRepeatedly.collectAsState()
@@ -182,6 +183,27 @@ fun SettingsScreen() {
                                     )
                                 }
                             }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f, fill = false)) {
+                                Text("顯示台灣加權", style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    "控制首頁累積損益下方的台灣加權摘要列",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = showTaiwanWeightedIndex,
+                                onCheckedChange = viewModel::setShowTaiwanWeightedIndex
+                            )
                         }
                     }
                 }

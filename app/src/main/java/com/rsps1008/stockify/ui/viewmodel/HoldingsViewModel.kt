@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.StockRepository
+import com.rsps1008.stockify.data.TaiwanWeightedIndexService
 import com.rsps1008.stockify.ui.screens.HoldingsUiState
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -14,6 +15,7 @@ import kotlinx.coroutines.launch
 class HoldingsViewModel(
     private val settingsDataStore: SettingsDataStore,
     private val realtimeStockDataService: RealtimeStockDataService,
+    private val taiwanWeightedIndexService: TaiwanWeightedIndexService,
     stockRepository: StockRepository
 ) : ViewModel() {
 
@@ -72,6 +74,16 @@ class HoldingsViewModel(
             started = SharingStarted.WhileSubscribed(5000L),
             initialValue = true
         )
+
+    val showTaiwanWeightedIndex: StateFlow<Boolean> = settingsDataStore.showTaiwanWeightedIndexFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000L),
+            initialValue = true
+        )
+
+    val taiwanWeightedIndexInfo: StateFlow<com.rsps1008.stockify.data.TaiwanWeightedIndexInfo?> =
+        taiwanWeightedIndexService.indexInfo
 
     fun setHomeDisplayMode(mode: String) {
         viewModelScope.launch {

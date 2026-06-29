@@ -40,6 +40,7 @@ class SettingsDataStore(val context: Context) {
     private val skipPdfImportTutorialKey = booleanPreferencesKey("skip_pdf_import_tutorial")
     private val usdToTwdRateKey = doublePreferencesKey("usd_to_twd_rate")
     private val usdToTwdRateUpdatedAtKey = longPreferencesKey("usd_to_twd_rate_updated_at")
+    private val taiwanWeightedIndexCacheKey = stringPreferencesKey("taiwan_weighted_index_cache")
     private val homeDisplayModeKey = stringPreferencesKey("home_display_mode")
     private val finnhubApiKeyKey = stringPreferencesKey("finnhub_api_key")
     private val holdingsOrderKey = stringPreferencesKey("holdings_order")
@@ -50,6 +51,7 @@ class SettingsDataStore(val context: Context) {
     private val homeHoldingsSortAscendingKey = booleanPreferencesKey("home_holdings_sort_ascending")
     private val localCsvRestoreFeeHintShownKey = booleanPreferencesKey("local_csv_restore_fee_hint_shown")
     private val calculationRoundingModeKey = stringPreferencesKey("calculation_rounding_mode")
+    private val showTaiwanWeightedIndexKey = booleanPreferencesKey("show_taiwan_weighted_index")
 
     val fetchIntervalFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
@@ -162,6 +164,13 @@ class SettingsDataStore(val context: Context) {
             preferences[usdToTwdRateUpdatedAtKey]
         }
 
+    val taiwanWeightedIndexCacheFlow: Flow<TaiwanWeightedIndexInfo?> = context.dataStore.data
+        .map { preferences ->
+            preferences[taiwanWeightedIndexCacheKey]?.let {
+                Json.decodeFromString<TaiwanWeightedIndexInfo>(it)
+            }
+        }
+
     val homeDisplayModeFlow: Flow<String> = context.dataStore.data
         .map { preferences ->
             preferences[homeDisplayModeKey] ?: HomeDisplayMode.COMBINED
@@ -211,6 +220,11 @@ class SettingsDataStore(val context: Context) {
     val localCsvRestoreFeeHintShownFlow: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
             preferences[localCsvRestoreFeeHintShownKey] ?: false
+        }
+
+    val showTaiwanWeightedIndexFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[showTaiwanWeightedIndexKey] ?: true
         }
 
     suspend fun setFetchInterval(interval: Int) {
@@ -346,6 +360,12 @@ class SettingsDataStore(val context: Context) {
         }
     }
 
+    suspend fun setTaiwanWeightedIndexCache(info: TaiwanWeightedIndexInfo) {
+        context.dataStore.edit {
+            it[taiwanWeightedIndexCacheKey] = Json.encodeToString(info)
+        }
+    }
+
     suspend fun setHomeDisplayMode(mode: String) {
         context.dataStore.edit {
             it[homeDisplayModeKey] = HomeDisplayMode.normalize(mode)
@@ -397,6 +417,12 @@ class SettingsDataStore(val context: Context) {
     suspend fun setLocalCsvRestoreFeeHintShown(shown: Boolean) {
         context.dataStore.edit {
             it[localCsvRestoreFeeHintShownKey] = shown
+        }
+    }
+
+    suspend fun setShowTaiwanWeightedIndex(show: Boolean) {
+        context.dataStore.edit {
+            it[showTaiwanWeightedIndexKey] = show
         }
     }
 }

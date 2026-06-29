@@ -91,6 +91,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import android.widget.Toast
 import com.rsps1008.stockify.data.HomeDisplayMode
 import com.rsps1008.stockify.data.StockMarket
+import com.rsps1008.stockify.data.TaiwanWeightedIndexInfo
 import com.rsps1008.stockify.data.formatHomeAmount
 import com.rsps1008.stockify.data.formatMarketAmount
 import com.rsps1008.stockify.data.formatShareCount
@@ -107,7 +108,8 @@ fun HoldingsScreen(navController: NavController) {
             stockDao = application.database.stockDao(),
             realtimeStockDataService = application.realtimeStockDataService,
             settingsDataStore = application.settingsDataStore,
-            exchangeRateService = application.exchangeRateService
+            exchangeRateService = application.exchangeRateService,
+            taiwanWeightedIndexService = application.taiwanWeightedIndexService
         )
     )
     val uiState by viewModel.uiState.collectAsState()
@@ -118,6 +120,8 @@ fun HoldingsScreen(navController: NavController) {
     val persistedSortMode by viewModel.homeHoldingsSortMode.collectAsState()
     val persistedSortColumnName by viewModel.homeHoldingsSortColumn.collectAsState()
     val persistedSortAscending by viewModel.homeHoldingsSortAscending.collectAsState()
+    val showTaiwanWeightedIndex by viewModel.showTaiwanWeightedIndex.collectAsState()
+    val taiwanWeightedIndexInfo by viewModel.taiwanWeightedIndexInfo.collectAsState()
     var showUnrealizedHoldings by rememberSaveable { mutableStateOf(true) }
     var showRealizedHoldings by rememberSaveable { mutableStateOf(true) }
     val usdToTwdRate by application.exchangeRateService.usdToTwdRate.collectAsState()
@@ -269,6 +273,14 @@ fun HoldingsScreen(navController: NavController) {
                     onModeSelected = viewModel::setHomeDisplayMode,
                     onRefreshClick = viewModel::refreshAllHoldingsQuotes
                 )
+            }
+
+            if (showTaiwanWeightedIndex) {
+                item {
+                    TaiwanWeightedIndexSection(
+                        indexInfo = taiwanWeightedIndexInfo
+                    )
+                }
             }
 
             item {
@@ -944,6 +956,52 @@ fun SummarySection(
 }
 
 @Composable
+private fun TaiwanWeightedIndexSection(
+    indexInfo: TaiwanWeightedIndexInfo?
+) {
+    val valueColor = when {
+        indexInfo == null -> MaterialTheme.colorScheme.onSurfaceVariant
+        indexInfo.change >= 0 -> StockifyAppTheme.stockColors.gain
+        else -> StockifyAppTheme.stockColors.loss
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp, start = 4.dp, end = 4.dp, bottom = 0.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "台灣加權",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = if (indexInfo == null) {
+                "--"
+            } else {
+                val arrow = when {
+                    indexInfo.change > 0 -> "▴"
+                    indexInfo.change < 0 -> "▾"
+                    else -> ""
+                }
+                if (arrow.isEmpty()) {
+                    "${String.format("%,.2f", indexInfo.current)}  0.00  (0.00%)"
+                } else {
+                    val absChange = kotlin.math.abs(indexInfo.change)
+                    val absPercent = kotlin.math.abs(indexInfo.changePercent)
+                    "${String.format("%,.2f", indexInfo.current)}  $arrow${String.format("%.2f", absChange)}  (${String.format("%.2f%%", absPercent)})"
+                }
+            },
+            style = MaterialTheme.typography.labelMedium,
+            color = valueColor,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@Composable
 fun HoldingsListHeader() {
 
     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -1328,7 +1386,7 @@ fun HoldingsHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 12.dp, bottom = 4.dp)
+            .padding(top = 8.dp, bottom = 4.dp)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -1396,7 +1454,7 @@ fun ClearedHoldingsHeader
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 12.dp, bottom = 4.dp)
+            .padding(top = 8.dp, bottom = 4.dp)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,

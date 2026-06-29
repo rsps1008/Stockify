@@ -7,6 +7,7 @@ import com.rsps1008.stockify.data.OfflineStockRepository
 import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.StockDao
+import com.rsps1008.stockify.data.TaiwanWeightedIndexService
 import com.rsps1008.stockify.data.UsdTwdExchangeRateService
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
 
@@ -18,7 +19,8 @@ class ViewModelFactory(
     private val stockCode: String? = null,
     private val transactionId: Int? = null,
     private val dividendRepository: YahooDividendRepository? = null,
-    private val exchangeRateService: UsdTwdExchangeRateService? = null
+    private val exchangeRateService: UsdTwdExchangeRateService? = null,
+    private val taiwanWeightedIndexService: TaiwanWeightedIndexService? = null
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return when {
@@ -26,10 +28,12 @@ class ViewModelFactory(
                 requireNotNull(realtimeStockDataService) { "realtimeStockDataService is required for HoldingsViewModel" }
                 requireNotNull(settingsDataStore) { "settingsDataStore is required for HoldingsViewModel" }
                 requireNotNull(exchangeRateService) { "exchangeRateService is required for HoldingsViewModel" }
+                requireNotNull(taiwanWeightedIndexService) { "taiwanWeightedIndexService is required for HoldingsViewModel" }
                 @Suppress("UNCHECKED_CAST")
                 HoldingsViewModel(
                     settingsDataStore = settingsDataStore,
                     realtimeStockDataService = realtimeStockDataService,
+                    taiwanWeightedIndexService = taiwanWeightedIndexService,
                     stockRepository = OfflineStockRepository(
                         stockDao = stockDao,
                         realtimeStockDataService = realtimeStockDataService,
