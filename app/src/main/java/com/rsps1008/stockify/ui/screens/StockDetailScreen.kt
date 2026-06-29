@@ -10,6 +10,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -48,11 +50,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.rsps1008.stockify.StockifyApplication
+import com.rsps1008.stockify.R
 import com.rsps1008.stockify.ui.navigation.Screen
 import com.rsps1008.stockify.ui.theme.StockifyAppTheme
 import com.rsps1008.stockify.ui.viewmodel.StockDetailViewModel
@@ -136,7 +141,16 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp)
         ) {
-            holdingInfo?.let { StockDetailSummary(it) }
+            holdingInfo?.let {
+                StockDetailSummary(
+                    holdingInfo = it,
+                    onYahooClick = {
+                        navController.navigate(
+                            Screen.YahooQuote.createRoute(it.stock.code, it.stock.market)
+                        )
+                    }
+                )
+            }
             Spacer(modifier = Modifier.height(16.dp))
             RealtimePriceRow(stockCode, viewModel)
             Spacer(modifier = Modifier.height(8.dp))
@@ -147,68 +161,90 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
 }
 
 @Composable
-private fun StockDetailSummary(holdingInfo: HoldingInfo) {
+private fun StockDetailSummary(
+    holdingInfo: HoldingInfo,
+    onYahooClick: () -> Unit
+) {
     val totalPlColor = if (holdingInfo.totalPL >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
     val dailyPlColor = if (holdingInfo.dailyChange >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
 
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("累積損益", style = MaterialTheme.typography.bodySmall)
-            Row(verticalAlignment = Alignment.Bottom) {
-
-                // 大字（累積損益）
-                AnimatedNumberText(
-                    text = formatMarketAmount(holdingInfo.totalPL, holdingInfo.stock.market),
-                    color = totalPlColor,
-                    style = MaterialTheme.typography.headlineLarge
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                Text(
+                    text = "累積損益",
+                    style = MaterialTheme.typography.bodySmall,
                 )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.Bottom) {
 
-                Spacer(modifier = Modifier.width(4.dp))
-
-                // 小字（%）→ 用 padding 調整
-                AnimatedNumberText(
-                    text = String.format("%+.2f%%", holdingInfo.totalPLPercentage),
-                    color = totalPlColor,
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(bottom = 4.dp)   // ★ 微調這裡
-                )
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            Row {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "成本均", style = MaterialTheme.typography.bodySmall)
-                    Text(text = String.format("%,.2f", holdingInfo.averageCost), style = MaterialTheme.typography.bodyLarge)
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "買均", style = MaterialTheme.typography.bodySmall)
-                    Text(text = String.format("%,.2f", holdingInfo.buyAverage), style = MaterialTheme.typography.bodyLarge)
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "持股數", style = MaterialTheme.typography.bodySmall)
-                    Text(text = formatShareCount(holdingInfo.shares), style = MaterialTheme.typography.bodyLarge)
-                }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Row {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "持股日損益", style = MaterialTheme.typography.bodySmall)
+                    // 大字（累積損益）
                     AnimatedNumberText(
-                        text = formatMarketAmount(kotlin.math.abs(holdingInfo.dailyChange * holdingInfo.shares), holdingInfo.stock.market),
-                        color = dailyPlColor,
-                        style = MaterialTheme.typography.bodyLarge
+                        text = formatMarketAmount(holdingInfo.totalPL, holdingInfo.stock.market),
+                        color = totalPlColor,
+                        style = MaterialTheme.typography.headlineLarge
+                    )
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // 小字（%）→ 用 padding 調整
+                    AnimatedNumberText(
+                        text = String.format("%+.2f%%", holdingInfo.totalPLPercentage),
+                        color = totalPlColor,
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.padding(bottom = 4.dp)
                     )
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "持股市值", style = MaterialTheme.typography.bodySmall)
-                    Text(
-                        text = formatMarketAmount(holdingInfo.marketValue, holdingInfo.stock.market),
-                        style = MaterialTheme.typography.bodyLarge
-                    )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "成本均", style = MaterialTheme.typography.bodySmall)
+                        Text(text = String.format("%,.2f", holdingInfo.averageCost), style = MaterialTheme.typography.bodyLarge)
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "買均", style = MaterialTheme.typography.bodySmall)
+                        Text(text = String.format("%,.2f", holdingInfo.buyAverage), style = MaterialTheme.typography.bodyLarge)
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "持股數", style = MaterialTheme.typography.bodySmall)
+                        Text(text = formatShareCount(holdingInfo.shares), style = MaterialTheme.typography.bodyLarge)
+                    }
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "股息收入", style = MaterialTheme.typography.bodySmall)
-                    Text(text = formatMarketAmount(holdingInfo.dividendIncome, holdingInfo.stock.market), style = MaterialTheme.typography.bodyLarge)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "持股日損益", style = MaterialTheme.typography.bodySmall)
+                        AnimatedNumberText(
+                            text = formatMarketAmount(kotlin.math.abs(holdingInfo.dailyChange * holdingInfo.shares), holdingInfo.stock.market),
+                            color = dailyPlColor,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "持股市值", style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            text = formatMarketAmount(holdingInfo.marketValue, holdingInfo.stock.market),
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "股息收入", style = MaterialTheme.typography.bodySmall)
+                        Text(text = formatMarketAmount(holdingInfo.dividendIncome, holdingInfo.stock.market), style = MaterialTheme.typography.bodyLarge)
+                    }
                 }
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 10.dp, end = 10.dp)
+                    .size(24.dp)
+                    .clickable(onClick = onYahooClick),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_yahoo_brand),
+                    contentDescription = "Yahoo 股市"
+                )
             }
         }
     }

@@ -17,6 +17,7 @@ import com.rsps1008.stockify.ui.screens.AddTransactionScreen
 import com.rsps1008.stockify.ui.screens.DataManagementScreen
 import com.rsps1008.stockify.ui.screens.DividendInfoScreen
 import com.rsps1008.stockify.ui.screens.HoldingsScreen
+import com.rsps1008.stockify.ui.screens.YahooWebViewScreen
 import com.rsps1008.stockify.ui.screens.SettingsScreen
 import com.rsps1008.stockify.ui.screens.StockDetailScreen
 import com.rsps1008.stockify.ui.screens.TransactionDetailScreen
@@ -66,6 +67,22 @@ fun NavGraph(
         composable(Screen.DividendInfo.route) {
             LogScreenEntry("DividendInfoScreen")
             DividendInfoScreen(navController = navController)
+        }
+        composable(
+            route = Screen.YahooQuote.route,
+            arguments = listOf(
+                navArgument("stockCode") { type = NavType.StringType },
+                navArgument("market") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val stockCode = backStackEntry.arguments?.getString("stockCode") ?: ""
+            val market = backStackEntry.arguments?.getString("market") ?: ""
+            LogScreenEntry("YahooQuoteScreen", "stockCode=$stockCode, market=$market")
+            YahooWebViewScreen(
+                stockCode = stockCode,
+                market = market,
+                navController = navController
+            )
         }
         composable(
             route = Screen.StockDetail.route,

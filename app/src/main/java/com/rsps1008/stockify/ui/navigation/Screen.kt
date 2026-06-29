@@ -9,6 +9,11 @@ sealed class Screen(val route: String) {
     object DataManagement : Screen("data_management")
     object DividendInfo : Screen("dividend_info")
 
+    object YahooQuote : Screen("yahoo_quote/{stockCode}/{market}") {
+        fun createRoute(stockCode: String, market: String) =
+            "yahoo_quote/${Uri.encode(stockCode)}/${Uri.encode(market)}"
+    }
+
     object AddTransaction :
         Screen("add_transaction?transactionId={transactionId}&stockCode={stockCode}") {
         fun createRoute(
