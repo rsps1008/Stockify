@@ -193,9 +193,9 @@ fun SettingsScreen() {
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column(modifier = Modifier.weight(1f, fill = false)) {
-                                Text("顯示台灣加權", style = MaterialTheme.typography.bodyLarge)
+                                Text("顯示台灣加權指數", style = MaterialTheme.typography.bodyLarge)
                                 Text(
-                                    "控制首頁累積損益下方的台灣加權摘要列",
+                                    "於首頁顯示台灣加權摘要列",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

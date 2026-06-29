@@ -201,6 +201,8 @@ Windows 指令範例：
 - 背景即時輪詢只會在各自市場開盤時刷新；台股關盤只刷美股，反之亦然，兩邊都關盤就完全不刷。當其中一個市場從關盤進入開盤時，下一輪輪詢會自動恢復對應市場的刷新，不需要重啟 App。
 - 匯入 PDF / CSV 時若建立了新的股票資料，會對該股票做一次即時價刷新，避免關盤時間新加入的美股一直停在空值。
 - 新增交易送出時只會針對新增那一檔股票做背景即時價刷新，不會等待刷新完成才返回上一頁。
+- `scripts/yahoo_crawler.py` 可用來單獨抓取目前的 Yahoo 台股 quote 頁、Yahoo 美股 chart API、以及 Yahoo 股利頁，對應 `YahooStockInfoFetcher`、`UsYahooStockInfoFetcher`、`YahooDividendRepository` 的現行路徑。
+- `YahooStockInfoFetcher` 解析 Yahoo 台股 quote 頁時，實際使用的 key 是 `成交` 與 `昨收`（可用 `收盤`、`前收` 做 fallback），不要沿用舊的亂碼字串常數。
 - 新增/編輯交易時可填寫「交易筆記」，內容會存入 `StockTransaction.note`，並在交易明細頁顯示。
 - 編輯既有買進 / 賣出交易時，`AddTransactionScreen` 不可在初始化階段重設 `fee` / `tax` / `expense` / `income`，否則像 CSV 匯入後的交易會在編輯頁暫時顯示成 `-`；清空計算值只應發生在新增交易切換類型時。
 - 賣出交易在新增 / 編輯頁中，`交易稅` 與 `手續費` 一樣支援手動覆寫；覆寫任一欄位後要即時重算 `收入金額`，但不要順手改掉另一個欄位。

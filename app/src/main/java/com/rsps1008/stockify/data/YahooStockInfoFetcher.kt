@@ -83,8 +83,8 @@ class YahooStockInfoFetcher : StockInfoFetcher {
                 }
             }
 
-            val priceStr = kv["?漱"]
-            val yesterdayPriceStr = kv["?冽"]
+            val priceStr = kv["成交"] ?: kv["收盤"]
+            val yesterdayPriceStr = kv["昨收"] ?: kv["前收"]
 
             val price = priceStr?.normalizeYahooNumber()?.toDoubleOrNull()
             val yesterdayPrice = yesterdayPriceStr?.normalizeYahooNumber()?.toDoubleOrNull()
