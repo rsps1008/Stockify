@@ -24,7 +24,7 @@ class OfflineStockRepository(
             settingsDataStore.preDeductSellFeesFlow,
             exchangeRateService.usdToTwdRate,
             settingsDataStore.homeDisplayModeFlow,
-            settingsDataStore.useCumulativeReturnRateFlow
+            settingsDataStore.returnRateModeFlow
         ) { values ->
             val stocks = values[0] as List<Stock>
             val transactions = values[1] as List<StockTransaction>
@@ -32,7 +32,7 @@ class OfflineStockRepository(
             val preDeductSellFees = values[3] as Boolean
             val usdToTwdRate = values[4] as Double
             val homeDisplayMode = values[5] as String
-            val useCumulativeReturnRate = values[6] as Boolean
+            val returnRateMode = values[6] as ReturnRateMode
 
             val mode = HomeDisplayMode.normalize(homeDisplayMode)
             val filteredStocks = when (mode) {
@@ -40,6 +40,7 @@ class OfflineStockRepository(
                 HomeDisplayMode.US -> stocks.filter { StockMarket.isUs(it.market) }
                 else -> stocks
             }
+            val currentDateMillis = System.currentTimeMillis()
 
             val holdingInfos = filteredStocks.map { stock ->
                 val realtime = realTimeData[stock.code]
@@ -48,7 +49,17 @@ class OfflineStockRepository(
                 val dailyChange = realTimeData[stock.code]?.change ?: 0.0
                 val dailyChangePercentage = realTimeData[stock.code]?.changePercent ?: 0.0
                 val limitState = realtime?.limitState ?: LimitState.NONE
-                calculateHoldingInfo(stock, stockTransactions, currentPrice, dailyChange, dailyChangePercentage, limitState, preDeductSellFees, useCumulativeReturnRate)
+                calculateHoldingInfo(
+                    stock = stock,
+                    transactions = stockTransactions,
+                    currentPrice = currentPrice,
+                    dailyChange = dailyChange,
+                    dailyChangePercentage = dailyChangePercentage,
+                    limitState = limitState,
+                    preDeductSellFees = preDeductSellFees,
+                    returnRateMode = returnRateMode,
+                    currentDateMillis = currentDateMillis
+                )
             }
 
             val summaryIsCombined = mode == HomeDisplayMode.COMBINED
@@ -66,10 +77,23 @@ class OfflineStockRepository(
             }
             val totalInvestment = holdingInfos.sumOf { holding ->
                 val rate = if (summaryIsCombined && StockMarket.isUs(holding.stock.market)) usdToTwdRate else 1.0
-                val basis = if (useCumulativeReturnRate) holding.totalInvestment else holding.averageCost * holding.shares
+                val basis = if (returnRateMode == ReturnRateMode.CUMULATIVE_INVESTMENT) holding.totalInvestment else holding.averageCost * holding.shares
                 basis * rate
             }
-            val cumulativePLPercentage = if (totalInvestment > 0) (cumulativePL / totalInvestment) * 100 else 0.0
+            val cumulativePLPercentage = when (returnRateMode) {
+                ReturnRateMode.REMAINING_POSITION,
+                ReturnRateMode.CUMULATIVE_INVESTMENT -> if (totalInvestment > 0) (cumulativePL / totalInvestment) * 100 else 0.0
+                ReturnRateMode.XIRR -> {
+                    val portfolioCashFlows = filteredStocks.flatMap { stock ->
+                        val stockTransactions = transactions.filter { it.stockCode == stock.code }
+                        val currentPrice = realTimeData[stock.code]?.currentPrice ?: 0.0
+                        val shares = holdingInfos.firstOrNull { it.stock.code == stock.code }?.shares ?: 0.0
+                        val rate = if (summaryIsCombined && StockMarket.isUs(stock.market)) usdToTwdRate else 1.0
+                        buildCashFlowsForStock(stockTransactions, currentPrice, shares, currentDateMillis, rate)
+                    }
+                    ReturnRateCalculator.calculateXirrPercentage(portfolioCashFlows) ?: 0.0
+                }
+            }
             val dividendIncome = holdingInfos.sumOf { holding ->
                 val rate = if (summaryIsCombined && StockMarket.isUs(holding.stock.market)) usdToTwdRate else 1.0
                 holding.dividendIncome * rate
@@ -100,15 +124,25 @@ class OfflineStockRepository(
             transactionsFlow,
             realtimeStockDataService.realtimeStockInfo,
             settingsDataStore.preDeductSellFeesFlow,
-            settingsDataStore.useCumulativeReturnRateFlow
-        ) { stock, transactions, realTimeData, preDeductSellFees, useCumulativeReturnRate ->
+            settingsDataStore.returnRateModeFlow
+        ) { stock, transactions, realTimeData, preDeductSellFees, returnRateMode ->
             stock?.let {
                 val realtime = realTimeData[stock.code]
                 val currentPrice = realTimeData[it.code]?.currentPrice ?: 0.0
                 val dailyChange = realTimeData[it.code]?.change ?: 0.0
                 val dailyChangePercentage = realTimeData[it.code]?.changePercent ?: 0.0
                 val limitState = realtime?.limitState ?: LimitState.NONE
-                calculateHoldingInfo(it, transactions, currentPrice, dailyChange, dailyChangePercentage, limitState, preDeductSellFees, useCumulativeReturnRate)
+                calculateHoldingInfo(
+                    stock = it,
+                    transactions = transactions,
+                    currentPrice = currentPrice,
+                    dailyChange = dailyChange,
+                    dailyChangePercentage = dailyChangePercentage,
+                    limitState = limitState,
+                    preDeductSellFees = preDeductSellFees,
+                    returnRateMode = returnRateMode,
+                    currentDateMillis = System.currentTimeMillis()
+                )
             }
         }
     }
@@ -172,7 +206,8 @@ class OfflineStockRepository(
         dailyChangePercentage: Double,
         limitState: LimitState,
         preDeductSellFees: Boolean,
-        useCumulativeReturnRate: Boolean
+        returnRateMode: ReturnRateMode,
+        currentDateMillis: Long
     ): HoldingInfo {
         var shares = 0.0
         var totalBuyExpense = 0.0
@@ -234,8 +269,14 @@ class OfflineStockRepository(
             totalPL -= (sellFee + sellTax)
         }
 
-        val percentageBasis = if (useCumulativeReturnRate) totalInvestment else costBasis
-        val totalPLPercentage = if (percentageBasis > 0) (totalPL / percentageBasis) * 100 else 0.0
+        val totalPLPercentage = when (returnRateMode) {
+            ReturnRateMode.REMAINING_POSITION -> if (costBasis > 0) (totalPL / costBasis) * 100 else 0.0
+            ReturnRateMode.CUMULATIVE_INVESTMENT -> if (totalInvestment > 0) (totalPL / totalInvestment) * 100 else 0.0
+            ReturnRateMode.XIRR -> {
+                val cashFlows = buildCashFlowsForStock(transactions, currentPrice, shares, currentDateMillis)
+                ReturnRateCalculator.calculateXirrPercentage(cashFlows) ?: 0.0
+            }
+        }
 
         return HoldingInfo(
             stock = stock,
@@ -253,5 +294,30 @@ class OfflineStockRepository(
             dailyChangePercentage = dailyChangePercentage,
             limitState = limitState
         )
+    }
+
+    private fun buildCashFlowsForStock(
+        transactions: List<StockTransaction>,
+        currentPrice: Double,
+        shares: Double,
+        currentDateMillis: Long,
+        currencyRate: Double = 1.0
+    ): List<CashFlow> {
+        val adjustedTransactions = adjustTransactionsForSplits(transactions)
+        val cashFlows = adjustedTransactions.mapNotNull { transaction ->
+            when (transaction.type) {
+                "買進" -> CashFlow(transaction.date, -transaction.expense * currencyRate)
+                "賣出" -> CashFlow(transaction.date, transaction.income * currencyRate)
+                "配息" -> CashFlow(transaction.date, transaction.dividendIncome * currencyRate)
+                "減資" -> CashFlow(transaction.date, transaction.cashReturned * currencyRate)
+                else -> null
+            }
+        }.toMutableList()
+
+        if (shares > 0.0 && currentPrice > 0.0) {
+            cashFlows.add(CashFlow(currentDateMillis, shares * currentPrice * currencyRate))
+        }
+
+        return cashFlows
     }
 }

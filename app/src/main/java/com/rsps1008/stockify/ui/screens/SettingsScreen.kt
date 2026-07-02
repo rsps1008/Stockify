@@ -24,6 +24,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -54,6 +55,7 @@ import com.rsps1008.stockify.BuildConfig
 import com.rsps1008.stockify.R
 import com.rsps1008.stockify.StockifyApplication
 import com.rsps1008.stockify.data.CalculationRoundingMode
+import com.rsps1008.stockify.data.ReturnRateMode
 import com.rsps1008.stockify.ui.viewmodel.SettingsViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import kotlinx.coroutines.delay
@@ -90,7 +92,7 @@ fun SettingsScreen() {
     val minFeeOddLot by viewModel.minFeeOddLot.collectAsState()
     val dividendFee by viewModel.dividendFee.collectAsState()
     val preDeductSellFees by viewModel.preDeductSellFees.collectAsState()
-    val useCumulativeReturnRate by viewModel.useCumulativeReturnRate.collectAsState()
+    val returnRateMode by viewModel.returnRateMode.collectAsState()
     val calculationRoundingMode by viewModel.calculationRoundingMode.collectAsState()
     val fetchInterval by viewModel.fetchInterval.collectAsState()
     val theme by viewModel.theme.collectAsState()
@@ -470,27 +472,29 @@ fun SettingsScreen() {
                         Text("報酬率計算方式", style = MaterialTheme.typography.titleMedium)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            "預設使用剩餘部位報酬率，會以目前還留在這檔股票中的有效成本作為分母，適合看手上部位的資金效率。開啟累積報酬率後，會改用這檔股票歷來投入成本作為分母，適合看整段交易的總報酬，部分賣出後百分比會較保守。",
+                            "可在手上剩餘部位的資金效率、整段交易的總投入報酬，以及這檔股票從買到現在或賣完的年化報酬之間切換。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(12.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("使用累積報酬率")
-                                Text(
-                                    if (useCumulativeReturnRate) "目前：整段交易的總投入報酬"
-                                    else "目前：手上剩餘部位的資金效率",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Switch(
-                                checked = useCumulativeReturnRate,
-                                onCheckedChange = { viewModel.setUseCumulativeReturnRate(it) }
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            ReturnRateModeOption(
+                                title = "手上剩餘部位的資金效率",
+                                description = "以目前還留在這檔股票中的有效成本作為分母，適合看手上部位的資金效率。",
+                                selected = returnRateMode == ReturnRateMode.REMAINING_POSITION,
+                                onSelected = { viewModel.setReturnRateMode(ReturnRateMode.REMAINING_POSITION) }
+                            )
+                            ReturnRateModeOption(
+                                title = "整段交易的總投入報酬",
+                                description = "改用這檔股票歷來投入成本作為分母，部分賣出後百分比會較保守。",
+                                selected = returnRateMode == ReturnRateMode.CUMULATIVE_INVESTMENT,
+                                onSelected = { viewModel.setReturnRateMode(ReturnRateMode.CUMULATIVE_INVESTMENT) }
+                            )
+                            ReturnRateModeOption(
+                                title = "這檔股票從買到現在/賣完的年化報酬",
+                                description = "依交易日期與現金流計算 XIRR，會把時間權重算進去。",
+                                selected = returnRateMode == ReturnRateMode.XIRR,
+                                onSelected = { viewModel.setReturnRateMode(ReturnRateMode.XIRR) }
                             )
                         }
                         Spacer(modifier = Modifier.height(16.dp))
@@ -746,6 +750,38 @@ fun SettingsScreen() {
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun ReturnRateModeOption(
+    title: String,
+    description: String,
+    selected: Boolean,
+    onSelected: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.Top,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+    ) {
+        RadioButton(
+            selected = selected,
+            onClick = onSelected
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(top = 6.dp)
+        ) {
+            Text(title)
+            Text(
+                description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 

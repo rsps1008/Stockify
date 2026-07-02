@@ -28,6 +28,7 @@ class SettingsDataStore(val context: Context) {
     private val dividendFeeKey = intPreferencesKey("dividend_fee")
     private val preDeductSellFeesKey = booleanPreferencesKey("pre_deduct_sell_fees")
     private val useCumulativeReturnRateKey = booleanPreferencesKey("use_cumulative_return_rate")
+    private val returnRateModeKey = stringPreferencesKey("return_rate_mode")
     private val realtimeStockInfoCacheKey = stringPreferencesKey("realtime_stock_info_cache")
     private val themeKey = stringPreferencesKey("theme")
     private val stockDataSourceKey = stringPreferencesKey("stock_data_source")
@@ -92,10 +93,20 @@ class SettingsDataStore(val context: Context) {
             preferences[preDeductSellFeesKey] ?: true
         }
 
-    val useCumulativeReturnRateFlow: Flow<Boolean> = context.dataStore.data
+    val returnRateModeFlow: Flow<ReturnRateMode> = context.dataStore.data
         .map { preferences ->
-            preferences[useCumulativeReturnRateKey] ?: false
+            val rawMode = preferences[returnRateModeKey]
+            if (rawMode != null) {
+                ReturnRateMode.normalize(rawMode)
+            } else if (preferences[useCumulativeReturnRateKey] == true) {
+                ReturnRateMode.CUMULATIVE_INVESTMENT
+            } else {
+                ReturnRateMode.REMAINING_POSITION
+            }
         }
+
+    val useCumulativeReturnRateFlow: Flow<Boolean> = returnRateModeFlow
+        .map { it == ReturnRateMode.CUMULATIVE_INVESTMENT }
 
     val calculationRoundingModeFlow: Flow<String> = context.dataStore.data
         .map { preferences ->
@@ -275,10 +286,15 @@ class SettingsDataStore(val context: Context) {
         }
     }
 
-    suspend fun setUseCumulativeReturnRate(useCumulative: Boolean) {
+    suspend fun setReturnRateMode(mode: ReturnRateMode) {
         context.dataStore.edit {
-            it[useCumulativeReturnRateKey] = useCumulative
+            it[returnRateModeKey] = mode.key
+            it[useCumulativeReturnRateKey] = mode == ReturnRateMode.CUMULATIVE_INVESTMENT
         }
+    }
+
+    suspend fun setUseCumulativeReturnRate(useCumulative: Boolean) {
+        setReturnRateMode(if (useCumulative) ReturnRateMode.CUMULATIVE_INVESTMENT else ReturnRateMode.REMAINING_POSITION)
     }
 
     suspend fun setCalculationRoundingMode(mode: String) {

@@ -15,6 +15,7 @@ import com.rsps1008.stockify.data.CsvService
 import com.rsps1008.stockify.data.CsvTransaction
 import com.rsps1008.stockify.data.GoogleDriveService
 import com.rsps1008.stockify.data.HoldingsOrderBackupService
+import com.rsps1008.stockify.data.ReturnRateMode
 import com.rsps1008.stockify.data.PdfHoldingImportService
 import com.rsps1008.stockify.data.PdfStockImportPreview
 import com.rsps1008.stockify.data.PdfStockImportPreviewItem
@@ -125,6 +126,9 @@ class SettingsViewModel(
 
     val preDeductSellFees: StateFlow<Boolean> = settingsDataStore.preDeductSellFeesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), true)
+
+    val returnRateMode: StateFlow<ReturnRateMode> = settingsDataStore.returnRateModeFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), ReturnRateMode.REMAINING_POSITION)
 
     val useCumulativeReturnRate: StateFlow<Boolean> = settingsDataStore.useCumulativeReturnRateFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), false)
@@ -735,6 +739,12 @@ class SettingsViewModel(
     fun setPreDeductSellFees(preDeduct: Boolean) {
         viewModelScope.launch {
             settingsDataStore.setPreDeductSellFees(preDeduct)
+        }
+    }
+
+    fun setReturnRateMode(mode: ReturnRateMode) {
+        viewModelScope.launch {
+            settingsDataStore.setReturnRateMode(mode)
         }
     }
 
