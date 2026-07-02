@@ -56,6 +56,7 @@ import com.rsps1008.stockify.R
 import com.rsps1008.stockify.StockifyApplication
 import com.rsps1008.stockify.data.CalculationRoundingMode
 import com.rsps1008.stockify.data.ReturnRateMode
+import com.rsps1008.stockify.data.TextSizeMode
 import com.rsps1008.stockify.ui.viewmodel.SettingsViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import kotlinx.coroutines.delay
@@ -96,6 +97,7 @@ fun SettingsScreen() {
     val calculationRoundingMode by viewModel.calculationRoundingMode.collectAsState()
     val fetchInterval by viewModel.fetchInterval.collectAsState()
     val theme by viewModel.theme.collectAsState()
+    val textSizeMode by viewModel.textSizeMode.collectAsState()
     val showTaiwanWeightedIndex by viewModel.showTaiwanWeightedIndex.collectAsState()
     val stockDataSource by viewModel.stockDataSource.collectAsState()
     val usStockDataSource by viewModel.usStockDataSource.collectAsState()
@@ -186,6 +188,58 @@ fun SettingsScreen() {
                                 }
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        val textSizeOptions = remember {
+                            mapOf(
+                                TextSizeMode.SMALL to "小",
+                                TextSizeMode.DEFAULT to "標準",
+                                TextSizeMode.LARGE to "大",
+                                TextSizeMode.EXTRA_LARGE to "特大"
+                            )
+                        }
+                        var expandedTextSize by remember { mutableStateOf(false) }
+
+                        ExposedDropdownMenuBox(
+                            expanded = expandedTextSize,
+                            onExpandedChange = { expandedTextSize = !expandedTextSize },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = textSizeOptions[textSizeMode] ?: TextSizeMode.label(textSizeMode),
+                                onValueChange = { },
+                                label = { Text("文字大小") },
+                                readOnly = true,
+                                trailingIcon = {
+                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedTextSize)
+                                },
+                                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = expandedTextSize,
+                                onDismissRequest = { expandedTextSize = false },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                textSizeOptions.forEach { (key, value) ->
+                                    DropdownMenuItem(
+                                        text = { Text(value) },
+                                        onClick = {
+                                            viewModel.setTextSizeMode(key)
+                                            expandedTextSize = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        Text(
+                            "會同步調整整個 App 的字級大小。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
 
                         Spacer(modifier = Modifier.height(16.dp))
 

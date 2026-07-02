@@ -31,6 +31,7 @@ class SettingsDataStore(val context: Context) {
     private val returnRateModeKey = stringPreferencesKey("return_rate_mode")
     private val realtimeStockInfoCacheKey = stringPreferencesKey("realtime_stock_info_cache")
     private val themeKey = stringPreferencesKey("theme")
+    private val textSizeModeKey = stringPreferencesKey("text_size_mode")
     private val stockDataSourceKey = stringPreferencesKey("stock_data_source")
     private val usStockDataSourceKey = stringPreferencesKey("us_stock_data_source")
     private val notifyFallbackRepeatedlyKey = booleanPreferencesKey("notify_fallback_repeatedly")
@@ -123,6 +124,11 @@ class SettingsDataStore(val context: Context) {
     val themeFlow: Flow<String> = context.dataStore.data
         .map { preferences ->
             preferences[themeKey] ?: "System"
+        }
+
+    val textSizeModeFlow: Flow<String> = context.dataStore.data
+        .map { preferences ->
+            preferences[textSizeModeKey] ?: TextSizeMode.DEFAULT
         }
 
     val stockDataSourceFlow: Flow<String> = context.dataStore.data
@@ -318,6 +324,12 @@ class SettingsDataStore(val context: Context) {
     suspend fun setTheme(theme: String) {
         context.dataStore.edit {
             it[themeKey] = theme
+        }
+    }
+
+    suspend fun setTextSizeMode(mode: String) {
+        context.dataStore.edit {
+            it[textSizeModeKey] = TextSizeMode.normalize(mode)
         }
     }
 

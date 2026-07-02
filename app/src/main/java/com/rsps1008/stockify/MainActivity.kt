@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +34,7 @@ import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.rsps1008.stockify.data.TextSizeMode
 import com.rsps1008.stockify.ui.navigation.NavGraph
 import com.rsps1008.stockify.ui.navigation.Screen
 import com.rsps1008.stockify.ui.theme.StockifyTheme
@@ -58,7 +60,8 @@ class MainActivity : AppCompatActivity() {
 
         enableEdgeToEdge()
         setContent {
-            StockifyTheme {
+            val textSizeMode by dataStore.textSizeModeFlow.collectAsState(initial = TextSizeMode.DEFAULT)
+            StockifyTheme(textScale = TextSizeMode.scale(textSizeMode)) {
                 MainScreen()
             }
         }

@@ -11,8 +11,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Density
 
 private val DarkColorScheme = darkColorScheme(
     primary = Purple80,
@@ -55,6 +57,7 @@ object StockifyAppTheme {
 @Composable
 fun StockifyTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    textScale: Float = 1f,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -68,8 +71,16 @@ fun StockifyTheme(
     }
 
     val stockColors = if (darkTheme) DarkStockColors else LightStockColors
+    val currentDensity = LocalDensity.current
+    val adjustedDensity = Density(
+        density = currentDensity.density,
+        fontScale = currentDensity.fontScale * textScale
+    )
 
-    CompositionLocalProvider(LocalStockColors provides stockColors) {
+    CompositionLocalProvider(
+        LocalStockColors provides stockColors,
+        LocalDensity provides adjustedDensity
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,

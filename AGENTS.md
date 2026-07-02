@@ -107,6 +107,7 @@
 - 目前包含：
   - 更新頻率
   - 主題
+  - 文字大小
   - 即時資料來源
   - 備援通知行為
   - 手續費與稅率設定
@@ -121,6 +122,7 @@
 - `app` module 需要維持 `buildFeatures.buildConfig = true`，否則設定頁無法直接讀 `BuildConfig.VERSION_NAME`。
 - 目前 AGP 已升到 `8.11.1`，而 `gradle/wrapper/gradle-wrapper.properties` 已是 `8.13`；若之後再升 AGP，先確認官方對應的最低 Gradle 版本。
 - 持股、交易、資料管理、設定這幾個底部分頁的頂部 logo/header 盡量統一成相同的外層 `16.dp` padding 與 `6.dp` 標題間距，避免頁面切換時看起來上下沒有對齊。
+- 設定頁的「外觀」區塊除了主題外，也提供文字大小調整；這個設定會寫入 `SettingsDataStore`，並由 `StockifyTheme` 在 `LocalDensity.fontScale` 統一套用到整個 App。
 - 設定頁的「股票資料來源」與「股票列表更新」要分成兩個獨立區塊，前者只放爬蟲/即時資料來源與相關刷新偏好，後者只放台股與美股股票列表更新操作。
 - 設定頁的台股手續費與台股交易稅率要包在同一個「費稅設定」專區裡，裡面再放兩張子卡片，避免費用與稅率分散成兩個孤立區塊。
 - 設定頁的「股票列表更新」區塊建議用主卡片包兩張子卡片的層級呈現，台股與美股更新流程要視覺上分開。
@@ -175,6 +177,7 @@ Windows 指令範例：
 - 首頁「累積損益」卡右上角的刷新時間尾巴會顯示 refresh icon，讓使用者明確知道那裡可點擊更新。
 - 首頁「累積損益」卡與「未實現」區塊之間會顯示一行「台灣加權」摘要；更新節奏跟台股即時報價一致，會跟著 App 啟動首刷、台股盤中依設定 interval 對齊秒點刷新、首頁手動刷新一起更新，資料來源也跟著設定頁的台股即時資料來源走 `TWSE`/`Yahoo` 優先順序並做一次 fallback。
 - 設定頁「外觀」區塊提供「顯示台灣加權」開關，控制首頁累積損益下方那行台灣加權摘要；預設開啟，舊版升級因為沒有既有值也會維持開啟。
+- 設定頁外觀區塊新增文字大小選項，會透過 `SettingsDataStore.textSizeModeFlow` 與 `StockifyTheme(textScale = ...)` 影響整個 App 的文字縮放，避免逐頁手動調整。
 - 設定頁的股票資料來源與股票列表更新已拆成兩個獨立區塊，方便把爬蟲來源設定和更新動作分開。
 - `NasdaqStockInfoFetcher` 解析 Nasdaq API 時會先確認 `data` 和 `primaryData` 都真的是 `JsonObject`，避免 API 回傳 `null`、錯誤訊息或其他非物件結構時直接拋出 `JsonNull is not a JsonObject`。
 - 美股走 Nasdaq API 時會依 `stockType` 切換 `assetclass`，`ETF` 使用 `assetclass=etf`，一般股票使用 `assetclass=stocks`。

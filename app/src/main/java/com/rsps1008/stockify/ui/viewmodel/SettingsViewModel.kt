@@ -19,6 +19,7 @@ import com.rsps1008.stockify.data.ReturnRateMode
 import com.rsps1008.stockify.data.PdfHoldingImportService
 import com.rsps1008.stockify.data.PdfStockImportPreview
 import com.rsps1008.stockify.data.PdfStockImportPreviewItem
+import com.rsps1008.stockify.data.TextSizeMode
 import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.Stock
@@ -138,6 +139,9 @@ class SettingsViewModel(
 
     val theme: StateFlow<String> = settingsDataStore.themeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), "System")
+
+    val textSizeMode: StateFlow<String> = settingsDataStore.textSizeModeFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), TextSizeMode.DEFAULT)
 
     val showTaiwanWeightedIndex: StateFlow<Boolean> = settingsDataStore.showTaiwanWeightedIndexFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), true)
@@ -672,6 +676,12 @@ class SettingsViewModel(
     fun setTheme(theme: String) {
         viewModelScope.launch {
             settingsDataStore.setTheme(theme)
+        }
+    }
+
+    fun setTextSizeMode(mode: String) {
+        viewModelScope.launch {
+            settingsDataStore.setTextSizeMode(mode)
         }
     }
 
