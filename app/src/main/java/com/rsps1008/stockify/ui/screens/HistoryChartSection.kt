@@ -34,12 +34,40 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.ArrowDropDown
 
+import com.rsps1008.stockify.ui.viewmodel.HoldingsViewModel
+
 @Composable
 fun HistoryChartSection(
     viewModel: StockDetailViewModel,
     modifier: Modifier = Modifier
 ) {
     val historyState by viewModel.historyState.collectAsState()
+    HistoryChartSectionContent(
+        historyState = historyState,
+        onRangeSelected = { viewModel.fetchStockHistory(it) },
+        modifier = modifier
+    )
+}
+
+@Composable
+fun HistoryChartSection(
+    viewModel: HoldingsViewModel,
+    modifier: Modifier = Modifier
+) {
+    val historyState by viewModel.historyState.collectAsState()
+    HistoryChartSectionContent(
+        historyState = historyState,
+        onRangeSelected = { viewModel.fetchPortfolioHistory(it) },
+        modifier = modifier
+    )
+}
+
+@Composable
+fun HistoryChartSectionContent(
+    historyState: HistoryState,
+    onRangeSelected: (HistoryRange) -> Unit,
+    modifier: Modifier = Modifier
+) {
     var selectedRange by remember { mutableStateOf(HistoryRange.ONE_MONTH) }
     var selectedMetric by remember { mutableStateOf("市值") }
     var isExpanded by rememberSaveable { mutableStateOf(true) }
@@ -97,77 +125,78 @@ fun HistoryChartSection(
                         selectedRange = selectedRange,
                         onRangeSelected = { range ->
                             selectedRange = range
-                            viewModel.fetchStockHistory(range)
-                        }
+                            onRangeSelected(range)
+                        },
+                        enabled = historyState !is HistoryState.Loading
                     )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-            // State content
-            Crossfade(targetState = historyState, label = "HistoryStateCrossfade") { state ->
-                when (state) {
-                    is HistoryState.Idle -> {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(220.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("無資料")
-                        }
-                    }
-                    is HistoryState.Loading -> {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(220.dp),
-                            verticalArrangement = Arrangement.Center,
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            CircularProgressIndicator(
-                                progress = { state.progress.coerceIn(0f, 1f) },
-                                color = MaterialTheme.colorScheme.primary,
-                                trackColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = state.statusText,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    is HistoryState.Error -> {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(220.dp),
-                            verticalArrangement = Arrangement.Center,
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = state.message,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Button(onClick = { viewModel.fetchStockHistory(selectedRange) }) {
-                                Text("重試")
+                // State content
+                Crossfade(targetState = historyState, label = "HistoryStateCrossfade") { state ->
+                    when (state) {
+                        is HistoryState.Idle -> {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(146.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("無資料")
                             }
                         }
-                    }
-                    is HistoryState.Success -> {
-                        HistoricalChartContent(
-                            points = state.points,
-                            selectedMetric = selectedMetric
-                        )
+                        is HistoryState.Loading -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(146.dp),
+                                verticalArrangement = Arrangement.Center,
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                CircularProgressIndicator(
+                                    progress = { state.progress.coerceIn(0f, 1f) },
+                                    color = MaterialTheme.colorScheme.primary,
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = state.statusText,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        is HistoryState.Error -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(146.dp),
+                                verticalArrangement = Arrangement.Center,
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = state.message,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Button(onClick = { onRangeSelected(selectedRange) }) {
+                                    Text("重試")
+                                }
+                            }
+                        }
+                        is HistoryState.Success -> {
+                            HistoricalChartContent(
+                                points = state.points,
+                                selectedMetric = selectedMetric
+                            )
+                        }
                     }
                 }
             }
         }
     }
-}
 }
 
 @Composable
@@ -210,7 +239,8 @@ private fun MetricSelectorRow(
 @Composable
 private fun RangeSelectorRow(
     selectedRange: HistoryRange,
-    onRangeSelected: (HistoryRange) -> Unit
+    onRangeSelected: (HistoryRange) -> Unit,
+    enabled: Boolean
 ) {
     val ranges = listOf(
         HistoryRange.ONE_MONTH to "1M",
@@ -221,7 +251,11 @@ private fun RangeSelectorRow(
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .background(
+                MaterialTheme.colorScheme.surfaceVariant.copy(
+                    alpha = if (enabled) 0.5f else 0.2f
+                )
+            )
             .padding(4.dp)
     ) {
         ranges.forEach { (range, label) ->
@@ -230,10 +264,17 @@ private fun RangeSelectorRow(
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
                     .background(
-                        if (isSelected) MaterialTheme.colorScheme.primary
-                        else Color.Transparent
+                        if (isSelected) {
+                            if (enabled) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                        } else {
+                            Color.Transparent
+                        }
                     )
-                    .clickable { onRangeSelected(range) }
+                    .then(
+                        if (enabled) Modifier.clickable { onRangeSelected(range) }
+                        else Modifier
+                    )
                     .padding(horizontal = 12.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -241,8 +282,13 @@ private fun RangeSelectorRow(
                     text = label,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary
-                            else MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (isSelected) {
+                        if (enabled) MaterialTheme.colorScheme.onPrimary
+                        else MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.5f)
+                    } else {
+                        if (enabled) MaterialTheme.colorScheme.onSurfaceVariant
+                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    }
                 )
             }
         }
@@ -290,7 +336,7 @@ private fun HistoricalChartContent(
                 )
                 Text(
                     text = String.format("NT$ %,.0f", displayMarketValue),
-                    style = MaterialTheme.typography.headlineMedium,
+                    style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -301,7 +347,7 @@ private fun HistoricalChartContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = String.format("%,.1f 股", displayShares),
+                    text = String.format("%,.0f 股", displayShares),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -337,7 +383,11 @@ private fun HistoricalChartContent(
                 )
                 Text(
                     text = if (isInteractive) displayPoint.date.replace("-", "/")
-                           else "${firstPoint.date.replace("-", "/")} ~ ${lastPoint.date.replace("-", "/")}",
+                           else {
+                               val firstYrMo = if (firstPoint.date.length >= 7) firstPoint.date.substring(0, 7).replace("-", "/") else firstPoint.date
+                               val lastYrMo = if (lastPoint.date.length >= 7) lastPoint.date.substring(0, 7).replace("-", "/") else lastPoint.date
+                               "$firstYrMo ~ $lastYrMo"
+                           },
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium
                 )
@@ -379,7 +429,7 @@ private fun InteractiveLineChart(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(160.dp)
+            .height(106.dp)
             .pointerInput(points, selectedMetric) {
                 awaitPointerEventScope {
                     while (true) {

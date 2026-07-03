@@ -43,14 +43,14 @@ sealed interface HistoryState {
     data class Error(val message: String) : HistoryState
 }
 
-sealed interface HistoryStateInternal {
-    object Idle : HistoryStateInternal
-    data class Loading(val progress: Float, val statusText: String) : HistoryStateInternal
-    data class Success(val range: HistoryRange, val rawPoints: List<StockHistoryPoint>) : HistoryStateInternal
-    data class Error(val message: String) : HistoryStateInternal
+sealed interface DetailHistoryStateInternal {
+    object Idle : DetailHistoryStateInternal
+    data class Loading(val progress: Float, val statusText: String) : DetailHistoryStateInternal
+    data class Success(val range: HistoryRange, val rawPoints: List<StockHistoryPoint>) : DetailHistoryStateInternal
+    data class Error(val message: String) : DetailHistoryStateInternal
 }
 
-private data class SettingsBundle(
+private data class DetailSettingsBundle(
     val preDeductSellFees: Boolean,
     val feeDiscount: Double,
     val minFeeRegular: Int,
@@ -77,7 +77,7 @@ class StockDetailViewModel(
     private val _showDeleteConfirmDialog = MutableStateFlow(false)
     val showDeleteConfirmDialog: StateFlow<Boolean> = _showDeleteConfirmDialog.asStateFlow()
 
-    private val _historyStateInternal = MutableStateFlow<HistoryStateInternal>(HistoryStateInternal.Idle)
+    private val _historyStateInternal = MutableStateFlow<DetailHistoryStateInternal>(DetailHistoryStateInternal.Idle)
 
     private val settingsCombined = combine(
         settingsDataStore.preDeductSellFeesFlow,
@@ -85,7 +85,7 @@ class StockDetailViewModel(
         settingsDataStore.minFeeRegularFlow,
         settingsDataStore.returnRateModeFlow
     ) { preDeduct, discount, minFee, mode ->
-        SettingsBundle(preDeduct, discount, minFee, mode)
+        DetailSettingsBundle(preDeduct, discount, minFee, mode)
     }
 
     val historyState: StateFlow<HistoryState> = combine(
@@ -94,7 +94,7 @@ class StockDetailViewModel(
         settingsCombined,
         holdingInfo
     ) { historyInternal, txList, settings, holding ->
-        if (historyInternal is HistoryStateInternal.Success) {
+        if (historyInternal is DetailHistoryStateInternal.Success) {
             val stockTransactions = txList.map { it.transaction }
             val adjustedTransactions = adjustTransactionsForSplits(stockTransactions)
             val firstTxTime = adjustedTransactions.minOfOrNull { it.date }
@@ -140,9 +140,9 @@ class StockDetailViewModel(
             }
         } else {
             when (historyInternal) {
-                is HistoryStateInternal.Idle -> HistoryState.Idle
-                is HistoryStateInternal.Loading -> HistoryState.Loading(historyInternal.progress, historyInternal.statusText)
-                is HistoryStateInternal.Error -> HistoryState.Error(historyInternal.message)
+                is DetailHistoryStateInternal.Idle -> HistoryState.Idle
+                is DetailHistoryStateInternal.Loading -> HistoryState.Loading(historyInternal.progress, historyInternal.statusText)
+                is DetailHistoryStateInternal.Error -> HistoryState.Error(historyInternal.message)
                 else -> HistoryState.Idle
             }
         }
@@ -165,21 +165,21 @@ class StockDetailViewModel(
                 HistoryRange.ONE_YEAR -> 12
             }
 
-            _historyStateInternal.value = HistoryStateInternal.Loading(0f, "準備從證交所下載數據...")
+            _historyStateInternal.value = DetailHistoryStateInternal.Loading(0f, "準備從證交所下載數據...")
             try {
                 val rawPoints = twseStockHistoryService.fetchHistory(stockCode, rangeMonths) { step, total ->
                     val progress = step.toFloat() / total.toFloat()
-                    _historyStateInternal.value = HistoryStateInternal.Loading(progress, "正在載入第 $step/$total 個月...")
+                    _historyStateInternal.value = DetailHistoryStateInternal.Loading(progress, "正在載入第 $step/$total 個月...")
                 }
                 
                 if (rawPoints.isEmpty()) {
-                    _historyStateInternal.value = HistoryStateInternal.Error("證交所回傳資料為空，請稍後重試。")
+                    _historyStateInternal.value = DetailHistoryStateInternal.Error("證交所回傳資料為空，請稍後重試。")
                     return@launch
                 }
 
-                _historyStateInternal.value = HistoryStateInternal.Success(range, rawPoints)
+                _historyStateInternal.value = DetailHistoryStateInternal.Success(range, rawPoints)
             } catch (e: Exception) {
-                _historyStateInternal.value = HistoryStateInternal.Error("載入失敗: ${e.localizedMessage}")
+                _historyStateInternal.value = DetailHistoryStateInternal.Error("載入失敗: ${e.localizedMessage}")
             }
         }
     }

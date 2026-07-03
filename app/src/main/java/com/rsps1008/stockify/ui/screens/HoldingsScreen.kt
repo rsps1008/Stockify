@@ -109,7 +109,8 @@ fun HoldingsScreen(navController: NavController) {
             realtimeStockDataService = application.realtimeStockDataService,
             settingsDataStore = application.settingsDataStore,
             exchangeRateService = application.exchangeRateService,
-            taiwanWeightedIndexService = application.taiwanWeightedIndexService
+            taiwanWeightedIndexService = application.taiwanWeightedIndexService,
+            twseStockHistoryService = application.twseStockHistoryService
         )
     )
     val uiState by viewModel.uiState.collectAsState()
@@ -121,6 +122,7 @@ fun HoldingsScreen(navController: NavController) {
     val persistedSortColumnName by viewModel.homeHoldingsSortColumn.collectAsState()
     val persistedSortAscending by viewModel.homeHoldingsSortAscending.collectAsState()
     val showTaiwanWeightedIndex by viewModel.showTaiwanWeightedIndex.collectAsState()
+    val showTaiwanPortfolioChart by viewModel.showTaiwanPortfolioChart.collectAsState()
     val taiwanWeightedIndexInfo by viewModel.taiwanWeightedIndexInfo.collectAsState()
     var showUnrealizedHoldings by rememberSaveable { mutableStateOf(true) }
     var showRealizedHoldings by rememberSaveable { mutableStateOf(true) }
@@ -279,6 +281,14 @@ fun HoldingsScreen(navController: NavController) {
                 item {
                     TaiwanWeightedIndexSection(
                         indexInfo = taiwanWeightedIndexInfo
+                    )
+                }
+            }
+
+            if (showTaiwanPortfolioChart) {
+                item {
+                    HistoryChartSection(
+                        viewModel = viewModel
                     )
                 }
             }

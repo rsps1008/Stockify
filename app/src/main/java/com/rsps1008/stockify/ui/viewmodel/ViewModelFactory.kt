@@ -31,11 +31,14 @@ class ViewModelFactory(
                 requireNotNull(settingsDataStore) { "settingsDataStore is required for HoldingsViewModel" }
                 requireNotNull(exchangeRateService) { "exchangeRateService is required for HoldingsViewModel" }
                 requireNotNull(taiwanWeightedIndexService) { "taiwanWeightedIndexService is required for HoldingsViewModel" }
+                requireNotNull(twseStockHistoryService) { "twseStockHistoryService is required for HoldingsViewModel" }
                 @Suppress("UNCHECKED_CAST")
                 HoldingsViewModel(
                     settingsDataStore = settingsDataStore,
                     realtimeStockDataService = realtimeStockDataService,
                     taiwanWeightedIndexService = taiwanWeightedIndexService,
+                    stockDao = stockDao,
+                    twseStockHistoryService = twseStockHistoryService,
                     stockRepository = OfflineStockRepository(
                         stockDao = stockDao,
                         realtimeStockDataService = realtimeStockDataService,

@@ -99,6 +99,7 @@ fun SettingsScreen() {
     val theme by viewModel.theme.collectAsState()
     val textSizeMode by viewModel.textSizeMode.collectAsState()
     val showTaiwanWeightedIndex by viewModel.showTaiwanWeightedIndex.collectAsState()
+    val showTaiwanPortfolioChart by viewModel.showTaiwanPortfolioChart.collectAsState()
     val stockDataSource by viewModel.stockDataSource.collectAsState()
     val usStockDataSource by viewModel.usStockDataSource.collectAsState()
     val notifyFallbackRepeatedly by viewModel.notifyFallbackRepeatedly.collectAsState()
@@ -259,6 +260,27 @@ fun SettingsScreen() {
                             Switch(
                                 checked = showTaiwanWeightedIndex,
                                 onCheckedChange = viewModel::setShowTaiwanWeightedIndex
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f, fill = false)) {
+                                Text("顯示台股歷史資產圖表", style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    "在首頁顯示整體台股的市值與報酬率歷史走勢圖",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = showTaiwanPortfolioChart,
+                                onCheckedChange = viewModel::setShowTaiwanPortfolioChart
                             )
                         }
                     }

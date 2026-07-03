@@ -9,7 +9,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -69,7 +71,7 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun StockDetailScreen(stockCode: String, navController: NavController) {
     val application = LocalContext.current.applicationContext as StockifyApplication
@@ -90,10 +92,10 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
     if (showDeleteConfirmDialog) {
         AlertDialog(
             onDismissRequest = { viewModel.onDeleteTransactionsCancelled() },
-            title = { Text("刪除確認") },
-            text = { Text("確定要刪除這支股票的所有交易紀錄嗎？此動作無法復原。") },
+            title = { Text("刪除此股票全部交易") },
+            text = { Text("確定要刪除 ${holdingInfo?.stock?.name} 的所有交易紀錄嗎？此動作無法復原。") },
             confirmButton = {
-                TextButton(onClick = { 
+                Button(onClick = { 
                     viewModel.onDeleteTransactionsConfirmed()
                     navController.popBackStack()
                 }) {
@@ -142,6 +144,7 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp)
         ) {
+            // 1. StockDetailSummary: Fixed at the top outside LazyColumn
             holdingInfo?.let { info ->
                 StockDetailSummary(
                     holdingInfo = info,
@@ -151,15 +154,38 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
                         )
                     }
                 )
-                if (com.rsps1008.stockify.data.StockMarket.isTw(info.stock.market)) {
-                    HistoryChartSection(viewModel = viewModel)
+            }
+
+            // 2. Scrollable LazyColumn below the summary
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
+                holdingInfo?.let { info ->
+                    if (com.rsps1008.stockify.data.StockMarket.isTw(info.stock.market)) {
+                        item {
+                            HistoryChartSection(viewModel = viewModel)
+                        }
+                    }
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    RealtimePriceRow(stockCode, viewModel)
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                // 3. stickyHeader: TransactionListHeader sticks below StockDetailSummary when scrolled!
+                stickyHeader {
+                    TransactionListHeader()
+                }
+
+                items(transactions) { transaction ->
+                    TransactionRow(transaction, navController)
+                    Divider()
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            RealtimePriceRow(stockCode, viewModel)
-            Spacer(modifier = Modifier.height(8.dp))
-            TransactionListHeader()
-            TransactionList(transactions, navController, modifier = Modifier.weight(1f))
         }
     }
 }
@@ -256,7 +282,12 @@ private fun StockDetailSummary(
 
 @Composable
 private fun TransactionListHeader() {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(vertical = 8.dp)
+    ) {
         Text(text = "日期", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1.5f))
         Text(text = "交易", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1.5f), textAlign = TextAlign.Center)
         Text(text = "股價", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
@@ -264,19 +295,7 @@ private fun TransactionListHeader() {
     }
 }
 
-@Composable
-private fun TransactionList(
-    transactions: List<TransactionUiState>,
-    navController: NavController,
-    modifier: Modifier = Modifier
-) {
-    LazyColumn(modifier = modifier) {
-        items(transactions) { transaction ->
-            TransactionRow(transaction, navController)
-            Divider()
-        }
-    }
-}
+
 
 @Composable
 private fun RealtimePriceRow(stockCode: String, viewModel: StockDetailViewModel) {

@@ -1,4 +1,4 @@
-﻿package com.rsps1008.stockify.ui.viewmodel
+package com.rsps1008.stockify.ui.viewmodel
 
 import android.app.Application
 import android.content.Intent
@@ -144,6 +144,9 @@ class SettingsViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), TextSizeMode.DEFAULT)
 
     val showTaiwanWeightedIndex: StateFlow<Boolean> = settingsDataStore.showTaiwanWeightedIndexFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), true)
+
+    val showTaiwanPortfolioChart: StateFlow<Boolean> = settingsDataStore.showTaiwanPortfolioChartFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), true)
 
     val stockDataSource: StateFlow<String> = settingsDataStore.stockDataSourceFlow
@@ -688,6 +691,12 @@ class SettingsViewModel(
     fun setShowTaiwanWeightedIndex(show: Boolean) {
         viewModelScope.launch {
             settingsDataStore.setShowTaiwanWeightedIndex(show)
+        }
+    }
+
+    fun setShowTaiwanPortfolioChart(show: Boolean) {
+        viewModelScope.launch {
+            settingsDataStore.setShowTaiwanPortfolioChart(show)
         }
     }
 

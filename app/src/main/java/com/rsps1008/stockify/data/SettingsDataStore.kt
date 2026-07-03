@@ -54,6 +54,7 @@ class SettingsDataStore(val context: Context) {
     private val localCsvRestoreFeeHintShownKey = booleanPreferencesKey("local_csv_restore_fee_hint_shown")
     private val calculationRoundingModeKey = stringPreferencesKey("calculation_rounding_mode")
     private val showTaiwanWeightedIndexKey = booleanPreferencesKey("show_taiwan_weighted_index")
+    private val showTaiwanPortfolioChartKey = booleanPreferencesKey("show_taiwan_portfolio_chart")
 
     val fetchIntervalFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
@@ -242,6 +243,11 @@ class SettingsDataStore(val context: Context) {
     val showTaiwanWeightedIndexFlow: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
             preferences[showTaiwanWeightedIndexKey] ?: true
+        }
+
+    val showTaiwanPortfolioChartFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[showTaiwanPortfolioChartKey] ?: true
         }
 
     suspend fun setFetchInterval(interval: Int) {
@@ -451,6 +457,12 @@ class SettingsDataStore(val context: Context) {
     suspend fun setShowTaiwanWeightedIndex(show: Boolean) {
         context.dataStore.edit {
             it[showTaiwanWeightedIndexKey] = show
+        }
+    }
+
+    suspend fun setShowTaiwanPortfolioChart(show: Boolean) {
+        context.dataStore.edit {
+            it[showTaiwanPortfolioChartKey] = show
         }
     }
 }
