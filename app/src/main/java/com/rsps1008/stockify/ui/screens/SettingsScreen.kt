@@ -523,34 +523,59 @@ fun SettingsScreen() {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("損益計算設定", style = MaterialTheme.typography.titleLarge)
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text("報酬率計算方式", style = MaterialTheme.typography.titleMedium)
+                        val returnRateModeOptions = remember {
+                            mapOf(
+                                ReturnRateMode.REMAINING_POSITION to "手上剩餘部位的資金效率 (剩餘部位成本)",
+                                ReturnRateMode.CUMULATIVE_INVESTMENT to "整段交易的總投入報酬 (歷來投入成本)",
+                                ReturnRateMode.XIRR to "這檔股票生命週期的年化報酬 (XIRR)"
+                            )
+                        }
+                        val returnRateModeDescriptions = remember {
+                            mapOf(
+                                ReturnRateMode.REMAINING_POSITION to "以目前還留在該股票中的有效成本作為分母。適合評估目前在倉部位的資金運用效率，不受已實現損益的現金回收影響。",
+                                ReturnRateMode.CUMULATIVE_INVESTMENT to "以這檔股票歷來累計投入的總成本作為分母。部分賣出回收資金後，分母仍維持最大投入金額，報酬率呈現會較穩健保守。",
+                                ReturnRateMode.XIRR to "根據每筆買進、賣出、配息、減資的實際發生日期與資金流向，計算考慮時間價值權重的年化報酬率（XIRR），最符合實際資金的時間價值。"
+                            )
+                        }
+                        var expandedReturnRateMode by remember { mutableStateOf(false) }
+                        ExposedDropdownMenuBox(
+                            expanded = expandedReturnRateMode,
+                            onExpandedChange = { expandedReturnRateMode = !expandedReturnRateMode },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = returnRateModeOptions[returnRateMode] ?: "",
+                                onValueChange = { },
+                                label = { Text("報酬率計算方式") },
+                                readOnly = true,
+                                trailingIcon = {
+                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedReturnRateMode)
+                                },
+                                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = expandedReturnRateMode,
+                                onDismissRequest = { expandedReturnRateMode = false },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                returnRateModeOptions.forEach { (key, value) ->
+                                    DropdownMenuItem(
+                                        text = { Text(value) },
+                                        onClick = {
+                                            viewModel.setReturnRateMode(key)
+                                            expandedReturnRateMode = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            "可在手上剩餘部位的資金效率、整段交易的總投入報酬，以及這檔股票從買到現在或賣完的年化報酬之間切換。",
+                            text = returnRateModeDescriptions[returnRateMode] ?: "",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            ReturnRateModeOption(
-                                title = "手上剩餘部位的資金效率",
-                                description = "以目前還留在這檔股票中的有效成本作為分母，適合看手上部位的資金效率。",
-                                selected = returnRateMode == ReturnRateMode.REMAINING_POSITION,
-                                onSelected = { viewModel.setReturnRateMode(ReturnRateMode.REMAINING_POSITION) }
-                            )
-                            ReturnRateModeOption(
-                                title = "整段交易的總投入報酬",
-                                description = "改用這檔股票歷來投入成本作為分母，部分賣出後百分比會較保守。",
-                                selected = returnRateMode == ReturnRateMode.CUMULATIVE_INVESTMENT,
-                                onSelected = { viewModel.setReturnRateMode(ReturnRateMode.CUMULATIVE_INVESTMENT) }
-                            )
-                            ReturnRateModeOption(
-                                title = "這檔股票從買到現在/賣完的年化報酬",
-                                description = "依交易日期與現金流計算 XIRR，會把時間權重算進去。",
-                                selected = returnRateMode == ReturnRateMode.XIRR,
-                                onSelected = { viewModel.setReturnRateMode(ReturnRateMode.XIRR) }
-                            )
-                        }
                         Spacer(modifier = Modifier.height(16.dp))
                         Text("自動計算取整方式", style = MaterialTheme.typography.titleMedium)
                         Spacer(modifier = Modifier.height(8.dp))
@@ -807,37 +832,6 @@ fun SettingsScreen() {
     }
 }
 
-@Composable
-private fun ReturnRateModeOption(
-    title: String,
-    description: String,
-    selected: Boolean,
-    onSelected: () -> Unit
-) {
-    Row(
-        verticalAlignment = Alignment.Top,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp)
-    ) {
-        RadioButton(
-            selected = selected,
-            onClick = onSelected
-        )
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(top = 6.dp)
-        ) {
-            Text(title)
-            Text(
-                description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
 
 private fun formatTimestamp(timestamp: Long): String {
     val sdf = SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault())
