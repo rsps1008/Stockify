@@ -6,6 +6,7 @@ import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.TaiwanWeightedIndexService
 import com.rsps1008.stockify.data.UsdTwdExchangeRateService
+import com.rsps1008.stockify.data.TwseStockHistoryService
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -21,6 +22,7 @@ class StockifyApplication : Application() {
     lateinit var exchangeRateService: UsdTwdExchangeRateService
     lateinit var realtimeStockDataService: RealtimeStockDataService
     lateinit var taiwanWeightedIndexService: TaiwanWeightedIndexService
+    lateinit var twseStockHistoryService: TwseStockHistoryService
     // ★ 新增：全域 HttpClient（給 TWSE / 即時股價 / 配息用）
 
     val httpClient: HttpClient by lazy {
@@ -53,5 +55,6 @@ class StockifyApplication : Application() {
             taiwanWeightedIndexService = taiwanWeightedIndexService,
             applicationContext = this
         )
+        twseStockHistoryService = TwseStockHistoryService(httpClient, database.stockDao())
     }
 }

@@ -98,4 +98,10 @@ interface StockDao {
     WHERE 股號 = :stockCode
 """)
     suspend fun getHoldingShares(stockCode: String): Double
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertHistoryPrices(prices: List<StockHistoryPrice>)
+
+    @Query("SELECT * FROM stock_history_prices WHERE stockCode = :stockCode AND date LIKE :monthPrefix || '%' ORDER BY date ASC")
+    suspend fun getHistoryPricesForMonth(stockCode: String, monthPrefix: String): List<StockHistoryPrice>
 }

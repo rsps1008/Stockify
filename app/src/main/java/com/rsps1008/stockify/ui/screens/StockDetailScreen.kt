@@ -79,7 +79,8 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
             realtimeStockDataService = application.realtimeStockDataService,
             settingsDataStore = application.settingsDataStore,
             stockCode = stockCode,
-            exchangeRateService = application.exchangeRateService
+            exchangeRateService = application.exchangeRateService,
+            twseStockHistoryService = application.twseStockHistoryService
         )
     )
     val holdingInfo by viewModel.holdingInfo.collectAsState()
@@ -141,21 +142,24 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp)
         ) {
-            holdingInfo?.let {
+            holdingInfo?.let { info ->
                 StockDetailSummary(
-                    holdingInfo = it,
+                    holdingInfo = info,
                     onYahooClick = {
                         navController.navigate(
-                            Screen.YahooQuote.createRoute(it.stock.code, it.stock.market)
+                            Screen.YahooQuote.createRoute(info.stock.code, info.stock.market)
                         )
                     }
                 )
+                if (com.rsps1008.stockify.data.StockMarket.isTw(info.stock.market)) {
+                    HistoryChartSection(viewModel = viewModel)
+                }
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             RealtimePriceRow(stockCode, viewModel)
             Spacer(modifier = Modifier.height(8.dp))
             TransactionListHeader()
-            TransactionList(transactions, navController)
+            TransactionList(transactions, navController, modifier = Modifier.weight(1f))
         }
     }
 }
@@ -261,8 +265,12 @@ private fun TransactionListHeader() {
 }
 
 @Composable
-private fun TransactionList(transactions: List<TransactionUiState>, navController: NavController) {
-    LazyColumn {
+private fun TransactionList(
+    transactions: List<TransactionUiState>,
+    navController: NavController,
+    modifier: Modifier = Modifier
+) {
+    LazyColumn(modifier = modifier) {
         items(transactions) { transaction ->
             TransactionRow(transaction, navController)
             Divider()

@@ -10,6 +10,7 @@ import com.rsps1008.stockify.data.StockDao
 import com.rsps1008.stockify.data.TaiwanWeightedIndexService
 import com.rsps1008.stockify.data.UsdTwdExchangeRateService
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
+import com.rsps1008.stockify.data.TwseStockHistoryService
 
 class ViewModelFactory(
     private val stockDao: StockDao,
@@ -20,7 +21,8 @@ class ViewModelFactory(
     private val transactionId: Int? = null,
     private val dividendRepository: YahooDividendRepository? = null,
     private val exchangeRateService: UsdTwdExchangeRateService? = null,
-    private val taiwanWeightedIndexService: TaiwanWeightedIndexService? = null
+    private val taiwanWeightedIndexService: TaiwanWeightedIndexService? = null,
+    private val twseStockHistoryService: TwseStockHistoryService? = null
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return when {
@@ -65,6 +67,7 @@ class ViewModelFactory(
                 requireNotNull(realtimeStockDataService) { "realtimeStockDataService is required for StockDetailViewModel" }
                 requireNotNull(settingsDataStore) { "settingsDataStore is required for StockDetailViewModel" }
                 requireNotNull(exchangeRateService) { "exchangeRateService is required for StockDetailViewModel" }
+                requireNotNull(twseStockHistoryService) { "twseStockHistoryService is required for StockDetailViewModel" }
 
                 @Suppress("UNCHECKED_CAST")
                 StockDetailViewModel(
@@ -76,7 +79,9 @@ class ViewModelFactory(
                         settingsDataStore = settingsDataStore,
                         exchangeRateService = exchangeRateService
                     ),
-                    realtimeStockDataService = realtimeStockDataService
+                    realtimeStockDataService = realtimeStockDataService,
+                    twseStockHistoryService = twseStockHistoryService,
+                    settingsDataStore = settingsDataStore
                 ) as T
             }
             modelClass.isAssignableFrom(DividendInfoViewModel::class.java) -> {

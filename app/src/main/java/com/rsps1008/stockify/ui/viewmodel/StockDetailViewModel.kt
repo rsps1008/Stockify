@@ -5,6 +5,12 @@ import androidx.lifecycle.viewModelScope
 import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.StockDao
 import com.rsps1008.stockify.data.StockRepository
+import com.rsps1008.stockify.data.StockMarket
+import com.rsps1008.stockify.data.TwseStockHistoryService
+import com.rsps1008.stockify.data.SettingsDataStore
+import com.rsps1008.stockify.data.ReturnRateMode
+import com.rsps1008.stockify.data.StockTransaction
+import com.rsps1008.stockify.data.StockHistoryPoint
 import com.rsps1008.stockify.ui.screens.HoldingInfo
 import com.rsps1008.stockify.ui.screens.TransactionUiState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,13 +18,52 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+
+enum class HistoryRange {
+    ONE_MONTH, SIX_MONTHS, ONE_YEAR
+}
+
+@kotlinx.serialization.Serializable
+data class PersonalHistoryPoint(
+    val date: String,          // "YYYY-MM-DD"
+    val price: Double,         // Stock price
+    val shares: Double,        // Shares held at that date
+    val marketValue: Double,   // Shares * Price
+    val totalPL: Double,       // Market value - Cost basis
+    val totalPLPercentage: Double // Return percentage
+)
+
+sealed interface HistoryState {
+    object Idle : HistoryState
+    data class Loading(val progress: Float, val statusText: String) : HistoryState
+    data class Success(val range: HistoryRange, val points: List<PersonalHistoryPoint>) : HistoryState
+    data class Error(val message: String) : HistoryState
+}
+
+sealed interface HistoryStateInternal {
+    object Idle : HistoryStateInternal
+    data class Loading(val progress: Float, val statusText: String) : HistoryStateInternal
+    data class Success(val range: HistoryRange, val rawPoints: List<StockHistoryPoint>) : HistoryStateInternal
+    data class Error(val message: String) : HistoryStateInternal
+}
+
+private data class SettingsBundle(
+    val preDeductSellFees: Boolean,
+    val feeDiscount: Double,
+    val minFeeRegular: Int,
+    val returnRateMode: ReturnRateMode
+)
 
 class StockDetailViewModel(
     private val stockCode: String,
     private val stockDao: StockDao,
     stockRepository: StockRepository,
-    val realtimeStockDataService: RealtimeStockDataService
+    val realtimeStockDataService: RealtimeStockDataService,
+    private val twseStockHistoryService: TwseStockHistoryService,
+    private val settingsDataStore: SettingsDataStore
 ) : ViewModel() {
 
     val holdingInfo: StateFlow<HoldingInfo?> = stockRepository.getHoldingInfo(stockCode)
@@ -31,6 +76,230 @@ class StockDetailViewModel(
 
     private val _showDeleteConfirmDialog = MutableStateFlow(false)
     val showDeleteConfirmDialog: StateFlow<Boolean> = _showDeleteConfirmDialog.asStateFlow()
+
+    private val _historyStateInternal = MutableStateFlow<HistoryStateInternal>(HistoryStateInternal.Idle)
+
+    private val settingsCombined = combine(
+        settingsDataStore.preDeductSellFeesFlow,
+        settingsDataStore.feeDiscountFlow,
+        settingsDataStore.minFeeRegularFlow,
+        settingsDataStore.returnRateModeFlow
+    ) { preDeduct, discount, minFee, mode ->
+        SettingsBundle(preDeduct, discount, minFee, mode)
+    }
+
+    val historyState: StateFlow<HistoryState> = combine(
+        _historyStateInternal,
+        transactions,
+        settingsCombined,
+        holdingInfo
+    ) { historyInternal, txList, settings, holding ->
+        if (historyInternal is HistoryStateInternal.Success) {
+            val stockTransactions = txList.map { it.transaction }
+            val adjustedTransactions = adjustTransactionsForSplits(stockTransactions)
+            val firstTxTime = adjustedTransactions.minOfOrNull { it.date }
+            val minFee = settings.minFeeRegular.toDouble()
+
+            val personalPoints = mutableListOf<PersonalHistoryPoint>()
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).apply {
+                timeZone = java.util.TimeZone.getTimeZone("Asia/Taipei")
+            }
+            val stockType = holding?.stock?.stockType ?: ""
+
+            for (pt in historyInternal.rawPoints) {
+                val dayStart = sdf.parse(pt.date)?.time ?: 0L
+                val dayEnd = dayStart + 24 * 60 * 60 * 1000L - 1L
+
+                if (firstTxTime != null && dayEnd < firstTxTime) {
+                    continue
+                }
+
+                val calcPt = calculateHistoricalHoldingAt(
+                    ptDateStr = pt.date,
+                    ptPrice = pt.price,
+                    adjustedTransactions = adjustedTransactions,
+                    preDeductSellFees = settings.preDeductSellFees,
+                    returnRateMode = settings.returnRateMode,
+                    feeDiscount = settings.feeDiscount,
+                    minFeeRegular = minFee,
+                    stockType = stockType,
+                    dayEnd = dayEnd
+                )
+                personalPoints.add(calcPt)
+            }
+
+            if (personalPoints.isEmpty()) {
+                HistoryState.Success(
+                    historyInternal.range,
+                    historyInternal.rawPoints.map {
+                        PersonalHistoryPoint(it.date, it.price, 0.0, 0.0, 0.0, 0.0)
+                    }
+                )
+            } else {
+                HistoryState.Success(historyInternal.range, personalPoints)
+            }
+        } else {
+            when (historyInternal) {
+                is HistoryStateInternal.Idle -> HistoryState.Idle
+                is HistoryStateInternal.Loading -> HistoryState.Loading(historyInternal.progress, historyInternal.statusText)
+                is HistoryStateInternal.Error -> HistoryState.Error(historyInternal.message)
+                else -> HistoryState.Idle
+            }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), HistoryState.Idle)
+
+    init {
+        viewModelScope.launch {
+            val market = StockMarket.inferFromCode(stockCode)
+            if (StockMarket.isTw(market)) {
+                fetchStockHistory(HistoryRange.ONE_MONTH)
+            }
+        }
+    }
+
+    fun fetchStockHistory(range: HistoryRange) {
+        viewModelScope.launch {
+            val rangeMonths = when (range) {
+                HistoryRange.ONE_MONTH -> 1
+                HistoryRange.SIX_MONTHS -> 6
+                HistoryRange.ONE_YEAR -> 12
+            }
+
+            _historyStateInternal.value = HistoryStateInternal.Loading(0f, "準備從證交所下載數據...")
+            try {
+                val rawPoints = twseStockHistoryService.fetchHistory(stockCode, rangeMonths) { step, total ->
+                    val progress = step.toFloat() / total.toFloat()
+                    _historyStateInternal.value = HistoryStateInternal.Loading(progress, "正在載入第 $step/$total 個月...")
+                }
+                
+                if (rawPoints.isEmpty()) {
+                    _historyStateInternal.value = HistoryStateInternal.Error("證交所回傳資料為空，請稍後重試。")
+                    return@launch
+                }
+
+                _historyStateInternal.value = HistoryStateInternal.Success(range, rawPoints)
+            } catch (e: Exception) {
+                _historyStateInternal.value = HistoryStateInternal.Error("載入失敗: ${e.localizedMessage}")
+            }
+        }
+    }
+
+    private fun adjustTransactionsForSplits(transactions: List<StockTransaction>): List<StockTransaction> {
+        val chronologicallySorted = transactions.sortedBy { it.date }
+        val adjustedTransactions = mutableListOf<StockTransaction>()
+        var splitMultiplier = 1.0
+
+        for (tx in chronologicallySorted.reversed()) {
+            if (tx.type == "分割") {
+                if (tx.stockSplitRatio > 0) {
+                    splitMultiplier *= tx.stockSplitRatio
+                }
+                continue
+            }
+
+            if (splitMultiplier != 1.0) {
+                adjustedTransactions.add(tx.copy(
+                    buyShares = tx.buyShares * splitMultiplier,
+                    buyPrice = tx.buyPrice / splitMultiplier,
+                    sellShares = tx.sellShares * splitMultiplier,
+                    sellPrice = tx.sellPrice / splitMultiplier,
+                    dividendShares = tx.dividendShares * splitMultiplier,
+                    exDividendShares = tx.exDividendShares * splitMultiplier,
+                    exRightsShares = tx.exRightsShares * splitMultiplier,
+                    sharesBeforeReduction = tx.sharesBeforeReduction * splitMultiplier,
+                    sharesAfterReduction = tx.sharesAfterReduction * splitMultiplier
+                ))
+            } else {
+                adjustedTransactions.add(tx)
+            }
+        }
+
+        return adjustedTransactions.reversed()
+    }
+
+    private fun calculateHistoricalHoldingAt(
+        ptDateStr: String,
+        ptPrice: Double,
+        adjustedTransactions: List<StockTransaction>,
+        preDeductSellFees: Boolean,
+        returnRateMode: ReturnRateMode,
+        feeDiscount: Double,
+        minFeeRegular: Double,
+        stockType: String,
+        dayEnd: Long
+    ): PersonalHistoryPoint {
+        val txs = adjustedTransactions.filter { it.date <= dayEnd }
+
+        var shares = 0.0
+        var totalBuyExpense = 0.0
+        var totalSellIncome = 0.0
+        var totalSellNetIncome = 0.0
+        var sellSharesTotal = 0.0
+        var sellAmountBeforeFee = 0.0
+        var totalDividendIncome = 0.0
+        var buySharesTotal = 0.0
+        var buyCostTotal = 0.0
+
+        for (it in txs) {
+            when (it.type) {
+                "買進" -> {
+                    shares += it.buyShares
+                    totalBuyExpense += it.expense
+                    buySharesTotal += it.buyShares
+                    buyCostTotal += it.expense
+                }
+                "賣出" -> {
+                    shares -= it.sellShares
+                    sellSharesTotal += it.sellShares
+                    sellAmountBeforeFee += it.sellPrice * it.sellShares
+                    totalSellIncome += it.income
+                    totalSellNetIncome += it.income
+                }
+                "配股" -> {
+                    shares += it.dividendShares
+                }
+                "配息" -> {
+                    totalDividendIncome += it.income
+                }
+                "減資" -> {
+                    shares += it.sharesAfterReduction - it.sharesBeforeReduction
+                    totalSellIncome += it.cashReturned
+                }
+            }
+        }
+
+        if (shares < 0) shares = 0.0
+        val costBasis = totalBuyExpense - totalSellIncome - totalDividendIncome
+        val totalSellFeeAndTax = (sellAmountBeforeFee - totalSellNetIncome).coerceAtLeast(0.0)
+        val totalInvestment = totalBuyExpense + totalSellFeeAndTax
+        val marketValue = shares * ptPrice
+        var totalPL = marketValue - costBasis
+
+        if (preDeductSellFees && marketValue > 0.0) {
+            val sellFee = (marketValue * 0.001425 * feeDiscount).coerceAtLeast(minFeeRegular)
+            val taxRate = if (stockType == "ETF") 0.001 else 0.003
+            val sellTax = marketValue * taxRate
+            totalPL -= (sellFee + sellTax)
+        }
+
+        val totalPLPercentage = when (returnRateMode) {
+            ReturnRateMode.REMAINING_POSITION -> if (costBasis > 0) (totalPL / costBasis) * 100 else 0.0
+            ReturnRateMode.CUMULATIVE_INVESTMENT -> if (totalInvestment > 0) (totalPL / totalInvestment) * 100 else 0.0
+            ReturnRateMode.XIRR -> {
+                // Newton-Raphson fallback to REMAINING_POSITION for history charts
+                if (costBasis > 0) (totalPL / costBasis) * 100 else 0.0
+            }
+        }
+
+        return PersonalHistoryPoint(
+            date = ptDateStr,
+            price = ptPrice,
+            shares = shares,
+            marketValue = marketValue,
+            totalPL = totalPL,
+            totalPLPercentage = totalPLPercentage
+        )
+    }
 
     fun onDeleteTransactionsClicked() {
         _showDeleteConfirmDialog.value = true
