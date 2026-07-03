@@ -79,6 +79,9 @@ class StockDetailViewModel(
 
     private val _historyStateInternal = MutableStateFlow<DetailHistoryStateInternal>(DetailHistoryStateInternal.Idle)
 
+    val detailHistoryChartExpanded: StateFlow<Boolean> = settingsDataStore.detailHistoryChartExpandedFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), true)
+
     private val settingsCombined = combine(
         settingsDataStore.preDeductSellFeesFlow,
         settingsDataStore.feeDiscountFlow,
@@ -151,7 +154,7 @@ class StockDetailViewModel(
     init {
         viewModelScope.launch {
             val market = StockMarket.inferFromCode(stockCode)
-            if (StockMarket.isTw(market)) {
+            if (StockMarket.isTw(market) || market == StockMarket.US) {
                 fetchStockHistory(HistoryRange.ONE_MONTH)
             }
         }
@@ -314,5 +317,11 @@ class StockDetailViewModel(
 
     fun onDeleteTransactionsCancelled() {
         _showDeleteConfirmDialog.value = false
+    }
+
+    fun setDetailHistoryChartExpanded(expanded: Boolean) {
+        viewModelScope.launch {
+            settingsDataStore.setDetailHistoryChartExpanded(expanded)
+        }
     }
 }

@@ -163,7 +163,7 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
                     .weight(1f)
             ) {
                 holdingInfo?.let { info ->
-                    if (com.rsps1008.stockify.data.StockMarket.isTw(info.stock.market)) {
+                    if (com.rsps1008.stockify.data.StockMarket.isTw(info.stock.market) || info.stock.market == com.rsps1008.stockify.data.StockMarket.US) {
                         item {
                             HistoryChartSection(viewModel = viewModel)
                         }

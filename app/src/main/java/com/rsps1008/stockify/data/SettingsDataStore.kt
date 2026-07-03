@@ -55,6 +55,8 @@ class SettingsDataStore(val context: Context) {
     private val calculationRoundingModeKey = stringPreferencesKey("calculation_rounding_mode")
     private val showTaiwanWeightedIndexKey = booleanPreferencesKey("show_taiwan_weighted_index")
     private val showTaiwanPortfolioChartKey = booleanPreferencesKey("show_taiwan_portfolio_chart")
+    private val homeHistoryChartExpandedKey = booleanPreferencesKey("home_history_chart_expanded")
+    private val detailHistoryChartExpandedKey = booleanPreferencesKey("detail_history_chart_expanded")
 
     val fetchIntervalFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
@@ -248,6 +250,16 @@ class SettingsDataStore(val context: Context) {
     val showTaiwanPortfolioChartFlow: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
             preferences[showTaiwanPortfolioChartKey] ?: true
+        }
+
+    val homeHistoryChartExpandedFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[homeHistoryChartExpandedKey] ?: true
+        }
+
+    val detailHistoryChartExpandedFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[detailHistoryChartExpandedKey] ?: true
         }
 
     suspend fun setFetchInterval(interval: Int) {
@@ -463,6 +475,18 @@ class SettingsDataStore(val context: Context) {
     suspend fun setShowTaiwanPortfolioChart(show: Boolean) {
         context.dataStore.edit {
             it[showTaiwanPortfolioChartKey] = show
+        }
+    }
+
+    suspend fun setHomeHistoryChartExpanded(expanded: Boolean) {
+        context.dataStore.edit {
+            it[homeHistoryChartExpandedKey] = expanded
+        }
+    }
+
+    suspend fun setDetailHistoryChartExpanded(expanded: Boolean) {
+        context.dataStore.edit {
+            it[detailHistoryChartExpandedKey] = expanded
         }
     }
 }

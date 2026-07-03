@@ -42,9 +42,12 @@ fun HistoryChartSection(
     modifier: Modifier = Modifier
 ) {
     val historyState by viewModel.historyState.collectAsState()
+    val isExpanded by viewModel.detailHistoryChartExpanded.collectAsState()
     HistoryChartSectionContent(
         historyState = historyState,
         onRangeSelected = { viewModel.fetchStockHistory(it) },
+        isExpanded = isExpanded,
+        onToggleExpanded = { viewModel.setDetailHistoryChartExpanded(it) },
         modifier = modifier
     )
 }
@@ -55,9 +58,12 @@ fun HistoryChartSection(
     modifier: Modifier = Modifier
 ) {
     val historyState by viewModel.historyState.collectAsState()
+    val isExpanded by viewModel.homeHistoryChartExpanded.collectAsState()
     HistoryChartSectionContent(
         historyState = historyState,
         onRangeSelected = { viewModel.fetchPortfolioHistory(it) },
+        isExpanded = isExpanded,
+        onToggleExpanded = { viewModel.setHomeHistoryChartExpanded(it) },
         modifier = modifier
     )
 }
@@ -66,16 +72,20 @@ fun HistoryChartSection(
 fun HistoryChartSectionContent(
     historyState: HistoryState,
     onRangeSelected: (HistoryRange) -> Unit,
+    isExpanded: Boolean,
+    onToggleExpanded: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var selectedRange by remember { mutableStateOf(HistoryRange.ONE_MONTH) }
     var selectedMetric by remember { mutableStateOf("市值") }
-    var isExpanded by rememberSaveable { mutableStateOf(true) }
 
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = if (isExpanded) 8.dp else 2.dp),
+            .padding(
+                top = if (isExpanded) 8.dp else 2.dp,
+                bottom = 0.dp
+            ),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
         )
@@ -90,7 +100,7 @@ fun HistoryChartSectionContent(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { isExpanded = !isExpanded }
+                    .clickable { onToggleExpanded(!isExpanded) }
                     .padding(vertical = if (isExpanded) 4.dp else 0.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically

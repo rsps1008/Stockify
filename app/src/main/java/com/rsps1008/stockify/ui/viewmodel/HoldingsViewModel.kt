@@ -124,6 +124,13 @@ class HoldingsViewModel(
             initialValue = true
         )
 
+    val homeHistoryChartExpanded: StateFlow<Boolean> = settingsDataStore.homeHistoryChartExpandedFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000L),
+            initialValue = true
+        )
+
     val taiwanWeightedIndexInfo: StateFlow<com.rsps1008.stockify.data.TaiwanWeightedIndexInfo?> =
         taiwanWeightedIndexService.indexInfo
 
@@ -455,6 +462,12 @@ class HoldingsViewModel(
                 column = column,
                 ascending = ascending
             )
+        }
+    }
+
+    fun setHomeHistoryChartExpanded(expanded: Boolean) {
+        viewModelScope.launch {
+            settingsDataStore.setHomeHistoryChartExpanded(expanded)
         }
     }
 }
