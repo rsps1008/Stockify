@@ -109,7 +109,16 @@ class StockDetailViewModel(
             }
             val stockType = holding?.stock?.stockType ?: ""
 
-            for (pt in historyInternal.rawPoints) {
+            val currentPrice = holding?.currentPrice ?: 0.0
+            val rawPoints = historyInternal.rawPoints.toMutableList()
+            if (currentPrice > 0.0) {
+                val todayStr = sdf.format(java.util.Date())
+                if (rawPoints.isEmpty() || rawPoints.last().date < todayStr) {
+                    rawPoints.add(StockHistoryPoint(todayStr, currentPrice))
+                }
+            }
+
+            for (pt in rawPoints) {
                 val dayStart = sdf.parse(pt.date)?.time ?: 0L
                 val dayEnd = dayStart + 24 * 60 * 60 * 1000L - 1L
 
@@ -134,7 +143,7 @@ class StockDetailViewModel(
             if (personalPoints.isEmpty()) {
                 HistoryState.Success(
                     historyInternal.range,
-                    historyInternal.rawPoints.map {
+                    rawPoints.map {
                         PersonalHistoryPoint(it.date, it.price, 0.0, 0.0, 0.0, 0.0)
                     }
                 )

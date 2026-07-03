@@ -37,11 +37,12 @@ class TwseStockHistoryService(
         rangeMonths: Int,
         onProgress: (step: Int, total: Int) -> Unit
     ): List<StockHistoryPoint> {
-        val market = StockMarket.inferFromCode(stockCode)
+        val normalizedCode = stockCode.uppercase().trim()
+        val market = StockMarket.inferFromCode(normalizedCode)
         return if (StockMarket.isTw(market)) {
-            fetchTwHistory(stockCode, rangeMonths, onProgress)
+            fetchTwHistory(normalizedCode, rangeMonths, onProgress)
         } else {
-            fetchUsHistory(stockCode, rangeMonths, onProgress)
+            fetchUsHistory(normalizedCode, rangeMonths, onProgress)
         }
     }
 
@@ -168,43 +169,51 @@ class TwseStockHistoryService(
             calendar.add(Calendar.MONTH, -rangeMonths)
             val fromDate = sdf.format(calendar.time)
 
-            // Nasdaq API limit is required
-            val url = "https://api.nasdaq.com/api/quote/$stockCode/historical?assetclass=$assetClass&fromdate=$fromDate&todate=$toDate&limit=400"
+            Log.d(TAG, "fetchUsHistory starting for $stockCode, rangeMonths=$rangeMonths, stockType=$stockType, assetClass=$assetClass, fromDate=$fromDate, toDate=$toDate")
 
-            val body = retryOnTransientNetworkFailure(TAG, stockCode) {
-                client.get(url) {
-                    header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                    header("Referer", "https://www.nasdaq.com/")
-                    header("Origin", "https://www.nasdaq.com")
-                    header("Accept", "application/json, text/plain, */*")
-                    header("Accept-Language", "en-US,en;q=0.9")
-                }.bodyAsText()
-            }
+            var body = fetchNasdaqBody(stockCode, assetClass, fromDate, toDate)
+            var points = body?.let { parseNasdaqResponse(it) } ?: emptyList()
 
-            if (body != null) {
-                try {
-                    val points = parseNasdaqResponse(body)
-                    if (points.isNotEmpty()) {
-                        // Save to database
-                        val dbEntities = points.map { StockHistoryPrice(stockCode, it.date, it.price) }
-                        stockDao.insertHistoryPrices(dbEntities)
+            Log.d(TAG, "fetchUsHistory parsed ${points.size} points for $stockCode under assetClass $assetClass")
 
-                        // Update memory cache
-                        val groupedByMonth = points.groupBy { it.date.replace("-", "").substring(0, 6) }
-                        for ((mStr, mPoints) in groupedByMonth) {
-                            cache["${stockCode}_$mStr"] = mPoints
-                        }
-
-                        // Rebuild resultPoints from cache
-                        resultPoints.clear()
-                        for (monthStr in targetMonths) {
-                            val cacheKey = "${stockCode}_$monthStr"
-                            val cached = cache[cacheKey] ?: groupedByMonth[monthStr] ?: emptyList()
-                            resultPoints.addAll(cached)
+            // Double-sided asset class fallback
+            if (points.isEmpty()) {
+                val fallbackAssetClass = if (assetClass == "stocks") "etf" else "stocks"
+                Log.d(TAG, "Nasdaq history empty for $stockCode with $assetClass, trying fallback with $fallbackAssetClass")
+                body = fetchNasdaqBody(stockCode, fallbackAssetClass, fromDate, toDate)
+                points = body?.let { parseNasdaqResponse(it) } ?: emptyList()
+                Log.d(TAG, "Nasdaq fallback parsed ${points.size} points for $stockCode under fallbackAssetClass $fallbackAssetClass")
+                if (points.isNotEmpty()) {
+                    val updatedStockType = if (fallbackAssetClass == "etf") "ETF" else "STOCK"
+                    stock?.let {
+                        try {
+                            stockDao.insertStock(it.copy(stockType = updatedStockType))
+                            Log.d(TAG, "Self-healed stockType for $stockCode to $updatedStockType in database")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to update stockType for $stockCode", e)
                         }
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error parsing Nasdaq response for $stockCode", e)
+                }
+            }
+
+            if (points.isNotEmpty()) {
+                // Save to database
+                val dbEntities = points.map { StockHistoryPrice(stockCode, it.date, it.price) }
+                stockDao.insertHistoryPrices(dbEntities)
+                Log.d(TAG, "Saved ${dbEntities.size} US history price points to SQLite database for $stockCode")
+
+                // Update memory cache
+                val groupedByMonth = points.groupBy { it.date.replace("-", "").substring(0, 6) }
+                for ((mStr, mPoints) in groupedByMonth) {
+                    cache["${stockCode}_$mStr"] = mPoints
+                }
+
+                // Rebuild resultPoints from cache
+                resultPoints.clear()
+                for (monthStr in targetMonths) {
+                    val cacheKey = "${monthStr.substring(0, 6)}"
+                    val cached = cache["${stockCode}_$cacheKey"] ?: groupedByMonth[cacheKey] ?: emptyList()
+                    resultPoints.addAll(cached)
                 }
             }
         }
@@ -213,12 +222,37 @@ class TwseStockHistoryService(
         resultPoints.distinctBy { it.date }.sortedBy { it.date }
     }
 
+    private suspend fun fetchNasdaqBody(
+        stockCode: String,
+        assetClass: String,
+        fromDate: String,
+        toDate: String
+    ): String? {
+        val url = "https://api.nasdaq.com/api/quote/$stockCode/historical?assetclass=$assetClass&fromdate=$fromDate&todate=$toDate&limit=400"
+        Log.d(TAG, "Requesting Nasdaq historical API: $url")
+        return retryOnTransientNetworkFailure(TAG, stockCode) {
+            val res = client.get(url) {
+                header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                header("Referer", "https://www.nasdaq.com/")
+                header("Origin", "https://www.nasdaq.com")
+                header("Accept", "application/json, text/plain, */*")
+                header("Accept-Language", "en-US,en;q=0.9")
+            }.bodyAsText()
+            Log.d(TAG, "Nasdaq response received for $stockCode ($assetClass), length=${res.length}")
+            res
+        }
+    }
+
     private fun parseNasdaqResponse(jsonText: String): List<StockHistoryPoint> {
         val points = mutableListOf<StockHistoryPoint>()
         if (jsonText.isBlank()) return points
 
         val root = Json.parseToJsonElement(jsonText).jsonObject
-        val dataObj = root["data"]?.jsonObject ?: return points
+        val dataElement = root["data"]
+        if (dataElement == null || dataElement is kotlinx.serialization.json.JsonNull) {
+            return points
+        }
+        val dataObj = dataElement.jsonObject
         val tradesTable = dataObj["tradesTable"]?.jsonObject ?: return points
         val rowsArray = tradesTable["rows"]?.jsonArray ?: return points
 
@@ -228,8 +262,11 @@ class TwseStockHistoryService(
             val closeStr = rowObj["close"]?.jsonPrimitive?.content ?: continue // "$294.38"
 
             val dateParts = dateStr.split("/")
-            if (dateParts.size != 3) return points // Return what we have or empty
-            val formattedDate = String.format("%s-%s-%s", dateParts[2], dateParts[0], dateParts[1])
+            if (dateParts.size != 3) continue
+            val year = dateParts[2].trim()
+            val month = dateParts[0].trim().toIntOrNull()?.let { String.format("%02d", it) } ?: dateParts[0].trim()
+            val day = dateParts[1].trim().toIntOrNull()?.let { String.format("%02d", it) } ?: dateParts[1].trim()
+            val formattedDate = "$year-$month-$day"
 
             val price = closeStr.replace("$", "").replace(",", "").trim().toDoubleOrNull() ?: continue
             points.add(StockHistoryPoint(formattedDate, price))
