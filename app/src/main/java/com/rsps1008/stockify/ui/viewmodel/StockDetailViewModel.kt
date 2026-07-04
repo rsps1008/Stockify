@@ -100,9 +100,8 @@ class StockDetailViewModel(
         holdingInfo
     ) { historyInternal, txList, settings, holding ->
         if (historyInternal is DetailHistoryStateInternal.Success) {
-            val stockTransactions = txList.map { it.transaction }
-            val adjustedTransactions = adjustTransactionsForSplits(stockTransactions)
-            val firstTxTime = adjustedTransactions.minOfOrNull { it.date }
+            val stockTransactions = txList.map { it.transaction }.sortedBy { it.date }
+            val firstTxTime = stockTransactions.minOfOrNull { it.date }
             val minFee = settings.minFeeRegular.toDouble()
 
             val personalPoints = mutableListOf<PersonalHistoryPoint>()
@@ -125,7 +124,7 @@ class StockDetailViewModel(
                 val calcPt = calculateHistoricalHoldingAt(
                     ptDateStr = pt.date,
                     ptPrice = pt.price,
-                    adjustedTransactions = adjustedTransactions,
+                    transactions = stockTransactions,
                     preDeductSellFees = settings.preDeductSellFees,
                     returnRateMode = settings.returnRateMode,
                     feeDiscount = settings.feeDiscount,
@@ -248,7 +247,7 @@ class StockDetailViewModel(
     private fun calculateHistoricalHoldingAt(
         ptDateStr: String,
         ptPrice: Double,
-        adjustedTransactions: List<StockTransaction>,
+        transactions: List<StockTransaction>,
         preDeductSellFees: Boolean,
         returnRateMode: ReturnRateMode,
         feeDiscount: Double,
@@ -257,7 +256,7 @@ class StockDetailViewModel(
         stockType: String,
         dayEnd: Long
     ): PersonalHistoryPoint {
-        val txs = adjustedTransactions.filter { it.date <= dayEnd }
+        val txs = transactions.filter { it.date <= dayEnd }
 
         var shares = 0.0
         var totalBuyExpense = 0.0
@@ -293,6 +292,9 @@ class StockDetailViewModel(
                 "減資" -> {
                     shares += it.sharesAfterReduction - it.sharesBeforeReduction
                     totalSellIncome += it.cashReturned
+                }
+                "分割" -> {
+                    shares += it.sharesAfterSplit - it.sharesBeforeSplit
                 }
             }
         }

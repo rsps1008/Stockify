@@ -189,8 +189,8 @@ class HoldingsViewModel(
                 historyInternal.allRawPoints.containsKey(tx.stockCode)
             }
 
-            val adjustedTxsByStock = twTxs.groupBy { it.stockCode }.mapValues { (_, txList) ->
-                adjustTransactionsForSplits(txList)
+            val historicalTxsByStock = twTxs.groupBy { it.stockCode }.mapValues { (_, txList) ->
+                txList.sortedBy { it.date }
             }
 
             val firstTxTime = twTxs.minOfOrNull { it.date }
@@ -215,12 +215,12 @@ class HoldingsViewModel(
                         ?: rawList.filter { it.date <= pt.date }.lastOrNull()?.price
                         ?: 0.0
 
-                    val stockTxs = adjustedTxsByStock[stockCode] ?: emptyList()
+                    val stockTxs = historicalTxsByStock[stockCode] ?: emptyList()
                     val stockType = holdingsState.holdings.firstOrNull { it.stock.code == stockCode }?.stock?.stockType ?: ""
 
                     val stats = calculateHistoricalHoldingStatsAt(
                         ptPrice = dailyPrice,
-                        adjustedTransactions = stockTxs,
+                        transactions = stockTxs,
                         preDeductSellFees = settings.preDeductSellFees,
                         feeDiscount = settings.feeDiscount,
                         minFeeRegular = minFee,
@@ -432,7 +432,7 @@ class HoldingsViewModel(
 
     private fun calculateHistoricalHoldingStatsAt(
         ptPrice: Double,
-        adjustedTransactions: List<StockTransaction>,
+        transactions: List<StockTransaction>,
         preDeductSellFees: Boolean,
         feeDiscount: Double,
         minFeeRegular: Double,
@@ -440,7 +440,7 @@ class HoldingsViewModel(
         stockType: String,
         dayEnd: Long
     ): HistoricalHoldingStats {
-        val txs = adjustedTransactions.filter { it.date <= dayEnd }
+        val txs = transactions.filter { it.date <= dayEnd }
 
         var shares = 0.0
         var totalBuyExpense = 0.0
@@ -476,6 +476,9 @@ class HoldingsViewModel(
                 "減資" -> {
                     shares += it.sharesAfterReduction - it.sharesBeforeReduction
                     totalSellIncome += it.cashReturned
+                }
+                "分割" -> {
+                    shares += it.sharesAfterSplit - it.sharesBeforeSplit
                 }
             }
         }
