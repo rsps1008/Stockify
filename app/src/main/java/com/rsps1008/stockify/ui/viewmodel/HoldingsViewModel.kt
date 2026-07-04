@@ -17,12 +17,14 @@ import com.rsps1008.stockify.data.UsdTwdExchangeRateService
 import com.rsps1008.stockify.data.CashFlow
 import com.rsps1008.stockify.data.ReturnRateCalculator
 import com.rsps1008.stockify.ui.screens.HoldingsUiState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 sealed interface HomeHistoryStateInternal {
@@ -194,6 +196,7 @@ class HoldingsViewModel(
             }
 
             val firstTxTime = twTxs.minOfOrNull { it.date }
+            var previousPortfolioXirrGuessRate: Double? = null
 
             for (pt in historyInternal.rawPoints) {
                 val dayStart = sdf.parse(pt.date)?.time ?: 0L
@@ -258,7 +261,14 @@ class HoldingsViewModel(
                         if (denominator > 0) (totalPL / denominator) * 100 else 0.0
                     }
                     ReturnRateMode.CUMULATIVE_INVESTMENT -> if (totalInvestment > 0) (totalPL / totalInvestment) * 100 else 0.0
-                    ReturnRateMode.XIRR -> ReturnRateCalculator.calculateXirrPercentage(portfolioCashFlows) ?: 0.0
+                    ReturnRateMode.XIRR -> {
+                        val xirrRate = ReturnRateCalculator.calculateXirrRate(
+                            cashFlows = portfolioCashFlows,
+                            guess = previousPortfolioXirrGuessRate ?: 0.1
+                        )
+                        previousPortfolioXirrGuessRate = xirrRate ?: previousPortfolioXirrGuessRate
+                        xirrRate?.times(100.0) ?: 0.0
+                    }
                 }
 
                 personalPoints.add(
@@ -291,7 +301,8 @@ class HoldingsViewModel(
                 else -> HistoryState.Idle
             }
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), HistoryState.Idle)
+    }.flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), HistoryState.Idle)
 
     init {
         viewModelScope.launch {

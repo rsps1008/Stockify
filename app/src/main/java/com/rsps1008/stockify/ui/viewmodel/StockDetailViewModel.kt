@@ -15,13 +15,15 @@ import com.rsps1008.stockify.data.CashFlow
 import com.rsps1008.stockify.data.ReturnRateCalculator
 import com.rsps1008.stockify.ui.screens.HoldingInfo
 import com.rsps1008.stockify.ui.screens.TransactionUiState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 enum class HistoryRange {
@@ -57,6 +59,11 @@ private data class DetailSettingsBundle(
     val feeDiscount: Double,
     val minFeeRegular: Int,
     val returnRateMode: ReturnRateMode
+)
+
+private data class HistoricalPointCalculationResult(
+    val point: PersonalHistoryPoint,
+    val xirrGuessRate: Double?
 )
 
 class StockDetailViewModel(
@@ -112,6 +119,7 @@ class StockDetailViewModel(
             val market = holding?.stock?.market ?: StockMarket.inferFromCode(stockCode)
 
             val rawPoints = historyInternal.rawPoints.toMutableList()
+            var previousXirrGuessRate: Double? = null
 
             for (pt in rawPoints) {
                 val dayStart = sdf.parse(pt.date)?.time ?: 0L
@@ -121,7 +129,7 @@ class StockDetailViewModel(
                     continue
                 }
 
-                val calcPt = calculateHistoricalHoldingAt(
+                val result = calculateHistoricalHoldingAt(
                     ptDateStr = pt.date,
                     ptPrice = pt.price,
                     transactions = stockTransactions,
@@ -131,9 +139,11 @@ class StockDetailViewModel(
                     minFeeRegular = minFee,
                     market = market,
                     stockType = stockType,
-                    dayEnd = dayEnd
+                    dayEnd = dayEnd,
+                    xirrGuessRate = previousXirrGuessRate
                 )
-                personalPoints.add(calcPt)
+                personalPoints.add(result.point)
+                previousXirrGuessRate = result.xirrGuessRate ?: previousXirrGuessRate
             }
 
             if (personalPoints.isEmpty()) {
@@ -154,7 +164,8 @@ class StockDetailViewModel(
                 else -> HistoryState.Idle
             }
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), HistoryState.Idle)
+    }.flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), HistoryState.Idle)
 
     init {
         viewModelScope.launch {
@@ -254,8 +265,9 @@ class StockDetailViewModel(
         minFeeRegular: Double,
         market: String,
         stockType: String,
-        dayEnd: Long
-    ): PersonalHistoryPoint {
+        dayEnd: Long,
+        xirrGuessRate: Double?
+    ): HistoricalPointCalculationResult {
         val txs = transactions.filter { it.date <= dayEnd }
 
         var shares = 0.0
@@ -299,7 +311,6 @@ class StockDetailViewModel(
             }
         }
 
-        if (shares < 0) shares = 0.0
         val costBasis = totalBuyExpense - totalSellIncome - totalDividendIncome
         val totalSellFeeAndTax = (sellAmountBeforeFee - totalSellNetIncome).coerceAtLeast(0.0)
         val totalInvestment = totalBuyExpense + totalSellFeeAndTax
@@ -313,24 +324,33 @@ class StockDetailViewModel(
             totalPL -= (sellFee + sellTax)
         }
 
+        var nextXirrGuessRate: Double? = null
         val totalPLPercentage = when (returnRateMode) {
             ReturnRateMode.REMAINING_POSITION -> {
                 val denominator = if (shares > 0.0) costBasis else totalInvestment
                 if (denominator > 0) (totalPL / denominator) * 100 else 0.0
             }
             ReturnRateMode.CUMULATIVE_INVESTMENT -> if (totalInvestment > 0) (totalPL / totalInvestment) * 100 else 0.0
-            ReturnRateMode.XIRR -> ReturnRateCalculator.calculateXirrPercentage(
-                buildHistoricalCashFlows(txs, shares, ptPrice, dayEnd)
-            ) ?: 0.0
+            ReturnRateMode.XIRR -> {
+                val xirrRate = ReturnRateCalculator.calculateXirrRate(
+                    cashFlows = buildHistoricalCashFlows(txs, shares, ptPrice, dayEnd),
+                    guess = xirrGuessRate ?: 0.1
+                )
+                nextXirrGuessRate = xirrRate
+                xirrRate?.times(100.0) ?: 0.0
+            }
         }
 
-        return PersonalHistoryPoint(
-            date = ptDateStr,
-            price = ptPrice,
-            shares = shares,
-            marketValue = marketValue,
-            totalPL = totalPL,
-            totalPLPercentage = totalPLPercentage
+        return HistoricalPointCalculationResult(
+            point = PersonalHistoryPoint(
+                date = ptDateStr,
+                price = ptPrice,
+                shares = shares,
+                marketValue = marketValue,
+                totalPL = totalPL,
+                totalPLPercentage = totalPLPercentage
+            ),
+            xirrGuessRate = nextXirrGuessRate
         )
     }
 

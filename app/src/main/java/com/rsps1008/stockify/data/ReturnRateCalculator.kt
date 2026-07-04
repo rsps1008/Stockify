@@ -12,8 +12,9 @@ object ReturnRateCalculator {
     private const val DAYS_PER_YEAR = 365.0
     private const val MILLIS_PER_DAY = 86_400_000.0
     private const val EPSILON = 1e-10
+    private const val DEFAULT_GUESS = 0.1
 
-    fun calculateXirrPercentage(cashFlows: List<CashFlow>): Double? {
+    fun calculateXirrRate(cashFlows: List<CashFlow>, guess: Double = DEFAULT_GUESS): Double? {
         val flows = cashFlows
             .filter { abs(it.amount) > EPSILON }
             .sortedBy { it.dateMillis }
@@ -22,18 +23,23 @@ object ReturnRateCalculator {
         if (flows.none { it.amount > 0.0 } || flows.none { it.amount < 0.0 }) return null
 
         val baseDate = flows.first().dateMillis
-        val xirr = solveXirr(flows, baseDate) ?: return null
+        val xirr = solveXirr(flows, baseDate, guess) ?: return null
+        return xirr
+    }
+
+    fun calculateXirrPercentage(cashFlows: List<CashFlow>, guess: Double = DEFAULT_GUESS): Double? {
+        val xirr = calculateXirrRate(cashFlows, guess) ?: return null
         return xirr * 100.0
     }
 
-    private fun solveXirr(flows: List<CashFlow>, baseDate: Long): Double? {
-        val newton = solveWithNewton(flows, baseDate)
+    private fun solveXirr(flows: List<CashFlow>, baseDate: Long, guess: Double): Double? {
+        val newton = solveWithNewton(flows, baseDate, guess)
         if (newton != null) return newton
         return solveWithBisection(flows, baseDate)
     }
 
-    private fun solveWithNewton(flows: List<CashFlow>, baseDate: Long): Double? {
-        var rate = 0.1
+    private fun solveWithNewton(flows: List<CashFlow>, baseDate: Long, guess: Double): Double? {
+        var rate = guess.takeIf { it.isFinite() && it > -0.999999999 } ?: DEFAULT_GUESS
         repeat(100) {
             val value = xnpv(rate, flows, baseDate)
             if (!value.isFinite()) return null
