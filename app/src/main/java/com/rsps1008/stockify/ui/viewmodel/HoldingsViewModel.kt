@@ -185,6 +185,11 @@ class HoldingsViewModel(
         uiState
     ) { historyInternal, allTxs, calculationBundle, holdingsState ->
         if (historyInternal is HomeHistoryStateInternal.Success) {
+            val expectedPortfolioKey = buildPortfolioKey(holdingsState, calculationBundle.displayMode)
+            if (historyInternal.portfolioKey != expectedPortfolioKey) {
+                return@combine HistoryState.Loading(0f, "切換歷史資料中...")
+            }
+
             val settings = calculationBundle.settings
             val minFee = settings.minFeeRegular.toDouble()
             val normalizedMode = HomeDisplayMode.normalize(calculationBundle.displayMode)

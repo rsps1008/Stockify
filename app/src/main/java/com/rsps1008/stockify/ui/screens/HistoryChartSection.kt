@@ -95,6 +95,7 @@ fun HistoryChartSectionContent(
 ) {
     var selectedRange by remember { mutableStateOf(HistoryRange.ONE_MONTH) }
     var selectedMetric by remember { mutableStateOf("市值") }
+    val normalizedDisplayMode = HomeDisplayMode.normalize(displayMode)
     LaunchedEffect(controlledSelectedRange) {
         controlledSelectedRange?.let { selectedRange = it }
     }
@@ -164,7 +165,10 @@ fun HistoryChartSectionContent(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // State content
-                Crossfade(targetState = historyState, label = "HistoryStateCrossfade") { state ->
+                Crossfade(
+                    targetState = historyState to normalizedDisplayMode,
+                    label = "HistoryStateCrossfade"
+                ) { (state, crossfadeDisplayMode) ->
                     when (state) {
                         is HistoryState.Idle -> {
                             Box(
@@ -220,7 +224,7 @@ fun HistoryChartSectionContent(
                             HistoricalChartContent(
                                 points = state.points,
                                 selectedMetric = selectedMetric,
-                                displayMode = displayMode
+                                displayMode = crossfadeDisplayMode
                             )
                         }
                     }
