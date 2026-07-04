@@ -197,24 +197,32 @@ fun HoldingsScreen(navController: NavController) {
     }
 
     val lazyListState = rememberLazyListState()
-    val activeHoldingsStartIndex = 3
     val reorderableLazyListState = rememberReorderableLazyListState(lazyListState) { from, to ->
-        val fromIndex = from.index - activeHoldingsStartIndex
-        val toIndex = to.index - activeHoldingsStartIndex
+        val activeIndexByKey = orderedActiveHoldings
+            .mapIndexed { index, holding -> holding.holdingOrderKey() to index }
+            .toMap()
+        val realizedIndexByKey = orderedZeroHoldings
+            .mapIndexed { index, holding -> holding.realizedHoldingReorderKey() to index }
+            .toMap()
+
+        val fromKey = from.key as? String
+        val toKey = to.key as? String
+
+        val fromIndex = fromKey?.let(activeIndexByKey::get)
+        val toIndex = toKey?.let(activeIndexByKey::get)
         if (fromIndex in orderedActiveHoldings.indices && toIndex in orderedActiveHoldings.indices) {
             orderedActiveHoldings = orderedActiveHoldings.toMutableList().apply {
-                add(toIndex, removeAt(fromIndex))
+                add(toIndex!!, removeAt(fromIndex!!))
             }
             viewModel.setHoldingsOrder(orderedActiveHoldings.map { it.holdingOrderKey() })
             return@rememberReorderableLazyListState
         }
 
-        val zeroHoldingsStartIndex = activeHoldingsStartIndex + orderedActiveHoldings.size + 2
-        val zeroFromIndex = from.index - zeroHoldingsStartIndex
-        val zeroToIndex = to.index - zeroHoldingsStartIndex
+        val zeroFromIndex = fromKey?.let(realizedIndexByKey::get)
+        val zeroToIndex = toKey?.let(realizedIndexByKey::get)
         if (zeroFromIndex in orderedZeroHoldings.indices && zeroToIndex in orderedZeroHoldings.indices) {
             orderedZeroHoldings = orderedZeroHoldings.toMutableList().apply {
-                add(zeroToIndex, removeAt(zeroFromIndex))
+                add(zeroToIndex!!, removeAt(zeroFromIndex!!))
             }
             viewModel.setRealizedHoldingsOrder(orderedZeroHoldings.map { it.holdingOrderKey() })
         }
@@ -416,6 +424,9 @@ fun HoldingsScreen(navController: NavController) {
 
 private fun HoldingInfo.holdingOrderKey(): String =
     "${stock.market}:${stock.code}"
+
+private fun HoldingInfo.realizedHoldingReorderKey(): String =
+    "realized-${holdingOrderKey()}"
 
 private fun sumDisplayPL(
     holdings: List<HoldingInfo>,
@@ -830,7 +841,6 @@ fun SummarySection(
 
     val cumulativePlColor =
         if (uiState.cumulativePL >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
-
     Card(modifier = Modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth()) {
             Box(
