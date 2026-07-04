@@ -194,6 +194,7 @@ fun SettingsScreen() {
 
                         val textSizeOptions = remember {
                             mapOf(
+                                TextSizeMode.EXTRA_SMALL to "特小",
                                 TextSizeMode.SMALL to "小",
                                 TextSizeMode.DEFAULT to "標準",
                                 TextSizeMode.LARGE to "大",
@@ -294,9 +295,9 @@ fun SettingsScreen() {
                         Spacer(modifier = Modifier.height(16.dp))
                         val returnRateModeOptions = remember {
                             mapOf(
-                                ReturnRateMode.REMAINING_POSITION to "手上剩餘部位的資金效率 (剩餘部位成本)",
-                                ReturnRateMode.CUMULATIVE_INVESTMENT to "整段交易的總投入報酬 (歷來投入成本)",
-                                ReturnRateMode.XIRR to "這檔股票生命週期的年化報酬 (XIRR)"
+                                ReturnRateMode.REMAINING_POSITION to "剩餘部位報酬 (剩餘成本)",
+                                ReturnRateMode.CUMULATIVE_INVESTMENT to "累計投入報酬 (歷來成本)",
+                                ReturnRateMode.XIRR to "年化報酬 (XIRR)"
                             )
                         }
                         val returnRateModeDescriptions = remember {
