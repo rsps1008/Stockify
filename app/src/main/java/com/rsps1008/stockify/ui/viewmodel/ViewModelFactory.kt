@@ -39,6 +39,7 @@ class ViewModelFactory(
                     taiwanWeightedIndexService = taiwanWeightedIndexService,
                     stockDao = stockDao,
                     twseStockHistoryService = twseStockHistoryService,
+                    exchangeRateService = exchangeRateService,
                     stockRepository = OfflineStockRepository(
                         stockDao = stockDao,
                         realtimeStockDataService = realtimeStockDataService,
@@ -63,7 +64,7 @@ class ViewModelFactory(
                 requireNotNull(application) { "application is required for SettingsViewModel" }
                 requireNotNull(realtimeStockDataService) { "realtimeStockDataService is required for SettingsViewModel" }
                 @Suppress("UNCHECKED_CAST")
-                SettingsViewModel(stockDao, settingsDataStore, application, realtimeStockDataService) as T
+                SettingsViewModel(stockDao, settingsDataStore, application, realtimeStockDataService, twseStockHistoryService) as T
             }
             modelClass.isAssignableFrom(StockDetailViewModel::class.java) -> {
                 requireNotNull(stockCode) { "stockCode is required for StockDetailViewModel" }

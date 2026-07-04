@@ -70,7 +70,8 @@ fun DataManagementScreen() {
             settingsDataStore = application.settingsDataStore,
             application = application,
             realtimeStockDataService = application.realtimeStockDataService,
-            exchangeRateService = application.exchangeRateService
+            exchangeRateService = application.exchangeRateService,
+            twseStockHistoryService = application.twseStockHistoryService
         )
     )
 
@@ -402,6 +403,7 @@ private fun OtherDataOperationsSection(
 ) {
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showClearCacheConfirmDialog by remember { mutableStateOf(false) }
+    var showClearHistoryPricesConfirmDialog by remember { mutableStateOf(false) }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -413,6 +415,13 @@ private fun OtherDataOperationsSection(
                 shape = DataManagementButtonShape
             ) {
                 Text("清除即時價格快取")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = { showClearHistoryPricesConfirmDialog = true },
+                shape = DataManagementButtonShape
+            ) {
+                Text("清除圖表歷史價格資料")
             }
             Spacer(modifier = Modifier.height(8.dp))
             Button(
@@ -460,6 +469,27 @@ private fun OtherDataOperationsSection(
             },
             dismissButton = {
                 TextButton(onClick = { showClearCacheConfirmDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    if (showClearHistoryPricesConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearHistoryPricesConfirmDialog = false },
+            title = { Text("確認清除圖表資料") },
+            text = { Text("這會清掉所有已下載的圖表歷史價格資料，不會影響交易資料。下次開啟圖表時會重新下載。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.clearHistoryPriceData()
+                    showClearHistoryPricesConfirmDialog = false
+                }) {
+                    Text("清除")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearHistoryPricesConfirmDialog = false }) {
                     Text("取消")
                 }
             }

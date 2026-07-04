@@ -44,6 +44,7 @@ class TwseStockHistoryServiceTest {
         override suspend fun insertHistoryPrices(prices: List<StockHistoryPrice>) {
             println("DAO insertHistoryPrices: ${prices.size} points")
         }
+        override suspend fun deleteAllHistoryPrices() {}
         override suspend fun getHistoryPricesForMonth(stockCode: String, monthPrefix: String): List<StockHistoryPrice> {
             return emptyList()
         }

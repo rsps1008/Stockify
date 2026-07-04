@@ -11,12 +11,18 @@ import com.rsps1008.stockify.data.TwseStockHistoryService
 import com.rsps1008.stockify.data.ReturnRateMode
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.StockHistoryPoint
+import com.rsps1008.stockify.data.HomeDisplayMode
+import com.rsps1008.stockify.data.StockMarket
+import com.rsps1008.stockify.data.UsdTwdExchangeRateService
+import com.rsps1008.stockify.data.CashFlow
+import com.rsps1008.stockify.data.ReturnRateCalculator
 import com.rsps1008.stockify.ui.screens.HoldingsUiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 sealed interface HomeHistoryStateInternal {
@@ -37,6 +43,12 @@ private data class HomeSettingsBundle(
     val returnRateMode: ReturnRateMode
 )
 
+private data class HomeHistoryCalculationBundle(
+    val settings: HomeSettingsBundle,
+    val displayMode: String,
+    val usdToTwdRate: Double
+)
+
 private data class HistoricalHoldingStats(
     val shares: Double,
     val costBasis: Double,
@@ -51,6 +63,7 @@ class HoldingsViewModel(
     private val taiwanWeightedIndexService: TaiwanWeightedIndexService,
     private val stockDao: StockDao,
     private val twseStockHistoryService: TwseStockHistoryService,
+    private val exchangeRateService: UsdTwdExchangeRateService,
     stockRepository: StockRepository
 ) : ViewModel() {
 
@@ -146,19 +159,31 @@ class HoldingsViewModel(
         HomeSettingsBundle(preDeduct, discount, minFee, mode)
     }
 
+    private val historyCalculationBundle = combine(
+        settingsCombined,
+        homeDisplayMode,
+        exchangeRateService.usdToTwdRate
+    ) { settings, displayMode, usdToTwdRate ->
+        HomeHistoryCalculationBundle(settings, displayMode, usdToTwdRate)
+    }
+
     val historyState: StateFlow<HistoryState> = combine(
         _historyStateInternal,
         stockDao.getAllTransactions(),
-        settingsCombined,
+        historyCalculationBundle,
         uiState
-    ) { historyInternal, allTxs, settings, holdingsState ->
+    ) { historyInternal, allTxs, calculationBundle, holdingsState ->
         if (historyInternal is HomeHistoryStateInternal.Success) {
+            val settings = calculationBundle.settings
             val minFee = settings.minFeeRegular.toDouble()
+            val normalizedMode = HomeDisplayMode.normalize(calculationBundle.displayMode)
+            val normalizedUsdToTwdRate = calculationBundle.usdToTwdRate.takeIf { it > 0.0 } ?: 1.0
             val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).apply {
                 timeZone = java.util.TimeZone.getTimeZone("Asia/Taipei")
             }
 
             val personalPoints = mutableListOf<PersonalHistoryPoint>()
+            val selectedStocksByCode = holdingsState.holdings.associateBy { it.stock.code }
 
             val twTxs = allTxs.filter { tx ->
                 historyInternal.allRawPoints.containsKey(tx.stockCode)
@@ -183,6 +208,7 @@ class HoldingsViewModel(
                 var totalInvestment = 0.0
                 var totalPL = 0.0
                 var totalShares = 0.0
+                val portfolioCashFlows = mutableListOf<CashFlow>()
 
                 for ((stockCode, rawList) in historyInternal.allRawPoints) {
                     val dailyPrice = rawList.firstOrNull { it.date == pt.date }?.price
@@ -193,26 +219,43 @@ class HoldingsViewModel(
                     val stockType = holdingsState.holdings.firstOrNull { it.stock.code == stockCode }?.stock?.stockType ?: ""
 
                     val stats = calculateHistoricalHoldingStatsAt(
-                        stockCode = stockCode,
                         ptPrice = dailyPrice,
                         adjustedTransactions = stockTxs,
                         preDeductSellFees = settings.preDeductSellFees,
                         feeDiscount = settings.feeDiscount,
                         minFeeRegular = minFee,
+                        market = selectedStocksByCode[stockCode]?.stock?.market ?: StockMarket.inferFromCode(stockCode),
                         stockType = stockType,
                         dayEnd = dayEnd
                     )
-                    totalMarketValue += stats.marketValue
-                    totalCostBasis += stats.costBasis
-                    totalInvestment += stats.totalInvestment
-                    totalPL += stats.totalPL
+                    val currencyRate = if (
+                        normalizedMode == HomeDisplayMode.COMBINED &&
+                        StockMarket.isUs(selectedStocksByCode[stockCode]?.stock?.market)
+                    ) {
+                        normalizedUsdToTwdRate
+                    } else {
+                        1.0
+                    }
+                    totalMarketValue += stats.marketValue * currencyRate
+                    totalCostBasis += stats.costBasis * currencyRate
+                    totalInvestment += stats.totalInvestment * currencyRate
+                    totalPL += stats.totalPL * currencyRate
                     totalShares += stats.shares
+                    if (settings.returnRateMode == ReturnRateMode.XIRR) {
+                        portfolioCashFlows += buildHistoricalCashFlows(
+                            transactions = stockTxs.filter { it.date <= dayEnd },
+                            shares = stats.shares,
+                            price = dailyPrice,
+                            terminalDateMillis = dayEnd,
+                            currencyRate = currencyRate
+                        )
+                    }
                 }
 
                 val totalPLPercentage = when (settings.returnRateMode) {
                     ReturnRateMode.REMAINING_POSITION -> if (totalCostBasis > 0) (totalPL / totalCostBasis) * 100 else 0.0
                     ReturnRateMode.CUMULATIVE_INVESTMENT -> if (totalInvestment > 0) (totalPL / totalInvestment) * 100 else 0.0
-                    ReturnRateMode.XIRR -> if (totalCostBasis > 0) (totalPL / totalCostBasis) * 100 else 0.0
+                    ReturnRateMode.XIRR -> ReturnRateCalculator.calculateXirrPercentage(portfolioCashFlows) ?: 0.0
                 }
 
                 personalPoints.add(
@@ -249,12 +292,16 @@ class HoldingsViewModel(
 
     init {
         viewModelScope.launch {
-            var lastTwStockCodes = emptySet<String>()
-            uiState.collect { state ->
-                val twStocks = state.holdings.filter { com.rsps1008.stockify.data.StockMarket.isTw(it.stock.market) }
-                val codes = twStocks.map { it.stock.code }.toSet()
-                if (codes.isNotEmpty() && codes != lastTwStockCodes) {
-                    lastTwStockCodes = codes
+            var lastPortfolioKey = ""
+            combine(uiState, homeDisplayMode) { state, mode ->
+                val codes = state.holdings
+                    .filter { StockMarket.isTw(it.stock.market) || StockMarket.isUs(it.stock.market) }
+                    .map { "${StockMarket.normalize(it.stock.market)}:${it.stock.code}" }
+                    .sorted()
+                "${HomeDisplayMode.normalize(mode)}|${codes.joinToString(",")}"
+            }.collect { portfolioKey ->
+                if (portfolioKey.substringAfter("|").isNotBlank() && portfolioKey != lastPortfolioKey) {
+                    lastPortfolioKey = portfolioKey
                     fetchPortfolioHistory(HistoryRange.ONE_MONTH)
                 }
             }
@@ -269,24 +316,37 @@ class HoldingsViewModel(
         }
 
         viewModelScope.launch {
-            val twStocks = uiState.value.holdings.filter { com.rsps1008.stockify.data.StockMarket.isTw(it.stock.market) }.map { it.stock }
-            if (twStocks.isEmpty()) {
-                _historyStateInternal.value = HomeHistoryStateInternal.Error("目前沒有持有任何台股部位。")
+            val selectedStocks = uiState.value.holdings
+                .map { it.stock }
+                .filter { StockMarket.isTw(it.market) || StockMarket.isUs(it.market) }
+            if (selectedStocks.isEmpty()) {
+                val mode = HomeDisplayMode.normalize(homeDisplayMode.first())
+                val message = when (mode) {
+                    HomeDisplayMode.US -> "目前沒有持有任何美股部位。"
+                    HomeDisplayMode.COMBINED -> "目前沒有持有任何台股或美股部位。"
+                    else -> "目前沒有持有任何台股部位。"
+                }
+                _historyStateInternal.value = HomeHistoryStateInternal.Error(message)
                 return@launch
             }
 
-            _historyStateInternal.value = HomeHistoryStateInternal.Loading(0f, "準備從證交所下載數據...")
+            _historyStateInternal.value = HomeHistoryStateInternal.Loading(0f, "準備下載歷史股價...")
             try {
                 val allRawPoints = mutableMapOf<String, List<StockHistoryPoint>>()
-                val totalStocks = twStocks.size
+                val totalStocks = selectedStocks.size
 
-                for ((index, stock) in twStocks.withIndex()) {
+                for ((index, stock) in selectedStocks.withIndex()) {
                     val rawPoints = twseStockHistoryService.fetchHistory(stock.code, rangeMonths) { step, total ->
                         val baseProgress = index.toFloat() / totalStocks
                         val stepProgress = (step.toFloat() / total) / totalStocks
+                        val statusText = if (StockMarket.isUs(stock.market)) {
+                            "正在載入 ${stock.name} (${index + 1}/$totalStocks) 美股歷史股價..."
+                        } else {
+                            "正在載入 ${stock.name} (${index + 1}/$totalStocks) 第 $step/$total 個月..."
+                        }
                         _historyStateInternal.value = HomeHistoryStateInternal.Loading(
                             baseProgress + stepProgress,
-                            "正在載入 ${stock.name} (${index + 1}/$totalStocks) 第 $step/$total 個月..."
+                            statusText
                         )
                     }
                     allRawPoints[stock.code] = rawPoints
@@ -343,12 +403,12 @@ class HoldingsViewModel(
     }
 
     private fun calculateHistoricalHoldingStatsAt(
-        stockCode: String,
         ptPrice: Double,
         adjustedTransactions: List<StockTransaction>,
         preDeductSellFees: Boolean,
         feeDiscount: Double,
         minFeeRegular: Double,
+        market: String,
         stockType: String,
         dayEnd: Long
     ): HistoricalHoldingStats {
@@ -399,7 +459,7 @@ class HoldingsViewModel(
         val marketValue = shares * ptPrice
         var totalPL = marketValue - costBasis
 
-        if (preDeductSellFees && marketValue > 0.0) {
+        if (preDeductSellFees && marketValue > 0.0 && StockMarket.isTw(market)) {
             val sellFee = (marketValue * 0.001425 * feeDiscount).coerceAtLeast(minFeeRegular)
             val taxRate = if (stockType == "ETF") 0.001 else 0.003
             val sellTax = marketValue * taxRate
@@ -413,6 +473,30 @@ class HoldingsViewModel(
             marketValue = marketValue,
             totalPL = totalPL
         )
+    }
+
+    private fun buildHistoricalCashFlows(
+        transactions: List<StockTransaction>,
+        shares: Double,
+        price: Double,
+        terminalDateMillis: Long,
+        currencyRate: Double
+    ): List<CashFlow> {
+        val cashFlows = transactions.mapNotNull { transaction ->
+            when (transaction.type) {
+                "買進" -> CashFlow(transaction.date, -transaction.expense * currencyRate)
+                "賣出" -> CashFlow(transaction.date, transaction.income * currencyRate)
+                "配息" -> CashFlow(transaction.date, transaction.dividendIncome * currencyRate)
+                "減資" -> CashFlow(transaction.date, transaction.cashReturned * currencyRate)
+                else -> null
+            }
+        }.toMutableList()
+
+        if (shares > 0.0 && price > 0.0) {
+            cashFlows.add(CashFlow(terminalDateMillis, shares * price * currencyRate))
+        }
+
+        return cashFlows
     }
 
     fun setHomeDisplayMode(mode: String) {

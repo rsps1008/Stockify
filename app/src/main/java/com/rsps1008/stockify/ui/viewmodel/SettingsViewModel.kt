@@ -28,6 +28,7 @@ import com.rsps1008.stockify.data.StockDataFetcher
 import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.StockListRepository
+import com.rsps1008.stockify.data.TwseStockHistoryService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,7 +48,8 @@ class SettingsViewModel(
     private val stockDao: StockDao,
     private val settingsDataStore: SettingsDataStore,
     application: Application,
-    private val realtimeStockDataService: RealtimeStockDataService
+    private val realtimeStockDataService: RealtimeStockDataService,
+    private val twseStockHistoryService: TwseStockHistoryService? = null
 ) : AndroidViewModel(application) {
 
     private companion object {
@@ -728,6 +730,14 @@ class SettingsViewModel(
         viewModelScope.launch {
             settingsDataStore.clearRealtimeStockInfoCache()
             _message.value = "股價快取已清除"
+        }
+    }
+
+    fun clearHistoryPriceData() {
+        viewModelScope.launch {
+            stockDao.deleteAllHistoryPrices()
+            twseStockHistoryService?.clearCache()
+            _message.value = "圖表歷史價格資料已清除"
         }
     }
 

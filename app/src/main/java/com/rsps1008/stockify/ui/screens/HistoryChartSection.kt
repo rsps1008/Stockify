@@ -35,6 +35,10 @@ import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.ArrowDropDown
 
 import com.rsps1008.stockify.ui.viewmodel.HoldingsViewModel
+import com.rsps1008.stockify.data.HomeDisplayMode
+import com.rsps1008.stockify.data.StockMarket
+import com.rsps1008.stockify.data.formatHomeAmount
+import com.rsps1008.stockify.data.formatShareCount
 
 @Composable
 fun HistoryChartSection(
@@ -43,11 +47,18 @@ fun HistoryChartSection(
 ) {
     val historyState by viewModel.historyState.collectAsState()
     val isExpanded by viewModel.detailHistoryChartExpanded.collectAsState()
+    val holdingInfo by viewModel.holdingInfo.collectAsState()
+    val displayMode = if (StockMarket.isUs(holdingInfo?.stock?.market)) {
+        HomeDisplayMode.US
+    } else {
+        HomeDisplayMode.TW
+    }
     HistoryChartSectionContent(
         historyState = historyState,
         onRangeSelected = { viewModel.fetchStockHistory(it) },
         isExpanded = isExpanded,
         onToggleExpanded = { viewModel.setDetailHistoryChartExpanded(it) },
+        displayMode = displayMode,
         modifier = modifier
     )
 }
@@ -59,11 +70,13 @@ fun HistoryChartSection(
 ) {
     val historyState by viewModel.historyState.collectAsState()
     val isExpanded by viewModel.homeHistoryChartExpanded.collectAsState()
+    val displayMode by viewModel.homeDisplayMode.collectAsState()
     HistoryChartSectionContent(
         historyState = historyState,
         onRangeSelected = { viewModel.fetchPortfolioHistory(it) },
         isExpanded = isExpanded,
         onToggleExpanded = { viewModel.setHomeHistoryChartExpanded(it) },
+        displayMode = displayMode,
         modifier = modifier
     )
 }
@@ -74,6 +87,7 @@ fun HistoryChartSectionContent(
     onRangeSelected: (HistoryRange) -> Unit,
     isExpanded: Boolean,
     onToggleExpanded: (Boolean) -> Unit,
+    displayMode: String = HomeDisplayMode.TW,
     modifier: Modifier = Modifier
 ) {
     var selectedRange by remember { mutableStateOf(HistoryRange.ONE_MONTH) }
@@ -83,8 +97,8 @@ fun HistoryChartSectionContent(
         modifier = modifier
             .fillMaxWidth()
             .padding(
-                top = if (isExpanded) 8.dp else 2.dp,
-                bottom = 0.dp
+                top = if (isExpanded) 8.dp else 6.dp,
+                bottom = if (isExpanded) 0.dp else 4.dp
             ),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
@@ -101,7 +115,7 @@ fun HistoryChartSectionContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onToggleExpanded(!isExpanded) }
-                    .padding(vertical = if (isExpanded) 4.dp else 0.dp),
+                    .padding(vertical = if (isExpanded) 4.dp else 2.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -199,7 +213,8 @@ fun HistoryChartSectionContent(
                         is HistoryState.Success -> {
                             HistoricalChartContent(
                                 points = state.points,
-                                selectedMetric = selectedMetric
+                                selectedMetric = selectedMetric,
+                                displayMode = displayMode
                             )
                         }
                     }
@@ -308,7 +323,8 @@ private fun RangeSelectorRow(
 @Composable
 private fun HistoricalChartContent(
     points: List<PersonalHistoryPoint>,
-    selectedMetric: String
+    selectedMetric: String,
+    displayMode: String
 ) {
     if (points.isEmpty()) return
 
@@ -330,6 +346,8 @@ private fun HistoricalChartContent(
     val gainColor = StockifyAppTheme.stockColors.gain
     val lossColor = StockifyAppTheme.stockColors.loss
     val changeColor = if (displayPLPercentage >= 0) gainColor else lossColor
+    val currencyLabel = if (HomeDisplayMode.normalize(displayMode) == HomeDisplayMode.US) "US$" else "NT$"
+    val currencyName = if (HomeDisplayMode.normalize(displayMode) == HomeDisplayMode.US) "美元" else "台幣"
 
     Column(modifier = Modifier.fillMaxWidth()) {
         // Row 1: Market Value & Shares
@@ -340,12 +358,12 @@ private fun HistoricalChartContent(
         ) {
             Column {
                 Text(
-                    text = if (isInteractive) "選股市值" else "目前市值",
+                    text = if (isInteractive) "選股市值 ($currencyName)" else "目前市值 ($currencyName)",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = String.format("NT$ %,.0f", displayMarketValue),
+                    text = "$currencyLabel ${formatHomeAmount(displayMarketValue, displayMode)}",
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -357,7 +375,7 @@ private fun HistoricalChartContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = String.format("%,.0f 股", displayShares),
+                    text = "${formatShareCount(displayShares)} 股",
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -379,7 +397,13 @@ private fun HistoricalChartContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = String.format("%+.2f%% (NT$ %+,.0f)", displayPLPercentage, displayPL),
+                    text = String.format(
+                        "%+.2f%% (%s %s%s)",
+                        displayPLPercentage,
+                        currencyLabel,
+                        if (displayPL >= 0) "+" else "",
+                        formatHomeAmount(displayPL, displayMode)
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = changeColor,
                     fontWeight = FontWeight.SemiBold
@@ -412,7 +436,8 @@ private fun HistoricalChartContent(
             selectedMetric = selectedMetric,
             activeIndex = activeIndex,
             onActiveIndexChanged = { activeIndex = it },
-            lineColor = if (lastPoint.totalPLPercentage >= 0) gainColor else lossColor
+            lineColor = if (lastPoint.totalPLPercentage >= 0) gainColor else lossColor,
+            displayMode = displayMode
         )
     }
 }
@@ -423,7 +448,8 @@ private fun InteractiveLineChart(
     selectedMetric: String,
     activeIndex: Int?,
     onActiveIndexChanged: (Int?) -> Unit,
-    lineColor: Color
+    lineColor: Color,
+    displayMode: String
 ) {
     val values = points.map {
         if (selectedMetric == "市值") it.marketValue else it.totalPLPercentage
@@ -435,6 +461,7 @@ private fun InteractiveLineChart(
     val density = LocalDensity.current
     val topPaddingPx = with(density) { 16.dp.toPx() }
     val bottomPaddingPx = with(density) { 16.dp.toPx() }
+    val currencyLabel = if (HomeDisplayMode.normalize(displayMode) == HomeDisplayMode.US) "US$" else "NT$"
 
     Box(
         modifier = Modifier
@@ -569,17 +596,17 @@ private fun InteractiveLineChart(
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = if (isPercentage) String.format("%+.1f%%", maxVal) else String.format("NT$ %,.0f", maxVal),
+                text = if (isPercentage) String.format("%+.1f%%", maxVal) else "$currencyLabel ${formatHomeAmount(maxVal, displayMode)}",
                 fontSize = 10.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
             Text(
-                text = if (isPercentage) String.format("%+.1f%%", (maxVal + minVal) / 2) else String.format("NT$ %,.0f", (maxVal + minVal) / 2),
+                text = if (isPercentage) String.format("%+.1f%%", (maxVal + minVal) / 2) else "$currencyLabel ${formatHomeAmount((maxVal + minVal) / 2, displayMode)}",
                 fontSize = 10.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
             )
             Text(
-                text = if (isPercentage) String.format("%+.1f%%", minVal) else String.format("NT$ %,.0f", minVal),
+                text = if (isPercentage) String.format("%+.1f%%", minVal) else "$currencyLabel ${formatHomeAmount(minVal, displayMode)}",
                 fontSize = 10.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )

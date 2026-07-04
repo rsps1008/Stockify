@@ -102,6 +102,9 @@ interface StockDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertHistoryPrices(prices: List<StockHistoryPrice>)
 
+    @Query("DELETE FROM stock_history_prices")
+    suspend fun deleteAllHistoryPrices()
+
     @Query("SELECT * FROM stock_history_prices WHERE stockCode = :stockCode AND date LIKE :monthPrefix || '%' ORDER BY date ASC")
     suspend fun getHistoryPricesForMonth(stockCode: String, monthPrefix: String): List<StockHistoryPrice>
 }

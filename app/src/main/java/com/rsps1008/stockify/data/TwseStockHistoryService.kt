@@ -32,6 +32,10 @@ class TwseStockHistoryService(
     // Cache structure: Map of "stockCode_YYYYMM" to List<StockHistoryPoint>
     private val cache = mutableMapOf<String, List<StockHistoryPoint>>()
 
+    fun clearCache() {
+        cache.clear()
+    }
+
     suspend fun fetchHistory(
         stockCode: String,
         rangeMonths: Int,

@@ -11,6 +11,8 @@ import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.ReturnRateMode
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.StockHistoryPoint
+import com.rsps1008.stockify.data.CashFlow
+import com.rsps1008.stockify.data.ReturnRateCalculator
 import com.rsps1008.stockify.ui.screens.HoldingInfo
 import com.rsps1008.stockify.ui.screens.TransactionUiState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -108,6 +110,7 @@ class StockDetailViewModel(
                 timeZone = java.util.TimeZone.getTimeZone("Asia/Taipei")
             }
             val stockType = holding?.stock?.stockType ?: ""
+            val market = holding?.stock?.market ?: StockMarket.inferFromCode(stockCode)
 
             val currentPrice = holding?.currentPrice ?: 0.0
             val rawPoints = historyInternal.rawPoints.toMutableList()
@@ -134,6 +137,7 @@ class StockDetailViewModel(
                     returnRateMode = settings.returnRateMode,
                     feeDiscount = settings.feeDiscount,
                     minFeeRegular = minFee,
+                    market = market,
                     stockType = stockType,
                     dayEnd = dayEnd
                 )
@@ -176,16 +180,22 @@ class StockDetailViewModel(
                 HistoryRange.SIX_MONTHS -> 6
                 HistoryRange.ONE_YEAR -> 12
             }
+            val market = holdingInfo.value?.stock?.market ?: StockMarket.inferFromCode(stockCode)
 
-            _historyStateInternal.value = DetailHistoryStateInternal.Loading(0f, "準備從證交所下載數據...")
+            _historyStateInternal.value = DetailHistoryStateInternal.Loading(0f, "準備下載歷史股價...")
             try {
                 val rawPoints = twseStockHistoryService.fetchHistory(stockCode, rangeMonths) { step, total ->
                     val progress = step.toFloat() / total.toFloat()
-                    _historyStateInternal.value = DetailHistoryStateInternal.Loading(progress, "正在載入第 $step/$total 個月...")
+                    val statusText = if (StockMarket.isUs(market)) {
+                        "正在載入美股歷史股價..."
+                    } else {
+                        "正在載入第 $step/$total 個月..."
+                    }
+                    _historyStateInternal.value = DetailHistoryStateInternal.Loading(progress, statusText)
                 }
                 
                 if (rawPoints.isEmpty()) {
-                    _historyStateInternal.value = DetailHistoryStateInternal.Error("證交所回傳資料為空，請稍後重試。")
+                    _historyStateInternal.value = DetailHistoryStateInternal.Error("歷史股價回傳資料為空，請稍後重試。")
                     return@launch
                 }
 
@@ -237,6 +247,7 @@ class StockDetailViewModel(
         returnRateMode: ReturnRateMode,
         feeDiscount: Double,
         minFeeRegular: Double,
+        market: String,
         stockType: String,
         dayEnd: Long
     ): PersonalHistoryPoint {
@@ -287,7 +298,7 @@ class StockDetailViewModel(
         val marketValue = shares * ptPrice
         var totalPL = marketValue - costBasis
 
-        if (preDeductSellFees && marketValue > 0.0) {
+        if (preDeductSellFees && marketValue > 0.0 && StockMarket.isTw(market)) {
             val sellFee = (marketValue * 0.001425 * feeDiscount).coerceAtLeast(minFeeRegular)
             val taxRate = if (stockType == "ETF") 0.001 else 0.003
             val sellTax = marketValue * taxRate
@@ -297,10 +308,9 @@ class StockDetailViewModel(
         val totalPLPercentage = when (returnRateMode) {
             ReturnRateMode.REMAINING_POSITION -> if (costBasis > 0) (totalPL / costBasis) * 100 else 0.0
             ReturnRateMode.CUMULATIVE_INVESTMENT -> if (totalInvestment > 0) (totalPL / totalInvestment) * 100 else 0.0
-            ReturnRateMode.XIRR -> {
-                // Newton-Raphson fallback to REMAINING_POSITION for history charts
-                if (costBasis > 0) (totalPL / costBasis) * 100 else 0.0
-            }
+            ReturnRateMode.XIRR -> ReturnRateCalculator.calculateXirrPercentage(
+                buildHistoricalCashFlows(txs, shares, ptPrice, dayEnd)
+            ) ?: 0.0
         }
 
         return PersonalHistoryPoint(
@@ -311,6 +321,29 @@ class StockDetailViewModel(
             totalPL = totalPL,
             totalPLPercentage = totalPLPercentage
         )
+    }
+
+    private fun buildHistoricalCashFlows(
+        transactions: List<StockTransaction>,
+        shares: Double,
+        price: Double,
+        terminalDateMillis: Long
+    ): List<CashFlow> {
+        val cashFlows = transactions.mapNotNull { transaction ->
+            when (transaction.type) {
+                "買進" -> CashFlow(transaction.date, -transaction.expense)
+                "賣出" -> CashFlow(transaction.date, transaction.income)
+                "配息" -> CashFlow(transaction.date, transaction.dividendIncome)
+                "減資" -> CashFlow(transaction.date, transaction.cashReturned)
+                else -> null
+            }
+        }.toMutableList()
+
+        if (shares > 0.0 && price > 0.0) {
+            cashFlows.add(CashFlow(terminalDateMillis, shares * price))
+        }
+
+        return cashFlows
     }
 
     fun onDeleteTransactionsClicked() {
