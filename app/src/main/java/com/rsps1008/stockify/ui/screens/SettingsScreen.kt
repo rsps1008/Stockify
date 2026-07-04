@@ -301,7 +301,7 @@ fun SettingsScreen() {
                         }
                         val returnRateModeDescriptions = remember {
                             mapOf(
-                                ReturnRateMode.REMAINING_POSITION to "以目前還留在該股票中的有效成本作為分母。適合評估目前在倉部位的資金運用效率，不受已實現損益的現金回收影響。",
+                                ReturnRateMode.REMAINING_POSITION to "有持股時，以目前還留在該股票中的有效成本作為分母，適合評估目前在倉部位的資金運用效率；若已全數賣出，則會自動退回以歷來投入成本作為分母，避免清倉後出現不直覺的 0% 或 -100%。",
                                 ReturnRateMode.CUMULATIVE_INVESTMENT to "以這檔股票歷來累計投入的總成本作為分母。部分賣出回收資金後，分母仍維持最大投入金額，報酬率呈現會較穩健保守。",
                                 ReturnRateMode.XIRR to "根據每筆買進、賣出、配息、減資的實際發生日期與資金流向，計算考慮時間價值權重的年化報酬率（XIRR），最符合實際資金的時間價值。"
                             )

@@ -312,7 +312,10 @@ class StockDetailViewModel(
         }
 
         val totalPLPercentage = when (returnRateMode) {
-            ReturnRateMode.REMAINING_POSITION -> if (costBasis > 0) (totalPL / costBasis) * 100 else 0.0
+            ReturnRateMode.REMAINING_POSITION -> {
+                val denominator = if (shares > 0.0) costBasis else totalInvestment
+                if (denominator > 0) (totalPL / denominator) * 100 else 0.0
+            }
             ReturnRateMode.CUMULATIVE_INVESTMENT -> if (totalInvestment > 0) (totalPL / totalInvestment) * 100 else 0.0
             ReturnRateMode.XIRR -> ReturnRateCalculator.calculateXirrPercentage(
                 buildHistoricalCashFlows(txs, shares, ptPrice, dayEnd)

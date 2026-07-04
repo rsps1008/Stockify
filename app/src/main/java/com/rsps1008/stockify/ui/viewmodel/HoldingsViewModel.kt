@@ -253,7 +253,10 @@ class HoldingsViewModel(
                 }
 
                 val totalPLPercentage = when (settings.returnRateMode) {
-                    ReturnRateMode.REMAINING_POSITION -> if (totalCostBasis > 0) (totalPL / totalCostBasis) * 100 else 0.0
+                    ReturnRateMode.REMAINING_POSITION -> {
+                        val denominator = if (totalShares > 0.0) totalCostBasis else totalInvestment
+                        if (denominator > 0) (totalPL / denominator) * 100 else 0.0
+                    }
                     ReturnRateMode.CUMULATIVE_INVESTMENT -> if (totalInvestment > 0) (totalPL / totalInvestment) * 100 else 0.0
                     ReturnRateMode.XIRR -> ReturnRateCalculator.calculateXirrPercentage(portfolioCashFlows) ?: 0.0
                 }

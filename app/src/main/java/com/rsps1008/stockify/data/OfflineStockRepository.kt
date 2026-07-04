@@ -77,7 +77,15 @@ class OfflineStockRepository(
             }
             val totalInvestment = holdingInfos.sumOf { holding ->
                 val rate = if (summaryIsCombined && StockMarket.isUs(holding.stock.market)) usdToTwdRate else 1.0
-                val basis = if (returnRateMode == ReturnRateMode.CUMULATIVE_INVESTMENT) holding.totalInvestment else holding.averageCost * holding.shares
+                val basis = when (returnRateMode) {
+                    ReturnRateMode.CUMULATIVE_INVESTMENT -> holding.totalInvestment
+                    ReturnRateMode.REMAINING_POSITION -> if (holding.shares > 0.0) {
+                        holding.averageCost * holding.shares
+                    } else {
+                        holding.totalInvestment
+                    }
+                    ReturnRateMode.XIRR -> holding.averageCost * holding.shares
+                }
                 basis * rate
             }
             val cumulativePLPercentage = when (returnRateMode) {
@@ -270,7 +278,10 @@ class OfflineStockRepository(
         }
 
         val totalPLPercentage = when (returnRateMode) {
-            ReturnRateMode.REMAINING_POSITION -> if (costBasis > 0) (totalPL / costBasis) * 100 else 0.0
+            ReturnRateMode.REMAINING_POSITION -> {
+                val denominator = if (shares > 0.0) costBasis else totalInvestment
+                if (denominator > 0) (totalPL / denominator) * 100 else 0.0
+            }
             ReturnRateMode.CUMULATIVE_INVESTMENT -> if (totalInvestment > 0) (totalPL / totalInvestment) * 100 else 0.0
             ReturnRateMode.XIRR -> {
                 val cashFlows = buildCashFlowsForStock(transactions, currentPrice, shares, currentDateMillis)
