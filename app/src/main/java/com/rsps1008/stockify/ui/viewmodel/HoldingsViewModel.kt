@@ -12,6 +12,7 @@ import com.rsps1008.stockify.data.ReturnRateMode
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.StockHistoryPoint
 import com.rsps1008.stockify.data.HomeDisplayMode
+import com.rsps1008.stockify.data.HistoryChartCalculationSupport
 import com.rsps1008.stockify.data.HoldingCalculationSupport
 import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.UsdTwdExchangeRateService
@@ -386,14 +387,16 @@ class HoldingsViewModel(
                     allRawPoints[stock.code] = rawPoints
                 }
 
-                if (allRawPoints.values.all { it.isEmpty() }) {
+                val availableRawPoints = HistoryChartCalculationSupport.filterEmptyHistorySeries(allRawPoints)
+
+                if (availableRawPoints.isEmpty()) {
                     if (!hasCachedPoints) {
                         _historyStateInternal.value = HomeHistoryStateInternal.Error("無歷史股價數據，請稍後重試。")
                     }
                     return@launch
                 }
 
-                _historyStateInternal.value = buildHomeHistorySuccess(range, allRawPoints)
+                _historyStateInternal.value = buildHomeHistorySuccess(range, availableRawPoints)
             } catch (e: Exception) {
                 if (!hasCachedPoints) {
                     _historyStateInternal.value = HomeHistoryStateInternal.Error("載入失敗: ${e.localizedMessage}")
@@ -406,11 +409,12 @@ class HoldingsViewModel(
         range: HistoryRange,
         allRawPoints: Map<String, List<StockHistoryPoint>>
     ): HomeHistoryStateInternal.Success {
-        val allDates = allRawPoints.values.flatMap { points -> points.map { it.date } }.distinct().sorted()
+        val availableRawPoints = HistoryChartCalculationSupport.filterEmptyHistorySeries(allRawPoints)
+        val allDates = availableRawPoints.values.flatMap { points -> points.map { it.date } }.distinct().sorted()
         val alignedRawPoints = allDates.map { date ->
             StockHistoryPoint(date, 1.0)
         }
-        return HomeHistoryStateInternal.Success(range, alignedRawPoints, allRawPoints)
+        return HomeHistoryStateInternal.Success(range, alignedRawPoints, availableRawPoints)
     }
 
     private fun adjustTransactionsForSplits(txs: List<StockTransaction>): List<StockTransaction> {

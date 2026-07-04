@@ -252,6 +252,7 @@ Windows 指令範例：
 - `ReturnRateMode.REMAINING_POSITION` 若仍有持股但剩餘成本已被配息、減資返還或部分賣出壓到 `<= 0`，也要改以 `totalInvestment` 作為 fallback 分母；不要直接把報酬率顯示成 `0%`。這套規則與配息相容性回傳，已收斂至新增的共用計算輔助工具 `HoldingCalculationSupport.kt`。
 - 配息交易的成本扣減與 XIRR 現金流都應優先使用 `StockTransaction.dividendIncome`，但若遇到舊資料或匯入資料只有 `income` 有值，需 fallback 讀 `income`，避免三種損益模式對同一筆配息各算各的，此規則亦收斂於 `HoldingCalculationSupport.resolveDividendIncome` 中。
 - 個股歷史圖在逐日回放交易後，若因舊資料或事件順序造成股數短暫小於 `0`，要先 clamp 回 `0` 再算市值與報酬，避免 detail chart 單獨畫出負持股。
+- 首頁歷史總圖若某檔股票本次完全抓不到任何有效歷史價，不能把該檔當成 `price = 0` 累加進總圖；要先從該次 home history 計算排除，避免把整體圖表誤算成大幅虧損。
 
 
 ## 10. 美股擴充備註
