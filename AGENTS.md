@@ -249,6 +249,10 @@ Windows 指令範例：
 - 歷史圖表統計範圍固定只到昨天，不納入今天的即時價格或今日歷史價；今天的價格變動交給即時報價與首頁/個股即時卡片呈現。讀取歷史圖表時若 cache/DB 已有到昨天的資料，就先顯示既有圖表且不再為同一天重抓。
 - 歷史圖表在處理 `分割` / `減資` 時，必須以「當天以前的原始交易」逐日回放，讓股數變化只從事件發生日之後生效；不要先把整段歷史交易按最終 split ratio 回推後，再去搭配 TWSE 未還原歷史收盤價，否則分割日前的歷史市值會被錯誤放大。
 - `ReturnRateMode.REMAINING_POSITION` 在個股已全數賣出、`shares = 0` 時，分母要自動從剩餘部位成本退回 `歷來投入成本`，避免顯示成 `0%` 或 `-100%`；這個模式在有持股時看剩餘部位效率，清倉後則沿用整段投入報酬的分母。
+- `ReturnRateMode.REMAINING_POSITION` 若仍有持股但剩餘成本已被配息、減資返還或部分賣出壓到 `<= 0`，也要改以 `totalInvestment` 作為 fallback 分母；不要直接把報酬率顯示成 `0%`。這套規則與配息相容性回傳，已收斂至新增的共用計算輔助工具 `HoldingCalculationSupport.kt`。
+- 配息交易的成本扣減與 XIRR 現金流都應優先使用 `StockTransaction.dividendIncome`，但若遇到舊資料或匯入資料只有 `income` 有值，需 fallback 讀 `income`，避免三種損益模式對同一筆配息各算各的，此規則亦收斂於 `HoldingCalculationSupport.resolveDividendIncome` 中。
+- 個股歷史圖在逐日回放交易後，若因舊資料或事件順序造成股數短暫小於 `0`，要先 clamp 回 `0` 再算市值與報酬，避免 detail chart 單獨畫出負持股。
+
 
 ## 10. 美股擴充備註
 

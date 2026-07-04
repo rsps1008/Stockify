@@ -79,11 +79,11 @@ class OfflineStockRepository(
                 val rate = if (summaryIsCombined && StockMarket.isUs(holding.stock.market)) usdToTwdRate else 1.0
                 val basis = when (returnRateMode) {
                     ReturnRateMode.CUMULATIVE_INVESTMENT -> holding.totalInvestment
-                    ReturnRateMode.REMAINING_POSITION -> if (holding.shares > 0.0) {
-                        holding.averageCost * holding.shares
-                    } else {
-                        holding.totalInvestment
-                    }
+                    ReturnRateMode.REMAINING_POSITION -> HoldingCalculationSupport.remainingPositionDenominator(
+                        shares = holding.shares,
+                        costBasis = holding.averageCost * holding.shares,
+                        totalInvestment = holding.totalInvestment
+                    )
                     ReturnRateMode.XIRR -> holding.averageCost * holding.shares
                 }
                 basis * rate
@@ -248,7 +248,7 @@ class OfflineStockRepository(
                     shares += it.dividendShares
                 }
                 "配息" -> {
-                    totalDividendIncome += it.income
+                    totalDividendIncome += HoldingCalculationSupport.resolveDividendIncome(it)
                 }
                 "減資" -> {
                     shares += it.sharesAfterReduction - it.sharesBeforeReduction
@@ -279,7 +279,11 @@ class OfflineStockRepository(
 
         val totalPLPercentage = when (returnRateMode) {
             ReturnRateMode.REMAINING_POSITION -> {
-                val denominator = if (shares > 0.0) costBasis else totalInvestment
+                val denominator = HoldingCalculationSupport.remainingPositionDenominator(
+                    shares = shares,
+                    costBasis = costBasis,
+                    totalInvestment = totalInvestment
+                )
                 if (denominator > 0) (totalPL / denominator) * 100 else 0.0
             }
             ReturnRateMode.CUMULATIVE_INVESTMENT -> if (totalInvestment > 0) (totalPL / totalInvestment) * 100 else 0.0
@@ -319,7 +323,10 @@ class OfflineStockRepository(
             when (transaction.type) {
                 "買進" -> CashFlow(transaction.date, -transaction.expense * currencyRate)
                 "賣出" -> CashFlow(transaction.date, transaction.income * currencyRate)
-                "配息" -> CashFlow(transaction.date, transaction.dividendIncome * currencyRate)
+                "配息" -> CashFlow(
+                    transaction.date,
+                    HoldingCalculationSupport.resolveDividendIncome(transaction) * currencyRate
+                )
                 "減資" -> CashFlow(transaction.date, transaction.cashReturned * currencyRate)
                 else -> null
             }

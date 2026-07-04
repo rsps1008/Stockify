@@ -12,6 +12,7 @@ import com.rsps1008.stockify.data.ReturnRateMode
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.StockHistoryPoint
 import com.rsps1008.stockify.data.CashFlow
+import com.rsps1008.stockify.data.HoldingCalculationSupport
 import com.rsps1008.stockify.data.ReturnRateCalculator
 import com.rsps1008.stockify.ui.screens.HoldingInfo
 import com.rsps1008.stockify.ui.screens.TransactionUiState
@@ -299,7 +300,7 @@ class StockDetailViewModel(
                     shares += it.dividendShares
                 }
                 "配息" -> {
-                    totalDividendIncome += it.income
+                    totalDividendIncome += HoldingCalculationSupport.resolveDividendIncome(it)
                 }
                 "減資" -> {
                     shares += it.sharesAfterReduction - it.sharesBeforeReduction
@@ -311,6 +312,7 @@ class StockDetailViewModel(
             }
         }
 
+        if (shares < 0) shares = 0.0
         val costBasis = totalBuyExpense - totalSellIncome - totalDividendIncome
         val totalSellFeeAndTax = (sellAmountBeforeFee - totalSellNetIncome).coerceAtLeast(0.0)
         val totalInvestment = totalBuyExpense + totalSellFeeAndTax
@@ -327,7 +329,11 @@ class StockDetailViewModel(
         var nextXirrGuessRate: Double? = null
         val totalPLPercentage = when (returnRateMode) {
             ReturnRateMode.REMAINING_POSITION -> {
-                val denominator = if (shares > 0.0) costBasis else totalInvestment
+                val denominator = HoldingCalculationSupport.remainingPositionDenominator(
+                    shares = shares,
+                    costBasis = costBasis,
+                    totalInvestment = totalInvestment
+                )
                 if (denominator > 0) (totalPL / denominator) * 100 else 0.0
             }
             ReturnRateMode.CUMULATIVE_INVESTMENT -> if (totalInvestment > 0) (totalPL / totalInvestment) * 100 else 0.0
@@ -364,7 +370,10 @@ class StockDetailViewModel(
             when (transaction.type) {
                 "買進" -> CashFlow(transaction.date, -transaction.expense)
                 "賣出" -> CashFlow(transaction.date, transaction.income)
-                "配息" -> CashFlow(transaction.date, transaction.dividendIncome)
+                "配息" -> CashFlow(
+                    transaction.date,
+                    HoldingCalculationSupport.resolveDividendIncome(transaction)
+                )
                 "減資" -> CashFlow(transaction.date, transaction.cashReturned)
                 else -> null
             }

@@ -12,6 +12,7 @@ import com.rsps1008.stockify.data.ReturnRateMode
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.StockHistoryPoint
 import com.rsps1008.stockify.data.HomeDisplayMode
+import com.rsps1008.stockify.data.HoldingCalculationSupport
 import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.UsdTwdExchangeRateService
 import com.rsps1008.stockify.data.CashFlow
@@ -257,7 +258,11 @@ class HoldingsViewModel(
 
                 val totalPLPercentage = when (settings.returnRateMode) {
                     ReturnRateMode.REMAINING_POSITION -> {
-                        val denominator = if (totalShares > 0.0) totalCostBasis else totalInvestment
+                        val denominator = HoldingCalculationSupport.remainingPositionDenominator(
+                            shares = totalShares,
+                            costBasis = totalCostBasis,
+                            totalInvestment = totalInvestment
+                        )
                         if (denominator > 0) (totalPL / denominator) * 100 else 0.0
                     }
                     ReturnRateMode.CUMULATIVE_INVESTMENT -> if (totalInvestment > 0) (totalPL / totalInvestment) * 100 else 0.0
@@ -482,7 +487,7 @@ class HoldingsViewModel(
                     shares += it.dividendShares
                 }
                 "配息" -> {
-                    totalDividendIncome += it.income
+                    totalDividendIncome += HoldingCalculationSupport.resolveDividendIncome(it)
                 }
                 "減資" -> {
                     shares += it.sharesAfterReduction - it.sharesBeforeReduction
@@ -528,7 +533,10 @@ class HoldingsViewModel(
             when (transaction.type) {
                 "買進" -> CashFlow(transaction.date, -transaction.expense * currencyRate)
                 "賣出" -> CashFlow(transaction.date, transaction.income * currencyRate)
-                "配息" -> CashFlow(transaction.date, transaction.dividendIncome * currencyRate)
+                "配息" -> CashFlow(
+                    transaction.date,
+                    HoldingCalculationSupport.resolveDividendIncome(transaction) * currencyRate
+                )
                 "減資" -> CashFlow(transaction.date, transaction.cashReturned * currencyRate)
                 else -> null
             }

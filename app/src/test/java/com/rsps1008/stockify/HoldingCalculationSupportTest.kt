@@ -1,0 +1,59 @@
+package com.rsps1008.stockify
+
+import com.rsps1008.stockify.data.HoldingCalculationSupport
+import com.rsps1008.stockify.data.StockTransaction
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+class HoldingCalculationSupportTest {
+
+    @Test
+    fun resolveDividendIncome_fallsBackToLegacyIncomeField() {
+        val transaction = StockTransaction(
+            stockCode = "0050",
+            date = 0L,
+            recordTime = 0L,
+            type = "配息",
+            income = 120.0,
+            dividendIncome = 0.0
+        )
+
+        assertEquals(120.0, HoldingCalculationSupport.resolveDividendIncome(transaction), 0.0)
+    }
+
+    @Test
+    fun resolveDividendIncome_prefersDividendIncomeWhenPresent() {
+        val transaction = StockTransaction(
+            stockCode = "0050",
+            date = 0L,
+            recordTime = 0L,
+            type = "配息",
+            income = 120.0,
+            dividendIncome = 100.0
+        )
+
+        assertEquals(100.0, HoldingCalculationSupport.resolveDividendIncome(transaction), 0.0)
+    }
+
+    @Test
+    fun remainingPositionDenominator_fallsBackToTotalInvestmentWhenCostBasisIsNonPositive() {
+        val denominator = HoldingCalculationSupport.remainingPositionDenominator(
+            shares = 10.0,
+            costBasis = -50.0,
+            totalInvestment = 500.0
+        )
+
+        assertEquals(500.0, denominator, 0.0)
+    }
+
+    @Test
+    fun remainingPositionDenominator_usesCostBasisWhenItIsPositive() {
+        val denominator = HoldingCalculationSupport.remainingPositionDenominator(
+            shares = 10.0,
+            costBasis = 300.0,
+            totalInvestment = 500.0
+        )
+
+        assertEquals(300.0, denominator, 0.0)
+    }
+}
