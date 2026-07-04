@@ -20,9 +20,11 @@ import com.rsps1008.stockify.data.CashFlow
 import com.rsps1008.stockify.data.ReturnRateCalculator
 import com.rsps1008.stockify.ui.screens.HoldingsUiState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
@@ -33,7 +35,8 @@ sealed interface HomeHistoryStateInternal {
     object Idle : HomeHistoryStateInternal
     data class Loading(val progress: Float, val statusText: String) : HomeHistoryStateInternal
     data class Success(
-        val range: HistoryRange, 
+        val range: HistoryRange,
+        val portfolioKey: String,
         val rawPoints: List<StockHistoryPoint>,
         val allRawPoints: Map<String, List<StockHistoryPoint>>
     ) : HomeHistoryStateInternal
@@ -153,6 +156,10 @@ class HoldingsViewModel(
 
     // --- Home Portfolio History States ---
     private val _historyStateInternal = MutableStateFlow<HomeHistoryStateInternal>(HomeHistoryStateInternal.Idle)
+    private val _selectedHomeHistoryRange = MutableStateFlow(HistoryRange.ONE_MONTH)
+    val selectedHomeHistoryRange: StateFlow<HistoryRange> = _selectedHomeHistoryRange.asStateFlow()
+    private var fetchPortfolioHistoryJob: Job? = null
+    private var homeHistoryRequestVersion = 0L
 
     private val settingsCombined = combine(
         settingsDataStore.preDeductSellFeesFlow,
@@ -314,31 +321,31 @@ class HoldingsViewModel(
         viewModelScope.launch {
             var lastPortfolioKey = ""
             combine(uiState, homeDisplayMode) { state, mode ->
-                val codes = state.holdings
-                    .filter { StockMarket.isTw(it.stock.market) || StockMarket.isUs(it.stock.market) }
-                    .map { "${StockMarket.normalize(it.stock.market)}:${it.stock.code}" }
-                    .sorted()
-                "${HomeDisplayMode.normalize(mode)}|${codes.joinToString(",")}"
+                buildPortfolioKey(state, mode)
             }.collect { portfolioKey ->
                 if (portfolioKey.substringAfter("|").isNotBlank() && portfolioKey != lastPortfolioKey) {
                     lastPortfolioKey = portfolioKey
-                    fetchPortfolioHistory(HistoryRange.ONE_MONTH)
+                    fetchPortfolioHistory(selectedHomeHistoryRange.value)
                 }
             }
         }
     }
 
     fun fetchPortfolioHistory(range: HistoryRange) {
+        _selectedHomeHistoryRange.value = range
         val rangeMonths = when (range) {
             HistoryRange.ONE_MONTH -> 1
             HistoryRange.SIX_MONTHS -> 6
             HistoryRange.ONE_YEAR -> 12
         }
 
-        viewModelScope.launch {
+        fetchPortfolioHistoryJob?.cancel()
+        val requestVersion = ++homeHistoryRequestVersion
+        fetchPortfolioHistoryJob = viewModelScope.launch {
             val selectedStocks = uiState.value.holdings
                 .map { it.stock }
                 .filter { StockMarket.isTw(it.market) || StockMarket.isUs(it.market) }
+            val portfolioKey = buildPortfolioKey(uiState.value, homeDisplayMode.value)
             if (selectedStocks.isEmpty()) {
                 val mode = HomeDisplayMode.normalize(homeDisplayMode.first())
                 val message = when (mode) {
@@ -346,7 +353,9 @@ class HoldingsViewModel(
                     HomeDisplayMode.COMBINED -> "目前沒有持有任何台股或美股部位。"
                     else -> "目前沒有持有任何台股部位。"
                 }
-                _historyStateInternal.value = HomeHistoryStateInternal.Error(message)
+                if (requestVersion == homeHistoryRequestVersion) {
+                    _historyStateInternal.value = HomeHistoryStateInternal.Error(message)
+                }
                 return@launch
             }
 
@@ -359,9 +368,13 @@ class HoldingsViewModel(
             }
             val hasCachedPoints = cachedRawPoints.isNotEmpty()
             if (hasCachedPoints) {
-                _historyStateInternal.value = buildHomeHistorySuccess(range, cachedRawPoints)
+                if (requestVersion == homeHistoryRequestVersion) {
+                    _historyStateInternal.value = buildHomeHistorySuccess(range, portfolioKey, cachedRawPoints)
+                }
             } else {
-                _historyStateInternal.value = HomeHistoryStateInternal.Loading(0f, "準備下載歷史股價...")
+                if (requestVersion == homeHistoryRequestVersion) {
+                    _historyStateInternal.value = HomeHistoryStateInternal.Loading(0f, "準備下載歷史股價...")
+                }
             }
 
             try {
@@ -378,10 +391,12 @@ class HoldingsViewModel(
                             "正在載入 ${stock.name} (${index + 1}/$totalStocks) 第 $step/$total 個月..."
                         }
                         if (!hasCachedPoints) {
-                            _historyStateInternal.value = HomeHistoryStateInternal.Loading(
-                                baseProgress + stepProgress,
-                                statusText
-                            )
+                            if (requestVersion == homeHistoryRequestVersion) {
+                                _historyStateInternal.value = HomeHistoryStateInternal.Loading(
+                                    baseProgress + stepProgress,
+                                    statusText
+                                )
+                            }
                         }
                     }
                     allRawPoints[stock.code] = rawPoints
@@ -390,15 +405,17 @@ class HoldingsViewModel(
                 val availableRawPoints = HistoryChartCalculationSupport.filterEmptyHistorySeries(allRawPoints)
 
                 if (availableRawPoints.isEmpty()) {
-                    if (!hasCachedPoints) {
+                    if (!hasCachedPoints && requestVersion == homeHistoryRequestVersion) {
                         _historyStateInternal.value = HomeHistoryStateInternal.Error("無歷史股價數據，請稍後重試。")
                     }
                     return@launch
                 }
 
-                _historyStateInternal.value = buildHomeHistorySuccess(range, availableRawPoints)
+                if (requestVersion == homeHistoryRequestVersion) {
+                    _historyStateInternal.value = buildHomeHistorySuccess(range, portfolioKey, availableRawPoints)
+                }
             } catch (e: Exception) {
-                if (!hasCachedPoints) {
+                if (!hasCachedPoints && requestVersion == homeHistoryRequestVersion) {
                     _historyStateInternal.value = HomeHistoryStateInternal.Error("載入失敗: ${e.localizedMessage}")
                 }
             }
@@ -407,6 +424,7 @@ class HoldingsViewModel(
 
     private fun buildHomeHistorySuccess(
         range: HistoryRange,
+        portfolioKey: String,
         allRawPoints: Map<String, List<StockHistoryPoint>>
     ): HomeHistoryStateInternal.Success {
         val availableRawPoints = HistoryChartCalculationSupport.filterEmptyHistorySeries(allRawPoints)
@@ -414,7 +432,15 @@ class HoldingsViewModel(
         val alignedRawPoints = allDates.map { date ->
             StockHistoryPoint(date, 1.0)
         }
-        return HomeHistoryStateInternal.Success(range, alignedRawPoints, availableRawPoints)
+        return HomeHistoryStateInternal.Success(range, portfolioKey, alignedRawPoints, availableRawPoints)
+    }
+
+    private fun buildPortfolioKey(state: HoldingsUiState, mode: String): String {
+        val codes = state.holdings
+            .filter { StockMarket.isTw(it.stock.market) || StockMarket.isUs(it.stock.market) }
+            .map { "${StockMarket.normalize(it.stock.market)}:${it.stock.code}" }
+            .sorted()
+        return "${HomeDisplayMode.normalize(mode)}|${codes.joinToString(",")}"
     }
 
     private fun adjustTransactionsForSplits(txs: List<StockTransaction>): List<StockTransaction> {
@@ -554,6 +580,7 @@ class HoldingsViewModel(
     }
 
     fun setHomeDisplayMode(mode: String) {
+        _historyStateInternal.value = HomeHistoryStateInternal.Loading(0f, "切換歷史資料中...")
         viewModelScope.launch {
             settingsDataStore.setHomeDisplayMode(mode)
         }

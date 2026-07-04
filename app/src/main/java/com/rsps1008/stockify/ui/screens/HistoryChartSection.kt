@@ -71,12 +71,14 @@ fun HistoryChartSection(
     val historyState by viewModel.historyState.collectAsState()
     val isExpanded by viewModel.homeHistoryChartExpanded.collectAsState()
     val displayMode by viewModel.homeDisplayMode.collectAsState()
+    val selectedRange by viewModel.selectedHomeHistoryRange.collectAsState()
     HistoryChartSectionContent(
         historyState = historyState,
         onRangeSelected = { viewModel.fetchPortfolioHistory(it) },
         isExpanded = isExpanded,
         onToggleExpanded = { viewModel.setHomeHistoryChartExpanded(it) },
         displayMode = displayMode,
+        controlledSelectedRange = selectedRange,
         modifier = modifier
     )
 }
@@ -88,10 +90,14 @@ fun HistoryChartSectionContent(
     isExpanded: Boolean,
     onToggleExpanded: (Boolean) -> Unit,
     displayMode: String = HomeDisplayMode.TW,
+    controlledSelectedRange: HistoryRange? = null,
     modifier: Modifier = Modifier
 ) {
     var selectedRange by remember { mutableStateOf(HistoryRange.ONE_MONTH) }
     var selectedMetric by remember { mutableStateOf("市值") }
+    LaunchedEffect(controlledSelectedRange) {
+        controlledSelectedRange?.let { selectedRange = it }
+    }
 
     Card(
         modifier = modifier
