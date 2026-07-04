@@ -97,8 +97,8 @@ fun HistoryChartSectionContent(
         modifier = modifier
             .fillMaxWidth()
             .padding(
-                top = if (isExpanded) 8.dp else 6.dp,
-                bottom = if (isExpanded) 0.dp else 4.dp
+                top = 8.dp,
+                bottom = 0.dp
             ),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
