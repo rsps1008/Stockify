@@ -330,7 +330,20 @@ class HoldingsViewModel(
                 return@launch
             }
 
-            _historyStateInternal.value = HomeHistoryStateInternal.Loading(0f, "準備下載歷史股價...")
+            val cachedRawPoints = mutableMapOf<String, List<StockHistoryPoint>>()
+            for (stock in selectedStocks) {
+                val cachedPoints = twseStockHistoryService.getCachedHistory(stock.code, rangeMonths)
+                if (cachedPoints.isNotEmpty()) {
+                    cachedRawPoints[stock.code] = cachedPoints
+                }
+            }
+            val hasCachedPoints = cachedRawPoints.isNotEmpty()
+            if (hasCachedPoints) {
+                _historyStateInternal.value = buildHomeHistorySuccess(range, cachedRawPoints)
+            } else {
+                _historyStateInternal.value = HomeHistoryStateInternal.Loading(0f, "準備下載歷史股價...")
+            }
+
             try {
                 val allRawPoints = mutableMapOf<String, List<StockHistoryPoint>>()
                 val totalStocks = selectedStocks.size
@@ -344,29 +357,41 @@ class HoldingsViewModel(
                         } else {
                             "正在載入 ${stock.name} (${index + 1}/$totalStocks) 第 $step/$total 個月..."
                         }
-                        _historyStateInternal.value = HomeHistoryStateInternal.Loading(
-                            baseProgress + stepProgress,
-                            statusText
-                        )
+                        if (!hasCachedPoints) {
+                            _historyStateInternal.value = HomeHistoryStateInternal.Loading(
+                                baseProgress + stepProgress,
+                                statusText
+                            )
+                        }
                     }
                     allRawPoints[stock.code] = rawPoints
                 }
 
                 if (allRawPoints.values.all { it.isEmpty() }) {
-                    _historyStateInternal.value = HomeHistoryStateInternal.Error("無歷史股價數據，請稍後重試。")
+                    if (!hasCachedPoints) {
+                        _historyStateInternal.value = HomeHistoryStateInternal.Error("無歷史股價數據，請稍後重試。")
+                    }
                     return@launch
                 }
 
-                val allDates = allRawPoints.values.flatMap { it.map { pt -> pt.date } }.distinct().sorted()
-                val alignedRawPoints = allDates.map { date ->
-                    StockHistoryPoint(date, 1.0)
-                }
-
-                _historyStateInternal.value = HomeHistoryStateInternal.Success(range, alignedRawPoints, allRawPoints)
+                _historyStateInternal.value = buildHomeHistorySuccess(range, allRawPoints)
             } catch (e: Exception) {
-                _historyStateInternal.value = HomeHistoryStateInternal.Error("載入失敗: ${e.localizedMessage}")
+                if (!hasCachedPoints) {
+                    _historyStateInternal.value = HomeHistoryStateInternal.Error("載入失敗: ${e.localizedMessage}")
+                }
             }
         }
+    }
+
+    private fun buildHomeHistorySuccess(
+        range: HistoryRange,
+        allRawPoints: Map<String, List<StockHistoryPoint>>
+    ): HomeHistoryStateInternal.Success {
+        val allDates = allRawPoints.values.flatMap { points -> points.map { it.date } }.distinct().sorted()
+        val alignedRawPoints = allDates.map { date ->
+            StockHistoryPoint(date, 1.0)
+        }
+        return HomeHistoryStateInternal.Success(range, alignedRawPoints, allRawPoints)
     }
 
     private fun adjustTransactionsForSplits(txs: List<StockTransaction>): List<StockTransaction> {

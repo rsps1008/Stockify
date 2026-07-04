@@ -112,14 +112,7 @@ class StockDetailViewModel(
             val stockType = holding?.stock?.stockType ?: ""
             val market = holding?.stock?.market ?: StockMarket.inferFromCode(stockCode)
 
-            val currentPrice = holding?.currentPrice ?: 0.0
             val rawPoints = historyInternal.rawPoints.toMutableList()
-            if (currentPrice > 0.0) {
-                val todayStr = sdf.format(java.util.Date())
-                if (rawPoints.isEmpty() || rawPoints.last().date < todayStr) {
-                    rawPoints.add(StockHistoryPoint(todayStr, currentPrice))
-                }
-            }
 
             for (pt in rawPoints) {
                 val dayStart = sdf.parse(pt.date)?.time ?: 0L
@@ -182,7 +175,14 @@ class StockDetailViewModel(
             }
             val market = holdingInfo.value?.stock?.market ?: StockMarket.inferFromCode(stockCode)
 
-            _historyStateInternal.value = DetailHistoryStateInternal.Loading(0f, "準備下載歷史股價...")
+            val cachedPoints = twseStockHistoryService.getCachedHistory(stockCode, rangeMonths)
+            val hasCachedPoints = cachedPoints.isNotEmpty()
+            if (hasCachedPoints) {
+                _historyStateInternal.value = DetailHistoryStateInternal.Success(range, cachedPoints)
+            } else {
+                _historyStateInternal.value = DetailHistoryStateInternal.Loading(0f, "準備下載歷史股價...")
+            }
+
             try {
                 val rawPoints = twseStockHistoryService.fetchHistory(stockCode, rangeMonths) { step, total ->
                     val progress = step.toFloat() / total.toFloat()
@@ -191,17 +191,23 @@ class StockDetailViewModel(
                     } else {
                         "正在載入第 $step/$total 個月..."
                     }
-                    _historyStateInternal.value = DetailHistoryStateInternal.Loading(progress, statusText)
+                    if (!hasCachedPoints) {
+                        _historyStateInternal.value = DetailHistoryStateInternal.Loading(progress, statusText)
+                    }
                 }
                 
                 if (rawPoints.isEmpty()) {
-                    _historyStateInternal.value = DetailHistoryStateInternal.Error("歷史股價回傳資料為空，請稍後重試。")
+                    if (!hasCachedPoints) {
+                        _historyStateInternal.value = DetailHistoryStateInternal.Error("歷史股價回傳資料為空，請稍後重試。")
+                    }
                     return@launch
                 }
 
                 _historyStateInternal.value = DetailHistoryStateInternal.Success(range, rawPoints)
             } catch (e: Exception) {
-                _historyStateInternal.value = DetailHistoryStateInternal.Error("載入失敗: ${e.localizedMessage}")
+                if (!hasCachedPoints) {
+                    _historyStateInternal.value = DetailHistoryStateInternal.Error("載入失敗: ${e.localizedMessage}")
+                }
             }
         }
     }

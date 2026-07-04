@@ -290,6 +290,127 @@ fun SettingsScreen() {
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
+                        Text("損益計算設定", style = MaterialTheme.typography.titleLarge)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        val returnRateModeOptions = remember {
+                            mapOf(
+                                ReturnRateMode.REMAINING_POSITION to "手上剩餘部位的資金效率 (剩餘部位成本)",
+                                ReturnRateMode.CUMULATIVE_INVESTMENT to "整段交易的總投入報酬 (歷來投入成本)",
+                                ReturnRateMode.XIRR to "這檔股票生命週期的年化報酬 (XIRR)"
+                            )
+                        }
+                        val returnRateModeDescriptions = remember {
+                            mapOf(
+                                ReturnRateMode.REMAINING_POSITION to "以目前還留在該股票中的有效成本作為分母。適合評估目前在倉部位的資金運用效率，不受已實現損益的現金回收影響。",
+                                ReturnRateMode.CUMULATIVE_INVESTMENT to "以這檔股票歷來累計投入的總成本作為分母。部分賣出回收資金後，分母仍維持最大投入金額，報酬率呈現會較穩健保守。",
+                                ReturnRateMode.XIRR to "根據每筆買進、賣出、配息、減資的實際發生日期與資金流向，計算考慮時間價值權重的年化報酬率（XIRR），最符合實際資金的時間價值。"
+                            )
+                        }
+                        var expandedReturnRateMode by remember { mutableStateOf(false) }
+                        ExposedDropdownMenuBox(
+                            expanded = expandedReturnRateMode,
+                            onExpandedChange = { expandedReturnRateMode = !expandedReturnRateMode },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = returnRateModeOptions[returnRateMode] ?: "",
+                                onValueChange = { },
+                                label = { Text("報酬率計算方式") },
+                                readOnly = true,
+                                trailingIcon = {
+                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedReturnRateMode)
+                                },
+                                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = expandedReturnRateMode,
+                                onDismissRequest = { expandedReturnRateMode = false },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                returnRateModeOptions.forEach { (key, value) ->
+                                    DropdownMenuItem(
+                                        text = { Text(value) },
+                                        onClick = {
+                                            viewModel.setReturnRateMode(key)
+                                            expandedReturnRateMode = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = returnRateModeDescriptions[returnRateMode] ?: "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("自動計算取整方式", style = MaterialTheme.typography.titleMedium)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        val roundingModeOptions = remember {
+                            mapOf(
+                                CalculationRoundingMode.ROUND to "四捨五入",
+                                CalculationRoundingMode.FLOOR to "無條件捨去"
+                            )
+                        }
+                        var expandedRoundingMode by remember { mutableStateOf(false) }
+                        ExposedDropdownMenuBox(
+                            expanded = expandedRoundingMode,
+                            onExpandedChange = { expandedRoundingMode = !expandedRoundingMode },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = roundingModeOptions[calculationRoundingMode] ?: "四捨五入",
+                                onValueChange = { },
+                                label = { Text("支出、收入、股息與配股計算") },
+                                readOnly = true,
+                                trailingIcon = {
+                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedRoundingMode)
+                                },
+                                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = expandedRoundingMode,
+                                onDismissRequest = { expandedRoundingMode = false },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                roundingModeOptions.forEach { (key, value) ->
+                                    DropdownMenuItem(
+                                        text = { Text(value) },
+                                        onClick = {
+                                            viewModel.setCalculationRoundingMode(key)
+                                            expandedRoundingMode = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            "預設維持原本的四捨五入；改成無條件捨去後，新增/編輯頁的自動計算結果會依此取整。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("預先扣除賣出費用與稅金", modifier = Modifier.weight(1f))
+                            Switch(
+                                checked = preDeductSellFees,
+                                onCheckedChange = { viewModel.setPreDeductSellFees(it) }
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         Text("股票資料來源", style = MaterialTheme.typography.titleLarge)
                         Spacer(modifier = Modifier.height(16.dp))
 
@@ -535,127 +656,6 @@ fun SettingsScreen() {
                                     }
                                 }
                             }
-                        }
-                    }
-                }
-            }
-
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("損益計算設定", style = MaterialTheme.typography.titleLarge)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        val returnRateModeOptions = remember {
-                            mapOf(
-                                ReturnRateMode.REMAINING_POSITION to "手上剩餘部位的資金效率 (剩餘部位成本)",
-                                ReturnRateMode.CUMULATIVE_INVESTMENT to "整段交易的總投入報酬 (歷來投入成本)",
-                                ReturnRateMode.XIRR to "這檔股票生命週期的年化報酬 (XIRR)"
-                            )
-                        }
-                        val returnRateModeDescriptions = remember {
-                            mapOf(
-                                ReturnRateMode.REMAINING_POSITION to "以目前還留在該股票中的有效成本作為分母。適合評估目前在倉部位的資金運用效率，不受已實現損益的現金回收影響。",
-                                ReturnRateMode.CUMULATIVE_INVESTMENT to "以這檔股票歷來累計投入的總成本作為分母。部分賣出回收資金後，分母仍維持最大投入金額，報酬率呈現會較穩健保守。",
-                                ReturnRateMode.XIRR to "根據每筆買進、賣出、配息、減資的實際發生日期與資金流向，計算考慮時間價值權重的年化報酬率（XIRR），最符合實際資金的時間價值。"
-                            )
-                        }
-                        var expandedReturnRateMode by remember { mutableStateOf(false) }
-                        ExposedDropdownMenuBox(
-                            expanded = expandedReturnRateMode,
-                            onExpandedChange = { expandedReturnRateMode = !expandedReturnRateMode },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            OutlinedTextField(
-                                value = returnRateModeOptions[returnRateMode] ?: "",
-                                onValueChange = { },
-                                label = { Text("報酬率計算方式") },
-                                readOnly = true,
-                                trailingIcon = {
-                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedReturnRateMode)
-                                },
-                                modifier = Modifier.menuAnchor().fillMaxWidth(),
-                                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
-                            )
-                            ExposedDropdownMenu(
-                                expanded = expandedReturnRateMode,
-                                onDismissRequest = { expandedReturnRateMode = false },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                returnRateModeOptions.forEach { (key, value) ->
-                                    DropdownMenuItem(
-                                        text = { Text(value) },
-                                        onClick = {
-                                            viewModel.setReturnRateMode(key)
-                                            expandedReturnRateMode = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = returnRateModeDescriptions[returnRateMode] ?: "",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("自動計算取整方式", style = MaterialTheme.typography.titleMedium)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        val roundingModeOptions = remember {
-                            mapOf(
-                                CalculationRoundingMode.ROUND to "四捨五入",
-                                CalculationRoundingMode.FLOOR to "無條件捨去"
-                            )
-                        }
-                        var expandedRoundingMode by remember { mutableStateOf(false) }
-                        ExposedDropdownMenuBox(
-                            expanded = expandedRoundingMode,
-                            onExpandedChange = { expandedRoundingMode = !expandedRoundingMode },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            OutlinedTextField(
-                                value = roundingModeOptions[calculationRoundingMode] ?: "四捨五入",
-                                onValueChange = { },
-                                label = { Text("支出、收入、股息與配股計算") },
-                                readOnly = true,
-                                trailingIcon = {
-                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedRoundingMode)
-                                },
-                                modifier = Modifier.menuAnchor().fillMaxWidth(),
-                                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
-                            )
-                            ExposedDropdownMenu(
-                                expanded = expandedRoundingMode,
-                                onDismissRequest = { expandedRoundingMode = false },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                roundingModeOptions.forEach { (key, value) ->
-                                    DropdownMenuItem(
-                                        text = { Text(value) },
-                                        onClick = {
-                                            viewModel.setCalculationRoundingMode(key)
-                                            expandedRoundingMode = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                        Text(
-                            "預設維持原本的四捨五入；改成無條件捨去後，新增/編輯頁的自動計算結果會依此取整。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("預先扣除賣出費用與稅金", modifier = Modifier.weight(1f))
-                            Switch(
-                                checked = preDeductSellFees,
-                                onCheckedChange = { viewModel.setPreDeductSellFees(it) }
-                            )
                         }
                     }
                 }
