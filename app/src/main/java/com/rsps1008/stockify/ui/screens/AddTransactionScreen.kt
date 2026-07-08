@@ -51,6 +51,10 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontWeight
 import com.rsps1008.stockify.ui.viewmodel.AddTransactionViewModel
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Icon
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
 import com.rsps1008.stockify.data.Stock
@@ -90,6 +94,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     val feeSettings by viewModel.feeSettings.collectAsState()
     val defaultDividendFee by viewModel.defaultDividendFee.collectAsState()
     val calculationRoundingMode by viewModel.calculationRoundingMode.collectAsState()
+    val selectedAccountId by viewModel.selectedAccountId.collectAsState()
+    val accounts by viewModel.accounts.collectAsState()
     var dividendFee by remember { mutableStateOf("") }
     var dividendIncome by remember { mutableStateOf("") }
     val coroutineScope = rememberCoroutineScope()
@@ -335,6 +341,45 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             .padding(16.dp)
             .verticalScroll(rememberScrollState())
     ) {
+        Text(text = "選擇帳戶", style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(4.dp))
+        var accountDropdownExpanded by remember { mutableStateOf(false) }
+        Box(modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(
+                onClick = { accountDropdownExpanded = true },
+                modifier = Modifier.fillMaxWidth(),
+                shape = AddTransactionButtonShape
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val activeAccount = accounts.find { it.id == selectedAccountId }
+                    Text(text = activeAccount?.name ?: "預設帳戶")
+                    Icon(
+                        imageVector = Icons.Default.ArrowDropDown,
+                        contentDescription = "Dropdown"
+                    )
+                }
+            }
+            DropdownMenu(
+                expanded = accountDropdownExpanded,
+                onDismissRequest = { accountDropdownExpanded = false },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                accounts.forEach { account ->
+                    DropdownMenuItem(
+                        text = { Text(account.name) },
+                        onClick = {
+                            viewModel.selectAccount(account.id)
+                            accountDropdownExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
         if (transactionId == null) {
             Text(text = "股票名稱或代號", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(4.dp))

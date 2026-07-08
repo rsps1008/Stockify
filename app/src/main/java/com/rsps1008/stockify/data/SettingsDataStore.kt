@@ -53,6 +53,7 @@ class SettingsDataStore(val context: Context) {
     private val homeHoldingsSortAscendingKey = booleanPreferencesKey("home_holdings_sort_ascending")
     private val localCsvRestoreFeeHintShownKey = booleanPreferencesKey("local_csv_restore_fee_hint_shown")
     private val calculationRoundingModeKey = stringPreferencesKey("calculation_rounding_mode")
+    private val activeAccountIdKey = intPreferencesKey("active_account_id")
     private val showTaiwanWeightedIndexKey = booleanPreferencesKey("show_taiwan_weighted_index")
     private val showTaiwanPortfolioChartKey = booleanPreferencesKey("show_taiwan_portfolio_chart")
     private val homeHistoryChartExpandedKey = booleanPreferencesKey("home_history_chart_expanded")
@@ -240,6 +241,11 @@ class SettingsDataStore(val context: Context) {
     val localCsvRestoreFeeHintShownFlow: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
             preferences[localCsvRestoreFeeHintShownKey] ?: false
+        }
+
+    val activeAccountIdFlow: Flow<Int> = context.dataStore.data
+        .map { preferences ->
+            preferences[activeAccountIdKey] ?: 0
         }
 
     val showTaiwanWeightedIndexFlow: Flow<Boolean> = context.dataStore.data
@@ -487,6 +493,12 @@ class SettingsDataStore(val context: Context) {
     suspend fun setDetailHistoryChartExpanded(expanded: Boolean) {
         context.dataStore.edit {
             it[detailHistoryChartExpandedKey] = expanded
+        }
+    }
+
+    suspend fun setActiveAccountId(accountId: Int) {
+        context.dataStore.edit {
+            it[activeAccountIdKey] = accountId
         }
     }
 }

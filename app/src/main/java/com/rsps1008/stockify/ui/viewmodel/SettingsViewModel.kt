@@ -13,6 +13,9 @@ import com.google.android.gms.common.api.Scope
 import com.google.api.services.drive.DriveScopes
 import com.rsps1008.stockify.data.CsvService
 import com.rsps1008.stockify.data.CsvTransaction
+import com.rsps1008.stockify.data.Account
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
 import com.rsps1008.stockify.data.GoogleDriveService
 import com.rsps1008.stockify.data.HoldingsOrderBackupService
 import com.rsps1008.stockify.data.ReturnRateMode
@@ -81,6 +84,7 @@ class SettingsViewModel(
     private var importUri: Uri? = null
     private var importData: ByteArray? = null
     private var pdfImportUri: Uri? = null
+    private var accountsBackupData: ByteArray? = null
 
     private val _googleSignInAccount = MutableStateFlow<GoogleSignInAccount?>(null)
     val googleSignInAccount: StateFlow<GoogleSignInAccount?> = _googleSignInAccount.asStateFlow()
@@ -255,6 +259,12 @@ class SettingsViewModel(
                     }
                     val driveService = GoogleDriveService(getApplication(), account)
                     driveService.uploadBackup("stockify_backup.csv", csvContent).getOrThrow()
+
+                    // Also backup accounts
+                    val accountsList = stockDao.getAllAccountsFlow().first()
+                    val accountsJson = Json.encodeToString(accountsList).toByteArray(Charsets.UTF_8)
+                    driveService.uploadBackup("stockify_accounts.json", accountsJson).getOrThrow()
+
                     refreshCloudBackupTimes(account)
                     _message.value = "Google 雲端備份成功"
                 } catch (e: Exception) {
@@ -275,7 +285,10 @@ class SettingsViewModel(
                 try {
                     val driveService = GoogleDriveService(getApplication(), account)
                     val csvContent = driveService.restoreBackup("stockify_backup.csv").getOrThrow()
+                    val accountsJson = driveService.restoreBackup("stockify_accounts.json").getOrNull()
+
                     importData = csvContent
+                    accountsBackupData = accountsJson
                     _showImportConfirmDialog.value = true
                 } catch (e: Exception) {
                     _message.value = "Google 雲端還原失敗: ${e.message}"
@@ -437,6 +450,7 @@ class SettingsViewModel(
         _showImportConfirmDialog.value = false
         importUri = null
         importData = null
+        accountsBackupData = null
     }
 
     fun onPdfImportRequest(uri: Uri) {
@@ -572,6 +586,25 @@ class SettingsViewModel(
         }
     }
 
+    private suspend fun restoreAccountsIfPresent(deleteOldData: Boolean) {
+        val bytes = accountsBackupData ?: return
+        try {
+            val restoredAccounts = Json.decodeFromString<List<Account>>(bytes.toString(Charsets.UTF_8))
+            if (restoredAccounts.isNotEmpty()) {
+                if (deleteOldData) {
+                    stockDao.deleteAllAccounts()
+                }
+                restoredAccounts.forEach {
+                    stockDao.insertAccount(it)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Restoring accounts from json failed", e)
+        } finally {
+            accountsBackupData = null
+        }
+    }
+
     private fun performImportFromUri(uri: Uri, deleteOldData: Boolean) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -579,6 +612,7 @@ class SettingsViewModel(
                 if (deleteOldData) {
                     deleteAllData()
                 }
+                restoreAccountsIfPresent(deleteOldData)
 
                 val csvTransactions = withContext(Dispatchers.IO) {
                     getApplication<Application>().contentResolver.openInputStream(uri)?.use {
@@ -629,6 +663,7 @@ class SettingsViewModel(
                 if (deleteOldData) {
                     deleteAllData()
                 }
+                restoreAccountsIfPresent(deleteOldData)
 
                 val csvTransactions = withContext(Dispatchers.IO) {
                     ByteArrayInputStream(data).use { 
@@ -660,6 +695,13 @@ class SettingsViewModel(
                 )
                 stockDao.insertStock(newStock)
             }
+
+            val accountId = csvTransaction.transaction.accountId
+            val existingAccount = stockDao.getAccountById(accountId)
+            if (existingAccount == null) {
+                stockDao.insertAccount(Account(id = accountId, name = "未命名帳戶 ($accountId)"))
+            }
+
             stockDao.insertTransaction(csvTransaction.transaction)
             refreshedStockCodes += csvTransaction.stockCode
         }
@@ -828,6 +870,8 @@ class SettingsViewModel(
 
     private suspend fun deleteAllData() {
         stockDao.deleteAllTransactions()
+        stockDao.deleteAllAccounts()
+        stockDao.insertAccount(Account(id = 1, name = "預設帳戶"))
     }
 
     fun updateStockListFromTwse() {

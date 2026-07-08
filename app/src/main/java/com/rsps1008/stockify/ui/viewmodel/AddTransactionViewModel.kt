@@ -10,6 +10,7 @@ import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.StockDao
 import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.StockTransaction
+import com.rsps1008.stockify.data.Account
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -70,16 +71,30 @@ class AddTransactionViewModel(
     val defaultDividendFee: StateFlow<Int> = settingsDataStore.dividendFeeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 10)
 
+    val accounts: StateFlow<List<Account>> = stockDao.getAllAccountsFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
+    private val _selectedAccountId = MutableStateFlow(1)
+    val selectedAccountId = _selectedAccountId.asStateFlow()
+
+    fun selectAccount(accountId: Int) {
+        _selectedAccountId.value = accountId
+    }
+
     init {
-        transactionId?.let {
-            viewModelScope.launch {
-                val transaction = stockDao.getTransactionById(it).firstOrNull()
+        viewModelScope.launch {
+            val activeId = settingsDataStore.activeAccountIdFlow.firstOrNull() ?: 0
+            _selectedAccountId.value = if (activeId == 0) 1 else activeId
+
+            transactionId?.let { txId ->
+                val transaction = stockDao.getTransactionById(txId).firstOrNull()
                 _transactionToEdit.value = transaction
                 transaction?.let { tx ->
                     _fee.value = tx.fee
                     _tax.value = tx.tax
                     _expense.value = tx.expense
                     _income.value = tx.income
+                    _selectedAccountId.value = tx.accountId
                 }
             }
         }
@@ -321,6 +336,7 @@ class AddTransactionViewModel(
         stock?.let { currentStock ->
             val transaction = StockTransaction(
                 stockCode = currentStock.code,
+                accountId = _selectedAccountId.value,
                 date = date,
                 recordTime = System.currentTimeMillis(),
                 type = type,
@@ -381,6 +397,7 @@ class AddTransactionViewModel(
         _transactionToEdit.value?.let {
             val updatedTransaction = it.copy(
                 stockCode = stockCode,
+                accountId = _selectedAccountId.value,
                 date = date,
                 type = type,
                 buyPrice = if (type == "買進") price else 0.0,

@@ -34,38 +34,94 @@ import com.rsps1008.stockify.ui.viewmodel.TransactionsViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import com.rsps1008.stockify.data.formatMarketAmount
 import com.rsps1008.stockify.data.formatShareCount
+import com.rsps1008.stockify.data.Account
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.foundation.layout.Box
 
 @Composable
 fun TransactionsScreen(navController: NavController) {
     val application = LocalContext.current.applicationContext as StockifyApplication
     val viewModel: TransactionsViewModel = viewModel(
-        factory = ViewModelFactory(application.database.stockDao())
+        factory = ViewModelFactory(
+            stockDao = application.database.stockDao(),
+            settingsDataStore = application.settingsDataStore
+        )
     )
     val transactions by viewModel.transactions.collectAsState()
+    val activeAccountId by viewModel.activeAccountId.collectAsState()
+    val accounts by viewModel.accounts.collectAsState()
 
     val groupedTransactions = transactions.groupBy {
         SimpleDateFormat("yyyy/MM/dd (E)", Locale.getDefault()).format(Date(it.transaction.date))
     }
 
-    Column(
-        modifier = Modifier.padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Image(
-            painter = painterResource(id = R.drawable.stockify),
-            contentDescription = "Stockify Logo",
+    Column(modifier = Modifier.fillMaxSize()) {
+        Box(
             modifier = Modifier
-                .fillMaxWidth(0.35f)
-        )
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(top = 16.dp),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            AccountSwitcherBadge(
+                activeAccountId = activeAccountId,
+                accounts = accounts,
+                onAccountSelected = viewModel::selectAccount,
+                onAddAccount = { name ->
+                    application.database.stockDao().let { dao ->
+                        CoroutineScope(Dispatchers.IO).launch {
+                            dao.insertAccount(Account(name = name))
+                        }
+                    }
+                },
+                onRenameAccount = { account, name ->
+                    application.database.stockDao().let { dao ->
+                        CoroutineScope(Dispatchers.IO).launch {
+                            dao.updateAccount(account.copy(name = name))
+                        }
+                    }
+                },
+                onDeleteAccount = { account ->
+                    application.database.stockDao().let { dao ->
+                        CoroutineScope(Dispatchers.IO).launch {
+                            dao.deleteTransactionsByAccountId(account.id)
+                            dao.deleteAccount(account)
+                            if (activeAccountId == account.id) {
+                                viewModel.selectAccount(0)
+                            }
+                        }
+                    }
+                },
+                modifier = Modifier.align(Alignment.CenterStart)
+            )
+
+            Image(
+                painter = painterResource(id = R.drawable.stockify),
+                contentDescription = "Stockify Logo",
+                modifier = Modifier.fillMaxWidth(0.35f)
+            )
+        }
+
         Spacer(modifier = Modifier.height(6.dp))
-        TransactionsListHeader()
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        ) {
+            TransactionsListHeader()
+        }
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
+                .padding(horizontal = 16.dp)
         ) {
             groupedTransactions.forEach { (date, transactionsOnDate) ->
                 item {
@@ -75,7 +131,7 @@ fun TransactionsScreen(navController: NavController) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .padding(horizontal = 2.dp, vertical = 8.dp)
+                            .padding(horizontal = 8.dp, vertical = 8.dp)
                     )
                 }
                 items(transactionsOnDate) { transaction ->

@@ -18,6 +18,7 @@ import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.UsdTwdExchangeRateService
 import com.rsps1008.stockify.data.CashFlow
 import com.rsps1008.stockify.data.ReturnRateCalculator
+import com.rsps1008.stockify.data.Account
 import com.rsps1008.stockify.ui.screens.HoldingsUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -109,6 +110,26 @@ class HoldingsViewModel(
             initialValue = false
         )
 
+    val activeAccountId: StateFlow<Int> = settingsDataStore.activeAccountIdFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000L),
+            initialValue = 0
+        )
+
+    val accounts: StateFlow<List<Account>> = stockDao.getAllAccountsFlow()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000L),
+            initialValue = emptyList()
+        )
+
+    fun selectAccount(accountId: Int) {
+        viewModelScope.launch {
+            settingsDataStore.setActiveAccountId(accountId)
+        }
+    }
+
     val homeHoldingsSortMode: StateFlow<String> = settingsDataStore.homeHoldingsSortModeFlow
         .stateIn(
             scope = viewModelScope,
@@ -182,8 +203,9 @@ class HoldingsViewModel(
         _historyStateInternal,
         stockDao.getAllTransactions(),
         historyCalculationBundle,
-        uiState
-    ) { historyInternal, allTxs, calculationBundle, holdingsState ->
+        uiState,
+        settingsDataStore.activeAccountIdFlow
+    ) { historyInternal, allTxs, calculationBundle, holdingsState, activeAccountId ->
         if (historyInternal is HomeHistoryStateInternal.Success) {
             val expectedPortfolioKey = buildPortfolioKey(holdingsState, calculationBundle.displayMode)
             if (historyInternal.portfolioKey != expectedPortfolioKey) {
@@ -201,7 +223,13 @@ class HoldingsViewModel(
             val personalPoints = mutableListOf<PersonalHistoryPoint>()
             val selectedStocksByCode = holdingsState.holdings.associateBy { it.stock.code }
 
-            val twTxs = allTxs.filter { tx ->
+            val accountFilteredTxs = if (activeAccountId == 0) {
+                allTxs
+            } else {
+                allTxs.filter { it.accountId == activeAccountId }
+            }
+
+            val twTxs = accountFilteredTxs.filter { tx ->
                 historyInternal.allRawPoints.containsKey(tx.stockCode)
             }
 

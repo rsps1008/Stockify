@@ -82,6 +82,9 @@ interface StockDao {
     @Query("DELETE FROM stock_transactions WHERE 股號 = :stockCode")
     suspend fun deleteTransactionsByStockCode(stockCode: String)
 
+    @Query("DELETE FROM stock_transactions WHERE 帳戶ID = :accountId")
+    suspend fun deleteTransactionsByAccountId(accountId: Int)
+
     @Query("""
     SELECT IFNULL(
         CAST(SUM(
@@ -107,4 +110,25 @@ interface StockDao {
 
     @Query("SELECT * FROM stock_history_prices WHERE stockCode = :stockCode AND date LIKE :monthPrefix || '%' ORDER BY date ASC")
     suspend fun getHistoryPricesForMonth(stockCode: String, monthPrefix: String): List<StockHistoryPrice>
+
+    @Query("SELECT COUNT(*) FROM accounts")
+    suspend fun getAccountCount(): Int
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAccount(account: Account)
+
+    @Update
+    suspend fun updateAccount(account: Account)
+
+    @Delete
+    suspend fun deleteAccount(account: Account)
+
+    @Query("SELECT * FROM accounts ORDER BY id ASC")
+    fun getAllAccountsFlow(): Flow<List<Account>>
+
+    @Query("SELECT * FROM accounts WHERE id = :accountId LIMIT 1")
+    suspend fun getAccountById(accountId: Int): Account?
+
+    @Query("DELETE FROM accounts")
+    suspend fun deleteAllAccounts()
 }

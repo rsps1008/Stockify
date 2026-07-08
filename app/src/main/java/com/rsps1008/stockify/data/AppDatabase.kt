@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
 
-@Database(entities = [Stock::class, StockTransaction::class, StockHistoryPrice::class], version = 9, exportSchema = false)
+@Database(entities = [Stock::class, StockTransaction::class, StockHistoryPrice::class, Account::class], version = 10, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun stockDao(): StockDao
@@ -29,7 +29,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "stock_database"
                 )
                 .addCallback(AppDatabaseCallback(context))
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_8_9) // Add migrations
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_8_9, MIGRATION_9_10) // Add migrations
                 .build()
                 INSTANCE = instance
                 instance
@@ -54,6 +54,9 @@ abstract class AppDatabase : RoomDatabase() {
             INSTANCE?.let { database ->
                 CoroutineScope(Dispatchers.IO).launch {
                     val stockDao = database.stockDao()
+                    if (stockDao.getAccountCount() == 0) {
+                        stockDao.insertAccount(Account(id = 1, name = "預設帳戶"))
+                    }
                     val settingsDataStore = SettingsDataStore(context)
                     val hasManualTwListUpdate = settingsDataStore.lastStockListUpdateTimeFlow.first() != null
 
@@ -156,6 +159,13 @@ abstract class AppDatabase : RoomDatabase() {
         private val MIGRATION_8_9 = object : Migration(8, 9) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("CREATE TABLE IF NOT EXISTS `stock_history_prices` (`stockCode` TEXT NOT NULL, `date` TEXT NOT NULL, `price` REAL NOT NULL, PRIMARY KEY(`stockCode`, `date`))")
+            }
+        }
+
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("CREATE TABLE IF NOT EXISTS `accounts` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL)")
+                database.execSQL("INSERT OR IGNORE INTO `accounts` (id, name) VALUES (1, '預設帳戶')")
             }
         }
     }

@@ -97,6 +97,10 @@ import com.rsps1008.stockify.data.formatMarketAmount
 import com.rsps1008.stockify.data.formatShareCount
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+import com.rsps1008.stockify.data.Account
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 
 @OptIn(ExperimentalFoundationApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -127,6 +131,8 @@ fun HoldingsScreen(navController: NavController) {
     var showUnrealizedHoldings by rememberSaveable { mutableStateOf(true) }
     var showRealizedHoldings by rememberSaveable { mutableStateOf(true) }
     val usdToTwdRate by application.exchangeRateService.usdToTwdRate.collectAsState()
+    val activeAccountId by viewModel.activeAccountId.collectAsState()
+    val accounts by viewModel.accounts.collectAsState()
     val activeHoldings = uiState.holdings.filter { it.shares > 1e-6 }
     var orderedActiveHoldings by remember { mutableStateOf(emptyList<HoldingInfo>()) }
     val unrealizedCount = activeHoldings.size
@@ -236,6 +242,38 @@ fun HoldingsScreen(navController: NavController) {
                 .padding(top = 16.dp),
             contentAlignment = Alignment.TopCenter
         ) {
+            AccountSwitcherBadge(
+                activeAccountId = activeAccountId,
+                accounts = accounts,
+                onAccountSelected = viewModel::selectAccount,
+                onAddAccount = { name ->
+                    application.database.stockDao().let { dao ->
+                        CoroutineScope(Dispatchers.IO).launch {
+                            dao.insertAccount(Account(name = name))
+                        }
+                    }
+                },
+                onRenameAccount = { account, name ->
+                    application.database.stockDao().let { dao ->
+                        CoroutineScope(Dispatchers.IO).launch {
+                            dao.updateAccount(account.copy(name = name))
+                        }
+                    }
+                },
+                onDeleteAccount = { account ->
+                    application.database.stockDao().let { dao ->
+                        CoroutineScope(Dispatchers.IO).launch {
+                            dao.deleteTransactionsByAccountId(account.id)
+                            dao.deleteAccount(account)
+                            if (activeAccountId == account.id) {
+                                viewModel.selectAccount(0)
+                            }
+                        }
+                    }
+                },
+                modifier = Modifier.align(Alignment.CenterStart)
+            )
+
             Image(
                 painter = painterResource(id = R.drawable.stockify),
                 contentDescription = "Stockify Logo",

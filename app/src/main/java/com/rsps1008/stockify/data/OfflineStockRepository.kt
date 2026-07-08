@@ -24,21 +24,31 @@ class OfflineStockRepository(
             settingsDataStore.preDeductSellFeesFlow,
             exchangeRateService.usdToTwdRate,
             settingsDataStore.homeDisplayModeFlow,
-            settingsDataStore.returnRateModeFlow
+            settingsDataStore.returnRateModeFlow,
+            settingsDataStore.activeAccountIdFlow
         ) { values ->
             val stocks = values[0] as List<Stock>
-            val transactions = values[1] as List<StockTransaction>
+            val allTransactions = values[1] as List<StockTransaction>
             val realTimeData = values[2] as Map<String, RealtimeStockInfo>
             val preDeductSellFees = values[3] as Boolean
             val usdToTwdRate = values[4] as Double
             val homeDisplayMode = values[5] as String
             val returnRateMode = values[6] as ReturnRateMode
+            val activeAccountId = values[7] as Int
+
+            val transactions = if (activeAccountId == 0) {
+                allTransactions
+            } else {
+                allTransactions.filter { it.accountId == activeAccountId }
+            }
 
             val mode = HomeDisplayMode.normalize(homeDisplayMode)
             val filteredStocks = when (mode) {
                 HomeDisplayMode.TW -> stocks.filter { StockMarket.isTw(it.market) }
                 HomeDisplayMode.US -> stocks.filter { StockMarket.isUs(it.market) }
                 else -> stocks
+            }.filter { stock ->
+                transactions.any { it.stockCode == stock.code }
             }
             val currentDateMillis = System.currentTimeMillis()
 
