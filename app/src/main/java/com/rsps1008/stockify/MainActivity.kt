@@ -45,11 +45,11 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         val dataStore = (application as StockifyApplication).settingsDataStore
-        lifecycleScope.launch {
-            dataStore.themeFlow.collect { theme ->
-                val mode = when (theme) {
-                    "Light" -> AppCompatDelegate.MODE_NIGHT_NO
-                    "Dark" -> AppCompatDelegate.MODE_NIGHT_YES
+            lifecycleScope.launch {
+                dataStore.themeFlow.collect { theme ->
+                    val mode = when (theme) {
+                        "Light" -> AppCompatDelegate.MODE_NIGHT_NO
+                        "Dark", "AMOLED" -> AppCompatDelegate.MODE_NIGHT_YES
                     else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
                 }
                 if (AppCompatDelegate.getDefaultNightMode() != mode) {
@@ -60,8 +60,12 @@ class MainActivity : AppCompatActivity() {
 
         enableEdgeToEdge()
         setContent {
+            val theme by dataStore.themeFlow.collectAsState(initial = "System")
             val textSizeMode by dataStore.textSizeModeFlow.collectAsState(initial = TextSizeMode.DEFAULT)
-            StockifyTheme(textScale = TextSizeMode.scale(textSizeMode)) {
+            StockifyTheme(
+                amoledTheme = theme == "AMOLED",
+                textScale = TextSizeMode.scale(textSizeMode)
+            ) {
                 MainScreen()
             }
         }

@@ -22,6 +22,15 @@ private val DarkColorScheme = darkColorScheme(
     tertiary = Pink80
 )
 
+private val AmoledColorScheme = darkColorScheme(
+    primary = Purple80,
+    secondary = PurpleGrey80,
+    tertiary = Pink80,
+    background = Color.Black,
+    surface = Color.Black,
+    surfaceVariant = Color(0xFF101010)
+)
+
 private val LightColorScheme = lightColorScheme(
     primary = Purple40,
     secondary = PurpleGrey40,
@@ -57,10 +66,12 @@ object StockifyAppTheme {
 @Composable
 fun StockifyTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    amoledTheme: Boolean = false,
     textScale: Float = 1f,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
+        amoledTheme -> AmoledColorScheme
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)

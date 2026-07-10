@@ -150,7 +150,12 @@ fun SettingsScreen() {
                         Spacer(modifier = Modifier.height(16.dp))
 
                         val themeOptions = remember {
-                            mapOf("System" to "系統預設", "Light" to "淺色", "Dark" to "深色")
+                            mapOf(
+                                "System" to "系統預設",
+                                "Light" to "淺色",
+                                "Dark" to "深色",
+                                "AMOLED" to "AMOLED 全黑"
+                            )
                         }
                         var expanded by remember { mutableStateOf(false) }
 
