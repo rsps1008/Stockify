@@ -207,7 +207,11 @@ class HoldingsViewModel(
         settingsDataStore.activeAccountIdFlow
     ) { historyInternal, allTxs, calculationBundle, holdingsState, activeAccountId ->
         if (historyInternal is HomeHistoryStateInternal.Success) {
-            val expectedPortfolioKey = buildPortfolioKey(holdingsState, calculationBundle.displayMode)
+            val expectedPortfolioKey = buildPortfolioKey(
+                holdingsState,
+                calculationBundle.displayMode,
+                activeAccountId
+            )
             if (historyInternal.portfolioKey != expectedPortfolioKey) {
                 return@combine HistoryState.Loading(0f, "切換歷史資料中...")
             }
@@ -353,10 +357,10 @@ class HoldingsViewModel(
     init {
         viewModelScope.launch {
             var lastPortfolioKey = ""
-            combine(uiState, homeDisplayMode) { state, mode ->
-                buildPortfolioKey(state, mode)
+            combine(uiState, homeDisplayMode, activeAccountId) { state, mode, accountId ->
+                buildPortfolioKey(state, mode, accountId)
             }.collect { portfolioKey ->
-                if (portfolioKey.substringAfter("|").isNotBlank() && portfolioKey != lastPortfolioKey) {
+                if (portfolioKey != lastPortfolioKey) {
                     lastPortfolioKey = portfolioKey
                     fetchPortfolioHistory(selectedHomeHistoryRange.value)
                 }
@@ -378,13 +382,13 @@ class HoldingsViewModel(
             val selectedStocks = uiState.value.holdings
                 .map { it.stock }
                 .filter { StockMarket.isTw(it.market) || StockMarket.isUs(it.market) }
-            val portfolioKey = buildPortfolioKey(uiState.value, homeDisplayMode.value)
+            val portfolioKey = buildPortfolioKey(uiState.value, homeDisplayMode.value, activeAccountId.value)
             if (selectedStocks.isEmpty()) {
                 val mode = HomeDisplayMode.normalize(homeDisplayMode.first())
                 val message = when (mode) {
-                    HomeDisplayMode.US -> "目前沒有持有任何美股部位。"
-                    HomeDisplayMode.COMBINED -> "目前沒有持有任何台股或美股部位。"
-                    else -> "目前沒有持有任何台股部位。"
+                    HomeDisplayMode.US -> "目前沒有美股持股，暫無歷史資料可顯示。"
+                    HomeDisplayMode.COMBINED -> "目前沒有台股或美股持股，暫無歷史資料可顯示。"
+                    else -> "目前沒有台股持股，暫無歷史資料可顯示。"
                 }
                 if (requestVersion == homeHistoryRequestVersion) {
                     _historyStateInternal.value = HomeHistoryStateInternal.Error(message)
@@ -468,12 +472,12 @@ class HoldingsViewModel(
         return HomeHistoryStateInternal.Success(range, portfolioKey, alignedRawPoints, availableRawPoints)
     }
 
-    private fun buildPortfolioKey(state: HoldingsUiState, mode: String): String {
+    private fun buildPortfolioKey(state: HoldingsUiState, mode: String, accountId: Int): String {
         val codes = state.holdings
             .filter { StockMarket.isTw(it.stock.market) || StockMarket.isUs(it.stock.market) }
             .map { "${StockMarket.normalize(it.stock.market)}:${it.stock.code}" }
             .sorted()
-        return "${HomeDisplayMode.normalize(mode)}|${codes.joinToString(",")}"
+        return "$accountId|${HomeDisplayMode.normalize(mode)}|${codes.joinToString(",")}"
     }
 
     private fun calculateHistoricalHoldingStatsAt(

@@ -438,7 +438,7 @@ private fun OtherDataOperationsSection(
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("其他資料操作", style = MaterialTheme.typography.titleLarge)
+            Text("其他資料操作(請警慎操作)", style = MaterialTheme.typography.titleLarge)
             Spacer(modifier = Modifier.height(16.dp))
 
             Button(
@@ -776,7 +776,7 @@ private fun CloudBackupSection(
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("雲端備份", style = MaterialTheme.typography.titleLarge)
+            Text("雲端備份 Google Drive", style = MaterialTheme.typography.titleLarge)
             Spacer(modifier = Modifier.height(12.dp))
 
             if (googleSignInAccount == null) {
@@ -795,14 +795,14 @@ private fun CloudBackupSection(
                         enabled = !isLoading,
                         shape = DataManagementButtonShape
                     ) {
-                        Text("備份全部")
+                        Text("備份至雲端")
                     }
                     Button(
                         onClick = viewModel::restoreFromGoogleDrive,
                         enabled = !isLoading,
                         shape = DataManagementButtonShape
                     ) {
-                        Text("還原全部")
+                        Text("自雲端還原")
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -843,7 +843,7 @@ private fun LocalBackupSection(
             )
 
             Spacer(modifier = Modifier.height(12.dp))
-            Text("帳戶資料", style = MaterialTheme.typography.titleMedium)
+            Text("帳戶資料(帳戶名稱)", style = MaterialTheme.typography.titleMedium)
             BackupButtonRow(
                 backupText = "備份帳戶",
                 restoreText = "還原帳戶",
