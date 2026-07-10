@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
@@ -67,6 +68,7 @@ private data class HistoricalPointCalculationResult(
     val xirrGuessRate: Double?
 )
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class StockDetailViewModel(
     private val stockCode: String,
     private val stockDao: StockDao,
@@ -76,10 +78,17 @@ class StockDetailViewModel(
     private val settingsDataStore: SettingsDataStore
 ) : ViewModel() {
 
-    val holdingInfo: StateFlow<HoldingInfo?> = stockRepository.getHoldingInfo(stockCode)
+    val activeAccountId: StateFlow<Int> = settingsDataStore.activeAccountIdFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 0)
+
+    val holdingInfo: StateFlow<HoldingInfo?> = activeAccountId.flatMapLatest { accountId ->
+        stockRepository.getHoldingInfo(stockCode, accountId)
+    }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
-    val transactions: StateFlow<List<TransactionUiState>> = stockRepository.getTransactionsForStock(stockCode)
+    val transactions: StateFlow<List<TransactionUiState>> = activeAccountId.flatMapLatest { accountId ->
+        stockRepository.getTransactionsForStock(stockCode, accountId)
+    }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
     val realtimeStockInfo = realtimeStockDataService.realtimeStockInfo
@@ -392,7 +401,12 @@ class StockDetailViewModel(
 
     fun onDeleteTransactionsConfirmed() {
         viewModelScope.launch {
-            stockDao.deleteTransactionsByStockCode(stockCode)
+            val accountId = activeAccountId.value
+            if (accountId == 0) {
+                stockDao.deleteTransactionsByStockCode(stockCode)
+            } else {
+                stockDao.deleteTransactionsByStockCodeAndAccountId(stockCode, accountId)
+            }
         }
         _showDeleteConfirmDialog.value = false
     }

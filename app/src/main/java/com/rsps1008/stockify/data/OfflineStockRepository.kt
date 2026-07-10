@@ -133,9 +133,11 @@ class OfflineStockRepository(
         }
     }
 
-    override fun getHoldingInfo(stockCode: String): Flow<HoldingInfo?> {
+    override fun getHoldingInfo(stockCode: String, accountId: Int): Flow<HoldingInfo?> {
         val stockFlow = stockDao.getStockByCodeFlow(stockCode)
-        val transactionsFlow = stockDao.getTransactionsForStock(stockCode)
+        val transactionsFlow = stockDao.getTransactionsForStock(stockCode).map { transactions ->
+            if (accountId == 0) transactions else transactions.filter { it.accountId == accountId }
+        }
 
         return combine(
             stockFlow,
@@ -165,8 +167,12 @@ class OfflineStockRepository(
         }
     }
 
-    override fun getTransactionsForStock(stockCode: String): Flow<List<TransactionUiState>> {
-        return stockDao.getTransactionsForStock(stockCode).combine(stockDao.getStockByCodeFlow(stockCode)) { transactions, stock ->
+    override fun getTransactionsForStock(stockCode: String, accountId: Int): Flow<List<TransactionUiState>> {
+        return stockDao.getTransactionsForStock(stockCode)
+            .map { transactions ->
+                if (accountId == 0) transactions else transactions.filter { it.accountId == accountId }
+            }
+            .combine(stockDao.getStockByCodeFlow(stockCode)) { transactions, stock ->
             transactions.map { transaction ->
                 TransactionUiState(
                     transaction = transaction,

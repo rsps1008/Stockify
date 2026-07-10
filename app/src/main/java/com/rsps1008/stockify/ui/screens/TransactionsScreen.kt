@@ -34,10 +34,6 @@ import com.rsps1008.stockify.ui.viewmodel.TransactionsViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import com.rsps1008.stockify.data.formatMarketAmount
 import com.rsps1008.stockify.data.formatShareCount
-import com.rsps1008.stockify.data.Account
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -53,8 +49,6 @@ fun TransactionsScreen(navController: NavController) {
         )
     )
     val transactions by viewModel.transactions.collectAsState()
-    val activeAccountId by viewModel.activeAccountId.collectAsState()
-    val accounts by viewModel.accounts.collectAsState()
 
     val groupedTransactions = transactions.groupBy {
         SimpleDateFormat("yyyy/MM/dd (E)", Locale.getDefault()).format(Date(it.transaction.date))
@@ -68,38 +62,6 @@ fun TransactionsScreen(navController: NavController) {
                 .padding(top = 16.dp),
             contentAlignment = Alignment.TopCenter
         ) {
-            AccountSwitcherBadge(
-                activeAccountId = activeAccountId,
-                accounts = accounts,
-                onAccountSelected = viewModel::selectAccount,
-                onAddAccount = { name ->
-                    application.database.stockDao().let { dao ->
-                        CoroutineScope(Dispatchers.IO).launch {
-                            dao.insertAccount(Account(name = name))
-                        }
-                    }
-                },
-                onRenameAccount = { account, name ->
-                    application.database.stockDao().let { dao ->
-                        CoroutineScope(Dispatchers.IO).launch {
-                            dao.updateAccount(account.copy(name = name))
-                        }
-                    }
-                },
-                onDeleteAccount = { account ->
-                    application.database.stockDao().let { dao ->
-                        CoroutineScope(Dispatchers.IO).launch {
-                            dao.deleteTransactionsByAccountId(account.id)
-                            dao.deleteAccount(account)
-                            if (activeAccountId == account.id) {
-                                viewModel.selectAccount(0)
-                            }
-                        }
-                    }
-                },
-                modifier = Modifier.align(Alignment.CenterStart)
-            )
-
             Image(
                 painter = painterResource(id = R.drawable.stockify),
                 contentDescription = "Stockify Logo",

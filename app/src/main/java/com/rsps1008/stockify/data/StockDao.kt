@@ -82,6 +82,9 @@ interface StockDao {
     @Query("DELETE FROM stock_transactions WHERE 股號 = :stockCode")
     suspend fun deleteTransactionsByStockCode(stockCode: String)
 
+    @Query("DELETE FROM stock_transactions WHERE 股號 = :stockCode AND 帳戶ID = :accountId")
+    suspend fun deleteTransactionsByStockCodeAndAccountId(stockCode: String, accountId: Int)
+
     @Query("DELETE FROM stock_transactions WHERE 帳戶ID = :accountId")
     suspend fun deleteTransactionsByAccountId(accountId: Int)
 
