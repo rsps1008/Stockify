@@ -320,6 +320,46 @@ class SettingsViewModel(
         }
     }
 
+    fun exportAccounts(uri: Uri) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val accounts = stockDao.getAllAccountsFlow().first()
+                val content = Json.encodeToString(accounts).toByteArray(Charsets.UTF_8)
+                withContext(Dispatchers.IO) {
+                    getApplication<Application>().contentResolver.openOutputStream(uri)?.use {
+                        it.write(content)
+                    }
+                }
+                _message.value = "本地帳戶名稱備份成功"
+            } catch (e: Exception) {
+                _message.value = "本地帳戶名稱備份失敗: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun importAccounts(uri: Uri) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val content = withContext(Dispatchers.IO) {
+                    getApplication<Application>().contentResolver.openInputStream(uri)?.use {
+                        it.readBytes()
+                    }
+                } ?: error("無法讀取檔案")
+                val accounts = Json.decodeFromString<List<Account>>(content.toString(Charsets.UTF_8))
+                accounts.forEach { stockDao.insertAccount(it) }
+                _message.value = "本地帳戶名稱還原成功，共 ${accounts.size} 個帳戶"
+            } catch (e: Exception) {
+                _message.value = "本地帳戶名稱還原失敗: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
     fun exportHoldingsOrder(uri: Uri) {
         viewModelScope.launch {
             _isLoading.value = true

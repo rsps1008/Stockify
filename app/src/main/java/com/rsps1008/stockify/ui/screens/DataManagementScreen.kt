@@ -120,6 +120,16 @@ fun DataManagementScreen() {
         onResult = { uri: Uri? -> uri?.let(viewModel::onImportRequest) }
     )
 
+    val exportAccountsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json"),
+        onResult = { uri: Uri? -> uri?.let(viewModel::exportAccounts) }
+    )
+
+    val importAccountsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri: Uri? -> uri?.let(viewModel::importAccounts) }
+    )
+
     val exportHoldingsOrderLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json"),
         onResult = { uri: Uri? -> uri?.let(viewModel::exportHoldingsOrder) }
@@ -181,6 +191,8 @@ fun DataManagementScreen() {
                     isLoading = isLoading,
                     exportCsvLauncher = exportCsvLauncher,
                     importCsvLauncher = importCsvLauncher,
+                    exportAccountsLauncher = exportAccountsLauncher,
+                    importAccountsLauncher = importAccountsLauncher,
                     isGoogleSignedIn = googleSignInAccount != null,
                     onImportPdfClick = {
                         if (skipPdfImportTutorial) {
@@ -503,6 +515,8 @@ private fun DataManagementSection(
     isLoading: Boolean,
     exportCsvLauncher: ActivityResultLauncher<String>,
     importCsvLauncher: ActivityResultLauncher<String>,
+    exportAccountsLauncher: ActivityResultLauncher<String>,
+    importAccountsLauncher: ActivityResultLauncher<String>,
     isGoogleSignedIn: Boolean,
     onImportPdfClick: () -> Unit
 ) {
@@ -511,7 +525,7 @@ private fun DataManagementSection(
             Text("持股資料管理", style = MaterialTheme.typography.titleLarge)
             Spacer(modifier = Modifier.height(16.dp))
 
-            Text("雲端資料", style = MaterialTheme.typography.titleMedium)
+            Text("雲端資料（包含帳戶名稱）", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -556,6 +570,29 @@ private fun DataManagementSection(
                     shape = DataManagementButtonShape
                 ) {
                     Text("還原本地資料")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        val sdf = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+                        exportAccountsLauncher.launch("stockify_accounts_${sdf.format(Date())}.json")
+                    },
+                    enabled = !isLoading,
+                    shape = DataManagementButtonShape
+                ) {
+                    Text("備份本地帳戶名稱")
+                }
+
+                Button(
+                    onClick = { importAccountsLauncher.launch("application/json") },
+                    enabled = !isLoading,
+                    shape = DataManagementButtonShape
+                ) {
+                    Text("還原本地帳戶名稱")
                 }
             }
 
