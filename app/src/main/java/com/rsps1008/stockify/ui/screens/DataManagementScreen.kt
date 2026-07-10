@@ -28,6 +28,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -57,6 +58,7 @@ import com.google.android.gms.common.api.Scope
 import com.google.api.services.drive.DriveScopes
 import com.rsps1008.stockify.R
 import com.rsps1008.stockify.StockifyApplication
+import com.rsps1008.stockify.data.Account
 import com.rsps1008.stockify.data.PdfStockImportPreview
 import com.rsps1008.stockify.ui.viewmodel.SettingsViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
@@ -94,6 +96,8 @@ fun DataManagementScreen() {
     val skipPdfImportTutorial by viewModel.skipPdfImportTutorial.collectAsState()
     val cloudDataBackupUpdatedAt by viewModel.cloudDataBackupUpdatedAt.collectAsState()
     val cloudOrderBackupUpdatedAt by viewModel.cloudOrderBackupUpdatedAt.collectAsState()
+    val accounts by viewModel.accounts.collectAsState()
+    val activeAccountId by viewModel.activeAccountId.collectAsState()
 
     val context = LocalContext.current
     var showPdfTutorialDialog by remember { mutableStateOf(false) }
@@ -184,7 +188,9 @@ fun DataManagementScreen() {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                GoogleDriveAccountSection(
+                CloudBackupSection(
+                    viewModel = viewModel,
+                    isLoading = isLoading,
                     googleSignInAccount = googleSignInAccount,
                     cloudDataBackupUpdatedAt = cloudDataBackupUpdatedAt,
                     cloudOrderBackupUpdatedAt = cloudOrderBackupUpdatedAt,
@@ -194,14 +200,22 @@ fun DataManagementScreen() {
             }
 
             item {
-                DataManagementSection(
+                LocalBackupSection(
                     viewModel = viewModel,
                     isLoading = isLoading,
                     exportCsvLauncher = exportCsvLauncher,
                     importCsvLauncher = importCsvLauncher,
                     exportAccountsLauncher = exportAccountsLauncher,
                     importAccountsLauncher = importAccountsLauncher,
-                    isGoogleSignedIn = googleSignInAccount != null,
+                    exportHoldingsOrderLauncher = exportHoldingsOrderLauncher,
+                    importHoldingsOrderLauncher = importHoldingsOrderLauncher
+                )
+            }
+
+            item {
+                ExternalImportSection(
+                    viewModel = viewModel,
+                    isLoading = isLoading,
                     onImportPdfClick = {
                         if (skipPdfImportTutorial) {
                             importPdfLauncher.launch("application/pdf")
@@ -214,17 +228,11 @@ fun DataManagementScreen() {
             }
 
             item {
-                HoldingsOrderManagementSection(
+                OtherDataOperationsSection(
                     viewModel = viewModel,
-                    isLoading = isLoading,
-                    exportHoldingsOrderLauncher = exportHoldingsOrderLauncher,
-                    importHoldingsOrderLauncher = importHoldingsOrderLauncher,
-                    isGoogleSignedIn = googleSignInAccount != null
+                    accounts = accounts,
+                    activeAccountId = activeAccountId
                 )
-            }
-
-            item {
-                OtherDataOperationsSection(viewModel = viewModel)
             }
         }
     }
@@ -419,9 +427,12 @@ private fun HoldingsOrderManagementSection(
 
 @Composable
 private fun OtherDataOperationsSection(
-    viewModel: SettingsViewModel
+    viewModel: SettingsViewModel,
+    accounts: List<Account>,
+    activeAccountId: Int
 ) {
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var showDeleteAllDataConfirmDialog by remember { mutableStateOf(false) }
     var showClearCacheConfirmDialog by remember { mutableStateOf(false) }
     var showClearHistoryPricesConfirmDialog by remember { mutableStateOf(false) }
 
@@ -450,6 +461,13 @@ private fun OtherDataOperationsSection(
             ) {
                 Text("刪除全部交易資料")
             }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = { showDeleteAllDataConfirmDialog = true },
+                shape = DataManagementButtonShape
+            ) {
+                Text("刪除全部資料")
+            }
         }
     }
 
@@ -457,17 +475,59 @@ private fun OtherDataOperationsSection(
         AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = false },
             title = { Text("確認刪除") },
-            text = { Text("這會刪除所有交易資料，且無法復原。") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("請選擇要刪除的交易範圍。帳戶資料本身不會被刪除。")
+                    if (accounts.isEmpty()) {
+                        Text("目前沒有帳戶資料。")
+                    } else {
+                        accounts.forEach { account ->
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.deleteAccountTransactionsAndShowToast(account.id, account.name)
+                                    showDeleteConfirmDialog = false
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = DataManagementButtonShape
+                            ) {
+                                val currentLabel = if (account.id == activeAccountId) "目前帳戶" else "帳戶"
+                                Text("刪除${currentLabel}「${account.name}」的交易")
+                            }
+                        }
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteAllDataAndShowToast()
                     showDeleteConfirmDialog = false
                 }) {
-                    Text("刪除")
+                    Text("刪除所有帳戶交易")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    if (showDeleteAllDataConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteAllDataConfirmDialog = false },
+            title = { Text("確認刪除全部資料") },
+            text = { Text("這會刪除所有持股、帳戶與排序資料，也會清除即時價格快取，且無法復原。股票代號清單不會刪除。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteAllUserDataAndShowToast()
+                    showDeleteAllDataConfirmDialog = false
+                }) {
+                    Text("全部刪除")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteAllDataConfirmDialog = false }) {
                     Text("取消")
                 }
             }
@@ -696,6 +756,153 @@ private fun PdfTutorialImage(
                     modifier = Modifier.fillMaxWidth(),
                     contentScale = ContentScale.FillWidth
                 )
+            }
+        }
+    }
+
+}
+
+@Composable
+private fun CloudBackupSection(
+    viewModel: SettingsViewModel,
+    isLoading: Boolean,
+    googleSignInAccount: GoogleSignInAccount?,
+    cloudDataBackupUpdatedAt: Long?,
+    cloudOrderBackupUpdatedAt: Long?,
+    onSignInClick: () -> Unit,
+    onSignOutClick: () -> Unit
+) {
+    val lastBackupAt = listOfNotNull(cloudDataBackupUpdatedAt, cloudOrderBackupUpdatedAt).maxOrNull()
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("雲端備份", style = MaterialTheme.typography.titleLarge)
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (googleSignInAccount == null) {
+                Text("尚未登入 Google Drive")
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(onClick = onSignInClick, shape = DataManagementButtonShape) {
+                    Text("登入 Google")
+                }
+            } else {
+                Text("目前帳號: ${googleSignInAccount.email}")
+                Text("最後備份時間: ${formatBackupTime(lastBackupAt)}")
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = viewModel::backupToGoogleDrive,
+                        enabled = !isLoading,
+                        shape = DataManagementButtonShape
+                    ) {
+                        Text("備份全部")
+                    }
+                    Button(
+                        onClick = viewModel::restoreFromGoogleDrive,
+                        enabled = !isLoading,
+                        shape = DataManagementButtonShape
+                    ) {
+                        Text("還原全部")
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(onClick = onSignOutClick) {
+                    Text("登出")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LocalBackupSection(
+    viewModel: SettingsViewModel,
+    isLoading: Boolean,
+    exportCsvLauncher: ActivityResultLauncher<String>,
+    importCsvLauncher: ActivityResultLauncher<String>,
+    exportAccountsLauncher: ActivityResultLauncher<String>,
+    importAccountsLauncher: ActivityResultLauncher<String>,
+    exportHoldingsOrderLauncher: ActivityResultLauncher<String>,
+    importHoldingsOrderLauncher: ActivityResultLauncher<String>
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("本地備份", style = MaterialTheme.typography.titleLarge)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text("持股資料", style = MaterialTheme.typography.titleMedium)
+            BackupButtonRow(
+                backupText = "備份持股",
+                restoreText = "還原持股",
+                isLoading = isLoading,
+                onBackup = {
+                    val fileName = "stockify_backup_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.csv"
+                    exportCsvLauncher.launch(fileName)
+                },
+                onRestore = { importCsvLauncher.launch("*/*") }
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("帳戶資料", style = MaterialTheme.typography.titleMedium)
+            BackupButtonRow(
+                backupText = "備份帳戶",
+                restoreText = "還原帳戶",
+                isLoading = isLoading,
+                onBackup = {
+                    val fileName = "stockify_accounts_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.json"
+                    exportAccountsLauncher.launch(fileName)
+                },
+                onRestore = { importAccountsLauncher.launch("application/json") }
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("排序資料", style = MaterialTheme.typography.titleMedium)
+            BackupButtonRow(
+                backupText = "備份排序",
+                restoreText = "還原排序",
+                isLoading = isLoading,
+                onBackup = {
+                    val fileName = "stockify_holdings_order_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.json"
+                    exportHoldingsOrderLauncher.launch(fileName)
+                },
+                onRestore = { importHoldingsOrderLauncher.launch("*/*") }
+            )
+        }
+    }
+}
+
+@Composable
+private fun BackupButtonRow(
+    backupText: String,
+    restoreText: String,
+    isLoading: Boolean,
+    onBackup: () -> Unit,
+    onRestore: () -> Unit
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = onBackup, enabled = !isLoading, shape = DataManagementButtonShape) {
+            Text(backupText)
+        }
+        Button(onClick = onRestore, enabled = !isLoading, shape = DataManagementButtonShape) {
+            Text(restoreText)
+        }
+    }
+}
+
+@Composable
+private fun ExternalImportSection(
+    viewModel: SettingsViewModel,
+    isLoading: Boolean,
+    onImportPdfClick: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("外部匯入", style = MaterialTheme.typography.titleLarge)
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("從集保 E 存摺匯入庫存資料")
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = onImportPdfClick, enabled = !isLoading, shape = DataManagementButtonShape) {
+                Text("匯入集保 E 存摺庫存 (PDF)")
             }
         }
     }

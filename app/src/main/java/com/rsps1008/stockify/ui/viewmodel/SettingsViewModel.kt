@@ -85,6 +85,7 @@ class SettingsViewModel(
     private var importData: ByteArray? = null
     private var pdfImportUri: Uri? = null
     private var accountsBackupData: ByteArray? = null
+    private var holdingsOrderBackupData: ByteArray? = null
 
     private val _googleSignInAccount = MutableStateFlow<GoogleSignInAccount?>(null)
     val googleSignInAccount: StateFlow<GoogleSignInAccount?> = _googleSignInAccount.asStateFlow()
@@ -106,6 +107,12 @@ class SettingsViewModel(
 
     private val _pdfImportPreview = MutableStateFlow<PdfStockImportPreview?>(null)
     val pdfImportPreview: StateFlow<PdfStockImportPreview?> = _pdfImportPreview.asStateFlow()
+
+    val accounts: StateFlow<List<Account>> = stockDao.getAllAccountsFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
+    val activeAccountId: StateFlow<Int> = settingsDataStore.activeAccountIdFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 0)
 
     val fetchInterval: StateFlow<Int> = settingsDataStore.fetchIntervalFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 5)
@@ -265,6 +272,17 @@ class SettingsViewModel(
                     val accountsJson = Json.encodeToString(accountsList).toByteArray(Charsets.UTF_8)
                     driveService.uploadBackup("stockify_accounts.json", accountsJson).getOrThrow()
 
+                    val order = settingsDataStore.holdingsOrderFlow.first()
+                    val realizedOrder = settingsDataStore.realizedHoldingsOrderFlow.first()
+                    val orderJson = withContext(Dispatchers.IO) {
+                        holdingsOrderBackupService.exportToBytes(order, realizedOrder)
+                    }
+                    driveService.uploadBackup(
+                        fileName = "stockify_holdings_order.json",
+                        content = orderJson,
+                        mimeType = "application/json"
+                    ).getOrThrow()
+
                     refreshCloudBackupTimes(account)
                     _message.value = "Google 雲端備份成功"
                 } catch (e: Exception) {
@@ -286,9 +304,11 @@ class SettingsViewModel(
                     val driveService = GoogleDriveService(getApplication(), account)
                     val csvContent = driveService.restoreBackup("stockify_backup.csv").getOrThrow()
                     val accountsJson = driveService.restoreBackup("stockify_accounts.json").getOrNull()
+                    val orderJson = driveService.restoreBackup("stockify_holdings_order.json").getOrNull()
 
                     importData = csvContent
                     accountsBackupData = accountsJson
+                    holdingsOrderBackupData = orderJson
                     _showImportConfirmDialog.value = true
                 } catch (e: Exception) {
                     _message.value = "Google 雲端還原失敗: ${e.message}"
@@ -645,6 +665,21 @@ class SettingsViewModel(
         }
     }
 
+    private suspend fun restoreHoldingsOrderIfPresent() {
+        val bytes = holdingsOrderBackupData ?: return
+        try {
+            val backup = withContext(Dispatchers.IO) {
+                holdingsOrderBackupService.import(bytes)
+            }
+            settingsDataStore.setHoldingsOrder(backup.order)
+            settingsDataStore.setRealizedHoldingsOrder(backup.realizedOrder)
+        } catch (e: Exception) {
+            Log.e(TAG, "Restoring holdings order from json failed", e)
+        } finally {
+            holdingsOrderBackupData = null
+        }
+    }
+
     private fun performImportFromUri(uri: Uri, deleteOldData: Boolean) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -661,6 +696,7 @@ class SettingsViewModel(
                 } ?: emptyList()
 
                 processImportedTransactions(csvTransactions)
+                restoreHoldingsOrderIfPresent()
                 
             } catch (e: Exception) {
                 _message.value = "還原失敗: ${e.message}"
@@ -712,6 +748,7 @@ class SettingsViewModel(
                 }
 
                 processImportedTransactions(csvTransactions)
+                restoreHoldingsOrderIfPresent()
 
             } catch (e: Exception) {
                 _message.value = "還原失敗: ${e.message}"
@@ -903,8 +940,28 @@ class SettingsViewModel(
 
     fun deleteAllDataAndShowToast() {
         viewModelScope.launch {
-            deleteAllData()
-            _message.value = "所有交易紀錄已刪除"
+            stockDao.deleteAllTransactions()
+            _message.value = "所有帳戶的交易紀錄已刪除，帳戶資料已保留"
+        }
+    }
+
+    fun deleteAccountTransactionsAndShowToast(accountId: Int, accountName: String) {
+        viewModelScope.launch {
+            stockDao.deleteTransactionsByAccountId(accountId)
+            _message.value = "帳戶「$accountName」的交易紀錄已刪除，帳戶資料已保留"
+        }
+    }
+
+    fun deleteAllUserDataAndShowToast() {
+        viewModelScope.launch {
+            stockDao.deleteAllTransactions()
+            stockDao.deleteAllAccounts()
+            settingsDataStore.setHoldingsOrder(emptyList())
+            settingsDataStore.setRealizedHoldingsOrder(emptyList())
+            settingsDataStore.setActiveAccountId(0)
+            settingsDataStore.clearRealtimeStockInfoCache()
+            twseStockHistoryService?.clearCache()
+            _message.value = "所有持股、帳戶與排序資料已刪除"
         }
     }
 
