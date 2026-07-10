@@ -360,7 +360,9 @@ class HoldingsViewModel(
             combine(uiState, homeDisplayMode, activeAccountId) { state, mode, accountId ->
                 buildPortfolioKey(state, mode, accountId)
             }.collect { portfolioKey ->
-                if (portfolioKey != lastPortfolioKey) {
+                val hasStocks = portfolioKey.substringAfterLast("|").isNotBlank()
+                val shouldLoad = lastPortfolioKey.isNotBlank() || hasStocks
+                if (portfolioKey != lastPortfolioKey && shouldLoad) {
                     lastPortfolioKey = portfolioKey
                     fetchPortfolioHistory(selectedHomeHistoryRange.value)
                 }

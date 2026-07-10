@@ -31,6 +31,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -776,7 +777,17 @@ private fun CloudBackupSection(
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("雲端備份 Google Drive", style = MaterialTheme.typography.titleLarge)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_google_drive),
+                    contentDescription = "Google Drive",
+                    tint = androidx.compose.ui.graphics.Color.Unspecified
+                )
+                Text("雲端備份", style = MaterialTheme.typography.titleLarge)
+            }
             Spacer(modifier = Modifier.height(12.dp))
 
             if (googleSignInAccount == null) {
