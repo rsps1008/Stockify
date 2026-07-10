@@ -1,6 +1,8 @@
 package com.rsps1008.stockify.ui.screens
 
 import android.app.Activity
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -8,6 +10,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -32,13 +35,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -55,6 +61,8 @@ import com.rsps1008.stockify.data.PdfStockImportPreview
 import com.rsps1008.stockify.ui.viewmodel.SettingsViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -667,13 +675,52 @@ private fun PdfTutorialImage(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("步驟 $step", style = MaterialTheme.typography.titleMedium)
-        Image(
-            painter = painterResource(id = resId),
-            contentDescription = "PDF 匯出教學步驟 $step",
-            modifier = Modifier.fillMaxWidth(),
-            contentScale = ContentScale.FillWidth
-        )
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val context = LocalContext.current
+            val density = LocalDensity.current
+            val targetWidthPx = with(density) { maxWidth.roundToPx() }
+            val bitmap by produceState<Bitmap?>(
+                initialValue = null,
+                key1 = resId,
+                key2 = targetWidthPx
+            ) {
+                value = withContext(Dispatchers.IO) {
+                    decodeSampledResource(context.resources, resId, targetWidthPx)
+                }
+            }
+
+            bitmap?.let {
+                Image(
+                    bitmap = it.asImageBitmap(),
+                    contentDescription = "PDF 匯出教學步驟 $step",
+                    modifier = Modifier.fillMaxWidth(),
+                    contentScale = ContentScale.FillWidth
+                )
+            }
+        }
     }
+}
+
+private fun decodeSampledResource(
+    resources: android.content.res.Resources,
+    resId: Int,
+    targetWidthPx: Int
+): Bitmap? {
+    if (targetWidthPx <= 0) return null
+
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeResource(resources, resId, bounds)
+
+    var sampleSize = 1
+    while (bounds.outWidth / (sampleSize * 2) >= targetWidthPx) {
+        sampleSize *= 2
+    }
+
+    return BitmapFactory.decodeResource(
+        resources,
+        resId,
+        BitmapFactory.Options().apply { inSampleSize = sampleSize }
+    )
 }
 
 @Composable

@@ -552,7 +552,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             style = MaterialTheme.typography.bodyLarge,
                             keyboardType = KeyboardType.Decimal
                         )
-                        androidx.compose.material3.Divider()
+                        androidx.compose.material3.HorizontalDivider()
                     }
                 }
             }

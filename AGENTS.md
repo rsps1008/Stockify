@@ -12,7 +12,7 @@
 - 語言：Kotlin
 - UI：Jetpack Compose + Material 3
 - 最低版本：API 26
-- 目前 `compileSdk` / `targetSdk` 為 API 35。
+- 目前 `compileSdk` / `targetSdk` 為 API 36。
 - 架構：以 `data/`、`ui/viewmodel/`、`ui/screens/` 為主的 MVVM 風格分層
 
 這個 App 主要用來管理持股、交易紀錄、即時股價與配息配股資訊，也支援匯入匯出與 Google Drive 備份。
@@ -123,7 +123,9 @@
 - Compose 風格請盡量維持既有 Material 3 介面與目前版面結構
 - 設定頁最底部要顯示目前 App 版本，直接讀 `BuildConfig.VERSION_NAME` 即可。
 - `app` module 需要維持 `buildFeatures.buildConfig = true`，否則設定頁無法直接讀 `BuildConfig.VERSION_NAME`。
-- 目前 AGP 已升到 `8.11.1`，而 `gradle/wrapper/gradle-wrapper.properties` 已是 `8.13`；若之後再升 AGP，先確認官方對應的最低 Gradle 版本。
+- 目前使用 AGP `9.0.1`、Gradle `9.1.0`、Kotlin `2.2.10` 與內建 Kotlin；若之後再升 AGP，先確認官方對應的最低 Gradle 版本。
+- Release build 已啟用 R8（`isMinifyEnabled = true`），並沿用 `proguard-android-optimize.txt` 與 `proguard-rules.pro`；AGP 9 的資源縮減由 R8 整合處理。
+- 目前因 KSP 2.2.10-2.0.2 仍透過舊 Kotlin source-set DSL 註冊產生檔，暫時保留 `android.disallowKotlinSourceSets=false`；Room 已升至 2.7.1 以相容 KSP2，升級到已修正 source-set 整合問題的 KSP 後應移除該旗標。
 - 持股、交易、資料管理、設定這幾個底部分頁的頂部 logo/header 盡量統一成相同的外層 `16.dp` padding 與 `6.dp` 標題間距，避免頁面切換時看起來上下沒有對齊。
 - 設定頁的「外觀」區塊除了主題外，也提供文字大小調整；這個設定會寫入 `SettingsDataStore`，並由 `StockifyTheme` 在 `LocalDensity.fontScale` 統一套用到整個 App。
 - 設定頁的「股票資料來源」與「股票列表更新」要分成兩個獨立區塊，前者只放爬蟲/即時資料來源與相關刷新偏好，後者只放台股與美股股票列表更新操作。
@@ -164,7 +166,7 @@ Windows 指令範例：
 ./gradlew.bat installDebug
 ```
 
-- 如果系統預設 `java -version` 是 `26`，目前這個專案要先切到 JDK 21 再跑 Gradle，例如設定 `JAVA_HOME=C:\Program Files\Java\jdk-21.0.10`。
+- AGP 9 需要 JDK 17 以上；目前專案編譯設定使用 Java/Kotlin 21，例如設定 `JAVA_HOME=C:\Program Files\Java\jdk-21.0.10`。
 
 ## 9. 最近的重要變更
 

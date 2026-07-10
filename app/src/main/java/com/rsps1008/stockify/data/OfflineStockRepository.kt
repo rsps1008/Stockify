@@ -15,6 +15,7 @@ class OfflineStockRepository(
     private val exchangeRateService: UsdTwdExchangeRateService
 ) : StockRepository {
 
+    @Suppress("UNCHECKED_CAST")
     override fun getHoldings(): Flow<HoldingsUiState> {
         // Combine held stocks, all transactions, and real-time data to calculate holdings state
         return combine(

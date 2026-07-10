@@ -620,7 +620,7 @@ fun SettingsScreen() {
                                         singleLine = true,
                                         keyboardOptions = KeyboardOptions(
                                             keyboardType = KeyboardType.Ascii,
-                                            autoCorrectEnabled = false,
+                                            autoCorrect = false,
                                             imeAction = ImeAction.Done
                                         ),
                                         keyboardActions = KeyboardActions(
