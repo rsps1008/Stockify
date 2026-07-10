@@ -13,6 +13,16 @@ object HoldingCalculationSupport {
         return sharesAfter - sharesBefore
     }
 
+    fun splitShareFactor(transaction: StockTransaction): Double {
+        val sharesBefore = transaction.sharesBeforeSplit
+        val sharesAfter = transaction.sharesAfterSplit
+        return when {
+            sharesBefore > 0.0 && sharesAfter > 0.0 -> sharesAfter / sharesBefore
+            transaction.stockSplitRatio > 0.0 -> transaction.stockSplitRatio
+            else -> 1.0
+        }
+    }
+
     /**
      * Applies a capital reduction using recorded counts, with a ratio fallback
      * for data created before the post-reduction count was stored.

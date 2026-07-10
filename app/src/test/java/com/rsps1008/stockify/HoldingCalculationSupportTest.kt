@@ -33,6 +33,22 @@ class HoldingCalculationSupportTest {
         )
 
         assertEquals(9_000.0, HoldingCalculationSupport.splitShareChange(transaction, 1_000.0), 0.0)
+        assertEquals(10.0, HoldingCalculationSupport.splitShareFactor(transaction), 0.0)
+    }
+
+    @Test
+    fun splitShareFactor_prefersRecordedShares() {
+        val transaction = StockTransaction(
+            stockCode = "00685L",
+            date = 0L,
+            recordTime = 0L,
+            type = "分割",
+            stockSplitRatio = 9.0,
+            sharesBeforeSplit = 1_000.0,
+            sharesAfterSplit = 10_000.0
+        )
+
+        assertEquals(10.0, HoldingCalculationSupport.splitShareFactor(transaction), 0.0)
     }
 
     @Test

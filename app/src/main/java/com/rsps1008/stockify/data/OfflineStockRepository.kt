@@ -229,7 +229,12 @@ class OfflineStockRepository(
                     shares += HoldingCalculationSupport.capitalReductionShareChange(it, shares)
                     totalSellIncome += it.cashReturned
                 }
-                "分割" -> shares += HoldingCalculationSupport.splitShareChange(it, shares)
+                "分割" -> {
+                    shares += HoldingCalculationSupport.splitShareChange(it, shares)
+                    val splitFactor = HoldingCalculationSupport.splitShareFactor(it)
+                    buySharesTotal *= splitFactor
+                    sellSharesTotal *= splitFactor
+                }
             }
         }
 

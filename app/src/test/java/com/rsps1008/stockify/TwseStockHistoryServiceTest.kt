@@ -23,6 +23,13 @@ class TwseStockHistoryServiceTest {
         override suspend fun deleteTransaction(transaction: StockTransaction) {}
         override suspend fun deleteAllTransactions() {}
         override suspend fun deleteAllStocks() {}
+        override suspend fun deleteAccount(account: Account) {}
+        override suspend fun deleteAllAccounts() {}
+        override suspend fun getAccountCount(): Int = 0
+        override suspend fun insertAccount(account: Account) {}
+        override suspend fun updateAccount(account: Account) {}
+        override fun getAllAccountsFlow(): Flow<List<Account>> = flowOf(emptyList())
+        override suspend fun getAccountById(accountId: Int): Account? = null
         override fun getAllStocks(): Flow<List<Stock>> = flowOf(emptyList())
         override fun getHeldStocks(): Flow<List<Stock>> = flowOf(emptyList())
         override fun getTransactionsForStock(stockCode: String): Flow<List<StockTransaction>> = flowOf(emptyList())
@@ -40,6 +47,8 @@ class TwseStockHistoryServiceTest {
         override suspend fun getStocksByMarket(market: String): List<Stock> = emptyList()
         override suspend fun deleteStocksByMarket(market: String) {}
         override suspend fun deleteTransactionsByStockCode(stockCode: String) {}
+        override suspend fun deleteTransactionsByStockCodeAndAccountId(stockCode: String, accountId: Int) {}
+        override suspend fun deleteTransactionsByAccountId(accountId: Int) {}
         override suspend fun getHoldingShares(stockCode: String): Double = 0.0
         override suspend fun insertHistoryPrices(prices: List<StockHistoryPrice>) {
             println("DAO insertHistoryPrices: ${prices.size} points")
