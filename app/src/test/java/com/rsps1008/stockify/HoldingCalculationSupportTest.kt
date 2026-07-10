@@ -8,6 +8,49 @@ import org.junit.Test
 class HoldingCalculationSupportTest {
 
     @Test
+    fun splitShareChange_usesRecordedPostSplitSharesForCurrentQuote() {
+        val transaction = StockTransaction(
+            stockCode = "00685L",
+            date = 0L,
+            recordTime = 0L,
+            type = "分割",
+            stockSplitRatio = 10.0,
+            sharesBeforeSplit = 1_000.0,
+            sharesAfterSplit = 10_000.0
+        )
+
+        assertEquals(9_000.0, HoldingCalculationSupport.splitShareChange(transaction, 1_000.0), 0.0)
+    }
+
+    @Test
+    fun splitShareChange_fallsBackToRatioForLegacyImport() {
+        val transaction = StockTransaction(
+            stockCode = "00685L",
+            date = 0L,
+            recordTime = 0L,
+            type = "分割",
+            stockSplitRatio = 10.0
+        )
+
+        assertEquals(9_000.0, HoldingCalculationSupport.splitShareChange(transaction, 1_000.0), 0.0)
+    }
+
+    @Test
+    fun capitalReductionShareChange_usesRecordedPostReductionShares() {
+        val transaction = StockTransaction(
+            stockCode = "0050",
+            date = 0L,
+            recordTime = 0L,
+            type = "減資",
+            capitalReductionRatio = 20.0,
+            sharesBeforeReduction = 1_000.0,
+            sharesAfterReduction = 800.0
+        )
+
+        assertEquals(-200.0, HoldingCalculationSupport.capitalReductionShareChange(transaction, 1_000.0), 0.0)
+    }
+
+    @Test
     fun resolveDividendIncome_fallsBackToLegacyIncomeField() {
         val transaction = StockTransaction(
             stockCode = "0050",

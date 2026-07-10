@@ -256,6 +256,7 @@ Windows 指令範例：
 - 配息交易的成本扣減與 XIRR 現金流都應優先使用 `StockTransaction.dividendIncome`，但若遇到舊資料或匯入資料只有 `income` 有值，需 fallback 讀 `income`，避免三種損益模式對同一筆配息各算各的，此規則亦收斂於 `HoldingCalculationSupport.resolveDividendIncome` 中。
 - 個股歷史圖在逐日回放交易後，若因舊資料或事件順序造成股數短暫小於 `0`，要先 clamp 回 `0` 再算市值與報酬，避免 detail chart 單獨畫出負持股。
 - 首頁歷史總圖若某檔股票本次完全抓不到任何有效歷史價，不能把該檔當成 `price = 0` 累加進總圖；要先從該次 home history 計算排除，避免把整體圖表誤算成大幅虧損。
+- 分割與減資都以事件日記錄的前後股數更新持股，再乘上來源回傳的未還原現價；舊 CSV 若缺少事件後股數，才分別用拆分倍率或減資比例回推。首頁、個股與歷史圖表必須共用這套規則，且同日事件按 `date`、`recordTime` 順序回放。
 
 
 ## 10. 美股擴充備註

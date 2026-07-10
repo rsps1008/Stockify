@@ -117,7 +117,8 @@ class StockDetailViewModel(
         holdingInfo
     ) { historyInternal, txList, settings, holding ->
         if (historyInternal is DetailHistoryStateInternal.Success) {
-            val stockTransactions = txList.map { it.transaction }.sortedBy { it.date }
+            val stockTransactions = txList.map { it.transaction }
+                .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime })
             val firstTxTime = stockTransactions.minOfOrNull { it.date }
             val minFee = settings.minFeeRegular.toDouble()
 
@@ -232,39 +233,6 @@ class StockDetailViewModel(
         }
     }
 
-    private fun adjustTransactionsForSplits(transactions: List<StockTransaction>): List<StockTransaction> {
-        val chronologicallySorted = transactions.sortedBy { it.date }
-        val adjustedTransactions = mutableListOf<StockTransaction>()
-        var splitMultiplier = 1.0
-
-        for (tx in chronologicallySorted.reversed()) {
-            if (tx.type == "分割") {
-                if (tx.stockSplitRatio > 0) {
-                    splitMultiplier *= tx.stockSplitRatio
-                }
-                continue
-            }
-
-            if (splitMultiplier != 1.0) {
-                adjustedTransactions.add(tx.copy(
-                    buyShares = tx.buyShares * splitMultiplier,
-                    buyPrice = tx.buyPrice / splitMultiplier,
-                    sellShares = tx.sellShares * splitMultiplier,
-                    sellPrice = tx.sellPrice / splitMultiplier,
-                    dividendShares = tx.dividendShares * splitMultiplier,
-                    exDividendShares = tx.exDividendShares * splitMultiplier,
-                    exRightsShares = tx.exRightsShares * splitMultiplier,
-                    sharesBeforeReduction = tx.sharesBeforeReduction * splitMultiplier,
-                    sharesAfterReduction = tx.sharesAfterReduction * splitMultiplier
-                ))
-            } else {
-                adjustedTransactions.add(tx)
-            }
-        }
-
-        return adjustedTransactions.reversed()
-    }
-
     private fun calculateHistoricalHoldingAt(
         ptDateStr: String,
         ptPrice: Double,
@@ -279,6 +247,7 @@ class StockDetailViewModel(
         xirrGuessRate: Double?
     ): HistoricalPointCalculationResult {
         val txs = transactions.filter { it.date <= dayEnd }
+            .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime })
 
         var shares = 0.0
         var totalBuyExpense = 0.0
@@ -312,11 +281,11 @@ class StockDetailViewModel(
                     totalDividendIncome += HoldingCalculationSupport.resolveDividendIncome(it)
                 }
                 "減資" -> {
-                    shares += it.sharesAfterReduction - it.sharesBeforeReduction
+                    shares += HoldingCalculationSupport.capitalReductionShareChange(it, shares)
                     totalSellIncome += it.cashReturned
                 }
                 "分割" -> {
-                    shares += it.sharesAfterSplit - it.sharesBeforeSplit
+                    shares += HoldingCalculationSupport.splitShareChange(it, shares)
                 }
             }
         }

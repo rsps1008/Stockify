@@ -476,39 +476,6 @@ class HoldingsViewModel(
         return "${HomeDisplayMode.normalize(mode)}|${codes.joinToString(",")}"
     }
 
-    private fun adjustTransactionsForSplits(txs: List<StockTransaction>): List<StockTransaction> {
-        val chronologicallySorted = txs.sortedBy { it.date }
-        val adjustedTransactions = mutableListOf<StockTransaction>()
-        var splitMultiplier = 1.0
-
-        for (tx in chronologicallySorted.reversed()) {
-            if (tx.type == "分割") {
-                if (tx.stockSplitRatio > 0) {
-                    splitMultiplier *= tx.stockSplitRatio
-                }
-                continue
-            }
-
-            if (splitMultiplier != 1.0) {
-                adjustedTransactions.add(tx.copy(
-                    buyShares = tx.buyShares * splitMultiplier,
-                    buyPrice = tx.buyPrice / splitMultiplier,
-                    sellShares = tx.sellShares * splitMultiplier,
-                    sellPrice = tx.sellPrice / splitMultiplier,
-                    dividendShares = tx.dividendShares * splitMultiplier,
-                    exDividendShares = tx.exDividendShares * splitMultiplier,
-                    exRightsShares = tx.exRightsShares * splitMultiplier,
-                    sharesBeforeReduction = tx.sharesBeforeReduction * splitMultiplier,
-                    sharesAfterReduction = tx.sharesAfterReduction * splitMultiplier
-                ))
-            } else {
-                adjustedTransactions.add(tx)
-            }
-        }
-
-        return adjustedTransactions.reversed()
-    }
-
     private fun calculateHistoricalHoldingStatsAt(
         ptPrice: Double,
         transactions: List<StockTransaction>,
@@ -520,6 +487,7 @@ class HoldingsViewModel(
         dayEnd: Long
     ): HistoricalHoldingStats {
         val txs = transactions.filter { it.date <= dayEnd }
+            .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime })
 
         var shares = 0.0
         var totalBuyExpense = 0.0
@@ -553,11 +521,11 @@ class HoldingsViewModel(
                     totalDividendIncome += HoldingCalculationSupport.resolveDividendIncome(it)
                 }
                 "減資" -> {
-                    shares += it.sharesAfterReduction - it.sharesBeforeReduction
+                    shares += HoldingCalculationSupport.capitalReductionShareChange(it, shares)
                     totalSellIncome += it.cashReturned
                 }
                 "分割" -> {
-                    shares += it.sharesAfterSplit - it.sharesBeforeSplit
+                    shares += HoldingCalculationSupport.splitShareChange(it, shares)
                 }
             }
         }
