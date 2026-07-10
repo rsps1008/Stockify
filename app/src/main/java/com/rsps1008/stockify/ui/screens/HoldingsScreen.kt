@@ -242,38 +242,6 @@ fun HoldingsScreen(navController: NavController) {
                 .padding(top = 16.dp),
             contentAlignment = Alignment.TopCenter
         ) {
-            AccountSwitcherBadge(
-                activeAccountId = activeAccountId,
-                accounts = accounts,
-                onAccountSelected = viewModel::selectAccount,
-                onAddAccount = { name ->
-                    application.database.stockDao().let { dao ->
-                        CoroutineScope(Dispatchers.IO).launch {
-                            dao.insertAccount(Account(name = name))
-                        }
-                    }
-                },
-                onRenameAccount = { account, name ->
-                    application.database.stockDao().let { dao ->
-                        CoroutineScope(Dispatchers.IO).launch {
-                            dao.updateAccount(account.copy(name = name))
-                        }
-                    }
-                },
-                onDeleteAccount = { account ->
-                    application.database.stockDao().let { dao ->
-                        CoroutineScope(Dispatchers.IO).launch {
-                            dao.deleteTransactionsByAccountId(account.id)
-                            dao.deleteAccount(account)
-                            if (activeAccountId == account.id) {
-                                viewModel.selectAccount(0)
-                            }
-                        }
-                    }
-                },
-                modifier = Modifier.align(Alignment.CenterStart)
-            )
-
             Image(
                 painter = painterResource(id = R.drawable.stockify),
                 contentDescription = "Stockify Logo",
@@ -319,7 +287,35 @@ fun HoldingsScreen(navController: NavController) {
                     lastUpdatedText = lastUpdatedText,
                     currentMode = homeDisplayMode,
                     onModeSelected = viewModel::setHomeDisplayMode,
-                    onRefreshClick = viewModel::refreshAllHoldingsQuotes
+                    onRefreshClick = viewModel::refreshAllHoldingsQuotes,
+                    activeAccountId = activeAccountId,
+                    accounts = accounts,
+                    onAccountSelected = viewModel::selectAccount,
+                    onAddAccount = { name ->
+                        application.database.stockDao().let { dao ->
+                            CoroutineScope(Dispatchers.IO).launch {
+                                dao.insertAccount(Account(name = name))
+                            }
+                        }
+                    },
+                    onRenameAccount = { account, name ->
+                        application.database.stockDao().let { dao ->
+                            CoroutineScope(Dispatchers.IO).launch {
+                                dao.updateAccount(account.copy(name = name))
+                            }
+                        }
+                    },
+                    onDeleteAccount = { account ->
+                        application.database.stockDao().let { dao ->
+                            CoroutineScope(Dispatchers.IO).launch {
+                                dao.deleteTransactionsByAccountId(account.id)
+                                dao.deleteAccount(account)
+                                if (activeAccountId == account.id) {
+                                    viewModel.selectAccount(0)
+                                }
+                            }
+                        }
+                    }
                 )
             }
 
@@ -870,7 +866,13 @@ fun SummarySection(
     lastUpdatedText: String,
     currentMode: String,
     onModeSelected: (String) -> Unit,
-    onRefreshClick: () -> Unit
+    onRefreshClick: () -> Unit,
+    activeAccountId: Int,
+    accounts: List<Account>,
+    onAccountSelected: (Int) -> Unit,
+    onAddAccount: (String) -> Unit,
+    onRenameAccount: (Account, String) -> Unit,
+    onDeleteAccount: (Account) -> Unit
 ) {
     var showMarketValue by remember { mutableStateOf(true) }
 
@@ -880,70 +882,86 @@ fun SummarySection(
     val cumulativePlColor =
         if (uiState.cumulativePL >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
     Card(modifier = Modifier.fillMaxWidth()) {
-        Box(Modifier.fillMaxWidth()) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(8.dp)
-                    .clickable { onRefreshClick() }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+                .padding(bottom = 4.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    AnimatedContent(
-                        targetState = lastUpdatedText,
-                        transitionSpec = { fadeIn() togetherWith fadeOut() }
-                    ) { time ->
-                        Text(
-                            text = time,
-                            fontSize = 9.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("累積損益", style = MaterialTheme.typography.bodySmall)
+                        Spacer(modifier = Modifier.padding(horizontal = 4.dp))
+                        Row(
+                            modifier = Modifier
+                                .offset(y = 2.dp)
+                                .clickable { onRefreshClick() },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            AnimatedContent(
+                                targetState = lastUpdatedText,
+                                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                                contentAlignment = Alignment.BottomEnd
+                            ) { time ->
+                                Text(
+                                    text = time,
+                                    fontSize = 9.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            Icon(
+                                imageVector = Icons.Filled.Refresh,
+                                contentDescription = "Refresh quotes",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.height(10.dp)
+                            )
+                        }
                     }
 
-                    Icon(
-                        imageVector = Icons.Filled.Refresh,
-                        contentDescription = "Refresh quotes",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.height(10.dp)
-                    )
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = formatHomeAmount(uiState.cumulativePL, currentMode),
+                            style = MaterialTheme.typography.headlineLarge,
+                            color = cumulativePlColor,
+                            modifier = Modifier.alignByBaseline()
+                        )
+
+                        Spacer(modifier = Modifier.padding(horizontal = 4.dp))
+
+                        Text(
+                            text = String.format("%+.2f%%", uiState.cumulativePLPercentage),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = cumulativePlColor,
+                            modifier = Modifier.alignByBaseline()
+                        )
+                    }
                 }
+
+                AccountSwitcherBadge(
+                    activeAccountId = activeAccountId,
+                    accounts = accounts,
+                    onAccountSelected = onAccountSelected,
+                    onAddAccount = onAddAccount,
+                    onRenameAccount = onRenameAccount,
+                    onDeleteAccount = onDeleteAccount,
+                    modifier = Modifier.offset(y = (-15).dp)
+                )
             }
 
-            Column(
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Row(
                 modifier = Modifier
-                    .padding(16.dp)
-                    .padding(bottom = 4.dp)
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min),
+                verticalAlignment = Alignment.Bottom
             ) {
-                Text("累積損益", style = MaterialTheme.typography.bodySmall)
-
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
-                        text = formatHomeAmount(uiState.cumulativePL, currentMode),
-                        style = MaterialTheme.typography.headlineLarge,
-                        color = cumulativePlColor,
-                        modifier = Modifier.alignByBaseline()
-                    )
-
-                    Spacer(modifier = Modifier.padding(horizontal = 4.dp))
-
-                    Text(
-                        text = String.format("%+.2f%%", uiState.cumulativePLPercentage),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = cumulativePlColor,
-                        modifier = Modifier.alignByBaseline()
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(IntrinsicSize.Min),
-                    verticalAlignment = Alignment.Bottom
-                ) {
                     Column(modifier = Modifier.weight(3f)) {
                         Text("持股日損益", style = MaterialTheme.typography.bodySmall)
                         Text(
@@ -1010,7 +1028,6 @@ fun SummarySection(
                 }
             }
         }
-    }
 }
 
 @Composable
