@@ -197,6 +197,8 @@ Windows 指令範例：
 - 底部功能列目前以 `ShowChart`、`Payments`、`Add`、`CloudSync`、`Settings` 對應持股、交易、快速新增、資料管理與設定入口；若之後更換 icon，請維持這組語意對應，不要只看原始 Material 預設名稱。
 - 首頁與交易紀錄這兩個 bottom tab 的切換轉場目前固定用淡入淡出，避免預設的上下滑動感；若之後調整 `NavGraph`，請保留這個 top-level 切換風格。
 
+- Google Drive 使用 Google API Client 的 `GsonFactory`，Release 開啟 R8 時需要在 `app/proguard-rules.pro` 保留 `com.google.api`、Google Sign-In 與 Gson 反射類別；否則雲端備份/還原的 Drive API 回應可能出現 `unable to create new instance of ... abstract` / `key error`。
+
 - 資料管理頁新增 PDF 庫存匯入，支援使用者手動輸入 PDF 密碼後解密與抽取文字。
 - 資料管理頁已分成「雲端備份」、「本地備份」、「外部匯入」與「其他資料操作」；雲端備份會同步持股交易、帳戶與持股排序，本地備份則分別提供這三類資料的六顆按鈕。
 - 「刪除全部交易資料」現在只刪除交易，可選單一帳戶或所有帳戶，帳戶資料會保留；只有「刪除全部資料」才會一併清除交易、帳戶、持股排序與即時價格快取，股票代號主清單保留。

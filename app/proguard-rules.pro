@@ -35,3 +35,13 @@
 -dontwarn org.ietf.jgss.GSSName
 -dontwarn org.ietf.jgss.Oid
 -dontwarn org.slf4j.impl.StaticLoggerBinder
+
+# Google Drive API models are parsed through Gson reflection at runtime.
+# Keep the generated model hierarchy and Gson metadata when R8 is enabled.
+-keep class com.google.api.** { *; }
+-keep class com.google.android.gms.auth.api.signin.** { *; }
+-keep class com.google.gson.** { *; }
+-keepattributes Signature
+-keepattributes RuntimeVisibleAnnotations
+-keepattributes RuntimeInvisibleAnnotations
+-keepattributes AnnotationDefault
