@@ -1,6 +1,7 @@
 package com.rsps1008.stockify.ui.screens
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -23,6 +24,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.core.tween
 import com.rsps1008.stockify.ui.viewmodel.PersonalHistoryPoint
 import com.rsps1008.stockify.ui.theme.StockifyAppTheme
 import com.rsps1008.stockify.ui.viewmodel.HistoryRange
@@ -103,6 +105,7 @@ fun HistoryChartSectionContent(
     Card(
         modifier = modifier
             .fillMaxWidth()
+            .animateContentSize(animationSpec = tween(durationMillis = 280))
             .padding(
                 top = 8.dp,
                 bottom = 0.dp
