@@ -71,12 +71,20 @@ fun StockifyTheme(
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
-        amoledTheme -> AmoledColorScheme
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            when {
+                amoledTheme -> dynamicDarkColorScheme(context).copy(
+                    background = Color.Black,
+                    surface = Color.Black,
+                    surfaceVariant = Color(0xFF101010)
+                )
+                darkTheme -> dynamicDarkColorScheme(context)
+                else -> dynamicLightColorScheme(context)
+            }
         }
 
+        amoledTheme -> AmoledColorScheme
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
     }

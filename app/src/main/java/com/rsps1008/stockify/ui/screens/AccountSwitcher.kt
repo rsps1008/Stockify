@@ -76,7 +76,7 @@ fun AccountSwitcherBadge(
         modifier = modifier
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
@@ -87,21 +87,21 @@ fun AccountSwitcherBadge(
                     Icons.Default.Wallet
                 },
                 contentDescription = "切換帳戶",
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(14.dp),
                 tint = MaterialTheme.colorScheme.onPrimaryContainer
             )
             Text(
                 text = activeAccountName,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                fontSize = 12.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
             Icon(
                 imageVector = Icons.Default.ArrowDropDown,
                 contentDescription = null,
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(14.dp),
                 tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
             )
         }

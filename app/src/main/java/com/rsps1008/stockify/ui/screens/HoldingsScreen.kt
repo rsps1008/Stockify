@@ -14,6 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -888,11 +889,8 @@ fun SummarySection(
                 .padding(16.dp)
                 .padding(bottom = 4.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.fillMaxWidth()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("累積損益", style = MaterialTheme.typography.bodySmall)
                         Spacer(modifier = Modifier.padding(horizontal = 4.dp))
@@ -950,7 +948,9 @@ fun SummarySection(
                     onAddAccount = onAddAccount,
                     onRenameAccount = onRenameAccount,
                     onDeleteAccount = onDeleteAccount,
-                    modifier = Modifier.offset(y = (-15).dp)
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 4.dp, y = (-18).dp)
                 )
             }
 
