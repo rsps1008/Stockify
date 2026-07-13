@@ -104,6 +104,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     var stockCode by remember { mutableStateOf("") }
     var date by remember { mutableStateOf(System.currentTimeMillis()) }
     var transactionType by remember { mutableStateOf("買進") }
+    var previousTransactionType by remember { mutableStateOf("買進") }
     var price by remember { mutableStateOf("") } // Represents total amount for dividend, price per share for buy/sell
     var shares by remember { mutableStateOf("") } // Represents shares for buy/sell/stock_dividend
     var note by remember { mutableStateOf("") }
@@ -255,8 +256,15 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     // Reset fields when transaction type changes for a new transaction
     LaunchedEffect(transactionType, defaultDividendFeeForStock) {
         if (transactionId == null) { // Only for new transactions
-            price = ""
-            shares = ""
+            val switchingBetweenBuyAndSell =
+                (previousTransactionType == "買進" || previousTransactionType == "賣出") &&
+                    (transactionType == "買進" || transactionType == "賣出") &&
+                    previousTransactionType != transactionType
+
+            if (!switchingBetweenBuyAndSell) {
+                price = ""
+                shares = ""
+            }
             cashDividend = ""
             exDividendShares = ""
             stockDividendRate = ""
@@ -268,6 +276,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             cashReturned = ""
             stockSplitRatio = ""
             sharesBeforeSplit = ""
+            previousTransactionType = transactionType
         }
     }
 

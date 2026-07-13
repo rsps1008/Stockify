@@ -196,6 +196,7 @@ Windows 指令範例：
 - 設定頁可用使用者填入的 Finnhub API key 手動更新美股股票列表；更新時只刪除並重建 Room 內 `market = US` 的股票資料，不會改動台股清單。
 - 底部功能列目前以 `ShowChart`、`Payments`、`Add`、`CloudSync`、`Settings` 對應持股、交易、快速新增、資料管理與設定入口；若之後更換 icon，請維持這組語意對應，不要只看原始 Material 預設名稱。
 - 首頁與交易紀錄這兩個 bottom tab 的切換轉場目前固定用淡入淡出，避免預設的上下滑動感；若之後調整 `NavGraph`，請保留這個 top-level 切換風格。
+- 新增交易頁在新增模式下由「買進」切換到「賣出」或反向切換時，會保留已輸入的價格與股數，避免使用者因交易類型選錯而重打欄位；切換到其他交易類型仍會清除不適用欄位。
 
 - Google Drive 使用 Google API Client 的 `GsonFactory`，Release 開啟 R8 時需要在 `app/proguard-rules.pro` 保留 `com.google.api`、Google Sign-In 與 Gson 反射類別；否則雲端備份/還原的 Drive API 回應可能出現 `unable to create new instance of ... abstract` / `key error`。
 
