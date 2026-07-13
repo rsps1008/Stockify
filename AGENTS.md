@@ -265,6 +265,8 @@ Windows 指令範例：
 - 首頁歷史總圖若某檔股票本次完全抓不到任何有效歷史價，不能把該檔當成 `price = 0` 累加進總圖；要先從該次 home history 計算排除，避免把整體圖表誤算成大幅虧損。
 - 歷史報酬率圖表只有在 0% 接近目前資料範圍時才納入 Y 軸並繪製 0% 基準線，避免高報酬率區間被 0% 拉大比例；報酬率曲線依正負值分段使用漲跌色，穿越 0% 時在交叉點切換顏色。
 - 分割與減資都以事件日記錄的前後股數更新持股，再乘上來源回傳的未還原現價；舊 CSV 若缺少事件後股數，才分別用拆分倍率或減資比例回推。首頁、個股與歷史圖表必須共用這套規則，且同日事件按 `date`、`recordTime` 順序回放。
+- 主畫面外層 `Scaffold` 明確使用 `WindowInsets.safeDrawing`；明細頁與 Yahoo WebView 頁面的 TopAppBar 保持 0 inset，因為它們已位於外層 Scaffold 消費過系統列 inset 的內容區內，避免重複套用間距。
+- `SampledResourceImage` 統一用 `BitmapFactory.Options.inJustDecodeBounds` 與 `inSampleSize` 依顯示寬度載入 Logo；PDF 匯入教學圖片也共用同一套降取樣邏輯，避免完整解碼大型點陣圖。
 
 
 ## 10. 美股擴充備註

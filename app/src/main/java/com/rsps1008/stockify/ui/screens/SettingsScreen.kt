@@ -22,6 +22,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
@@ -45,7 +46,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
@@ -132,8 +132,8 @@ fun SettingsScreen() {
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.stockify),
+        SampledResourceImage(
+            resId = R.drawable.stockify,
             contentDescription = "Stockify Logo",
             modifier = Modifier.fillMaxWidth(0.35f)
         )
@@ -172,7 +172,7 @@ fun SettingsScreen() {
                                 trailingIcon = {
                                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
                                 },
-                                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
                                 colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
                             )
                             ExposedDropdownMenu(
@@ -221,7 +221,7 @@ fun SettingsScreen() {
                                 trailingIcon = {
                                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedTextSize)
                                 },
-                                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
                                 colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
                             )
                             ExposedDropdownMenu(
@@ -326,7 +326,7 @@ fun SettingsScreen() {
                                 trailingIcon = {
                                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedReturnRateMode)
                                 },
-                                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
                                 colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
                             )
                             ExposedDropdownMenu(
@@ -374,7 +374,7 @@ fun SettingsScreen() {
                                 trailingIcon = {
                                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedRoundingMode)
                                 },
-                                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
                                 colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
                             )
                             ExposedDropdownMenu(
@@ -442,7 +442,7 @@ fun SettingsScreen() {
                                 trailingIcon = {
                                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedDataSource)
                                 },
-                                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
                                 colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
                             )
                             ExposedDropdownMenu(
@@ -476,7 +476,7 @@ fun SettingsScreen() {
                                 trailingIcon = {
                                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedUsDataSource)
                                 },
-                                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
                                 colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
                             )
                             ExposedDropdownMenu(
@@ -541,7 +541,7 @@ fun SettingsScreen() {
                                 trailingIcon = {
                                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedInterval)
                                 },
-                                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
                                 colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
                             )
                             ExposedDropdownMenu(
@@ -625,7 +625,7 @@ fun SettingsScreen() {
                                         singleLine = true,
                                         keyboardOptions = KeyboardOptions(
                                             keyboardType = KeyboardType.Ascii,
-                                            autoCorrect = false,
+                                            autoCorrectEnabled = false,
                                             imeAction = ImeAction.Done
                                         ),
                                         keyboardActions = KeyboardActions(

@@ -20,6 +20,9 @@
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
 
+# Disable class/member name obfuscation.
+-dontobfuscate
+
 # Optional classes referenced by PDFBox/Apache HTTP on non-JVM Android paths.
 -dontwarn com.gemalto.jp2.JP2Decoder
 -dontwarn javax.naming.InvalidNameException

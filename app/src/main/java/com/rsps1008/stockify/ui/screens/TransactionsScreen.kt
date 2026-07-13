@@ -21,7 +21,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -62,8 +61,8 @@ fun TransactionsScreen(navController: NavController) {
                 .padding(top = 16.dp),
             contentAlignment = Alignment.TopCenter
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.stockify),
+            SampledResourceImage(
+                resId = R.drawable.stockify,
                 contentDescription = "Stockify Logo",
                 modifier = Modifier.fillMaxWidth(0.35f)
             )

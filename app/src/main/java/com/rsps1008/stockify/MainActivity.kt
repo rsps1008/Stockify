@@ -9,9 +9,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -45,11 +47,11 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         val dataStore = (application as StockifyApplication).settingsDataStore
-            lifecycleScope.launch {
-                dataStore.themeFlow.collect { theme ->
-                    val mode = when (theme) {
-                        "Light" -> AppCompatDelegate.MODE_NIGHT_NO
-                        "Dark", "AMOLED" -> AppCompatDelegate.MODE_NIGHT_YES
+        lifecycleScope.launch {
+            dataStore.themeFlow.collect { theme ->
+                val mode = when (theme) {
+                    "Light" -> AppCompatDelegate.MODE_NIGHT_NO
+                    "Dark", "AMOLED" -> AppCompatDelegate.MODE_NIGHT_YES
                     else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
                 }
                 if (AppCompatDelegate.getDefaultNightMode() != mode) {
@@ -77,6 +79,7 @@ fun MainScreen() {
     val navController = rememberNavController()
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        contentWindowInsets = WindowInsets.safeDrawing,
         bottomBar = {
             BottomAppBar(
                 actions = {

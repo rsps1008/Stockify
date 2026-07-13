@@ -243,8 +243,8 @@ fun HoldingsScreen(navController: NavController) {
                 .padding(top = 16.dp),
             contentAlignment = Alignment.TopCenter
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.stockify),
+            SampledResourceImage(
+                resId = R.drawable.stockify,
                 contentDescription = "Stockify Logo",
                 modifier = Modifier.fillMaxWidth(0.35f)
             )

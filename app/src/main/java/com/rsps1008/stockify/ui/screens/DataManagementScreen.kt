@@ -2,7 +2,6 @@ package com.rsps1008.stockify.ui.screens
 
 import android.app.Activity
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -177,8 +176,8 @@ fun DataManagementScreen() {
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.stockify),
+        SampledResourceImage(
+            resId = R.drawable.stockify,
             contentDescription = "Stockify Logo",
             modifier = Modifier.fillMaxWidth(0.35f)
         )
@@ -917,28 +916,6 @@ private fun ExternalImportSection(
             }
         }
     }
-}
-
-private fun decodeSampledResource(
-    resources: android.content.res.Resources,
-    resId: Int,
-    targetWidthPx: Int
-): Bitmap? {
-    if (targetWidthPx <= 0) return null
-
-    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    BitmapFactory.decodeResource(resources, resId, bounds)
-
-    var sampleSize = 1
-    while (bounds.outWidth / (sampleSize * 2) >= targetWidthPx) {
-        sampleSize *= 2
-    }
-
-    return BitmapFactory.decodeResource(
-        resources,
-        resId,
-        BitmapFactory.Options().apply { inSampleSize = sampleSize }
-    )
 }
 
 @Composable
