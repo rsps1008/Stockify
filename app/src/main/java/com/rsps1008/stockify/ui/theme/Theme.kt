@@ -28,7 +28,7 @@ private val AmoledColorScheme = darkColorScheme(
     tertiary = Pink80,
     background = Color.Black,
     surface = Color.Black,
-    surfaceVariant = Color(0xFF101010)
+    surfaceVariant = Color(0xFF242424)
 )
 
 private val LightColorScheme = lightColorScheme(
@@ -77,7 +77,7 @@ fun StockifyTheme(
                 amoledTheme -> dynamicDarkColorScheme(context).copy(
                     background = Color.Black,
                     surface = Color.Black,
-                    surfaceVariant = Color(0xFF101010)
+                    surfaceVariant = Color(0xFF242424)
                 )
                 darkTheme -> dynamicDarkColorScheme(context)
                 else -> dynamicLightColorScheme(context)
