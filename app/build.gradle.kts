@@ -29,8 +29,8 @@ android {
         applicationId = "com.rsps1008.stockify"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1554
-        versionName = "1.5.5"
+        versionCode = 1560
+        versionName = "1.5.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
