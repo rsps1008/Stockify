@@ -467,14 +467,31 @@ private fun InteractiveLineChart(
     val values = points.map {
         if (selectedMetric == "市值") it.marketValue else it.totalPLPercentage
     }
-    val minVal = values.minOrNull() ?: 0.0
-    val maxVal = values.maxOrNull() ?: 1.0
+    val isPercentage = selectedMetric == "報酬率"
+    val profitValues = points.map { it.totalPLPercentage }
+    val shouldColorByProfitLoss = selectedMetric == "市值" || isPercentage
+    val rawMinVal = values.minOrNull() ?: 0.0
+    val rawMaxVal = values.maxOrNull() ?: 1.0
+    val rawRange = (rawMaxVal - rawMinVal).coerceAtLeast(0.01)
+
+    // Keep the chart readable for large positive/negative returns. Only include
+    // 0% in the visible range when it is reasonably close to the data range.
+    val shouldIncludeZero = isPercentage && when {
+        rawMinVal <= 0.0 && rawMaxVal >= 0.0 -> true
+        rawMinVal > 0.0 -> rawMinVal <= rawRange * 0.5
+        else -> -rawMaxVal <= rawRange * 0.5
+    }
+    val minVal = if (shouldIncludeZero) minOf(rawMinVal, 0.0) else rawMinVal
+    val maxVal = if (shouldIncludeZero) maxOf(rawMaxVal, 0.0) else rawMaxVal
     val valRange = (maxVal - minVal).coerceAtLeast(0.01)
 
     val density = LocalDensity.current
     val topPaddingPx = with(density) { 16.dp.toPx() }
     val bottomPaddingPx = with(density) { 16.dp.toPx() }
     val currencyLabel = if (HomeDisplayMode.normalize(displayMode) == HomeDisplayMode.US) "US$" else "NT$"
+    val gainColor = StockifyAppTheme.stockColors.gain
+    val lossColor = StockifyAppTheme.stockColors.loss
+    val zeroLineColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.42f)
 
     Box(
         modifier = Modifier
@@ -522,6 +539,20 @@ private fun InteractiveLineChart(
                 )
             }
 
+            // Draw a stronger 0% reference line only when it is inside the
+            // selected percentage chart range. This avoids compressing charts
+            // whose returns are, for example, entirely between 100% and 200%.
+            if (isPercentage && shouldIncludeZero) {
+                val zeroY = topPaddingPx + chartHeight * (1.0 - ((0.0 - minVal) / valRange)).toFloat()
+                drawLine(
+                    color = zeroLineColor,
+                    start = Offset(0f, zeroY),
+                    end = Offset(width, zeroY),
+                    strokeWidth = 1.dp.toPx(),
+                    pathEffect = pathEffect
+                )
+            }
+
             // Calculate point positions
             val sizeCount = points.size
             val xStep = width / (sizeCount - 1).coerceAtLeast(1)
@@ -541,35 +572,133 @@ private fun InteractiveLineChart(
                     }
                 }
 
-                val fillPath = Path().apply {
-                    addPath(linePath)
-                    lineTo(width, height)
-                    lineTo(0f, height)
-                    close()
+                if (shouldColorByProfitLoss) {
+                    // Fill each segment with the same gain/loss color as the
+                    // line above it. Splitting crossing segments keeps the
+                    // gradient transition aligned with the 0% crossing point.
+                    for (i in 0 until coordinates.lastIndex) {
+                        val start = coordinates[i]
+                        val end = coordinates[i + 1]
+                        val startValue = profitValues[i]
+                        val endValue = profitValues[i + 1]
+
+                        fun drawSegmentFill(segmentStart: Offset, segmentEnd: Offset, color: Color) {
+                            val segmentFillPath = Path().apply {
+                                moveTo(segmentStart.x, segmentStart.y)
+                                lineTo(segmentEnd.x, segmentEnd.y)
+                                lineTo(segmentEnd.x, height)
+                                lineTo(segmentStart.x, height)
+                                close()
+                            }
+                            drawPath(
+                                path = segmentFillPath,
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(color.copy(alpha = 0.25f), Color.Transparent),
+                                    startY = topPaddingPx,
+                                    endY = height
+                                )
+                            )
+                        }
+
+                        if ((startValue < 0.0 && endValue > 0.0) ||
+                            (startValue > 0.0 && endValue < 0.0)
+                        ) {
+                            val fraction = (0.0 - startValue) / (endValue - startValue)
+                            val zeroPoint = Offset(
+                                x = start.x + (end.x - start.x) * fraction.toFloat(),
+                                y = start.y + (end.y - start.y) * fraction.toFloat()
+                            )
+                            drawSegmentFill(
+                                start,
+                                zeroPoint,
+                                if (startValue >= 0.0) gainColor else lossColor
+                            )
+                            drawSegmentFill(
+                                zeroPoint,
+                                end,
+                                if (endValue >= 0.0) gainColor else lossColor
+                            )
+                        } else {
+                            drawSegmentFill(
+                                start,
+                                end,
+                                if (startValue >= 0.0) gainColor else lossColor
+                            )
+                        }
+                    }
+                } else {
+                    val fillPath = Path().apply {
+                        addPath(linePath)
+                        lineTo(width, height)
+                        lineTo(0f, height)
+                        close()
+                    }
+
+                    drawPath(
+                        path = fillPath,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                lineColor.copy(alpha = 0.25f),
+                                Color.Transparent
+                            ),
+                            startY = topPaddingPx,
+                            endY = height
+                        )
+                    )
                 }
 
-                // Draw Gradient Fill
-                drawPath(
-                    path = fillPath,
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            lineColor.copy(alpha = 0.25f),
-                            Color.Transparent
-                        ),
-                        startY = topPaddingPx,
-                        endY = height
-                    )
-                )
+                // Draw the line in positive/negative segments for returns.
+                // When a segment crosses 0%, split it at the exact crossing
+                // point so the color change happens on the baseline.
+                if (shouldColorByProfitLoss) {
+                    for (i in 0 until coordinates.lastIndex) {
+                        val start = coordinates[i]
+                        val end = coordinates[i + 1]
+                        val startValue = profitValues[i]
+                        val endValue = profitValues[i + 1]
 
-                // Draw Smooth Line Stroke
-                drawPath(
-                    path = linePath,
-                    color = lineColor,
-                    style = Stroke(
-                        width = 2.dp.toPx(),
-                        cap = StrokeCap.Round
+                        if ((startValue < 0.0 && endValue > 0.0) ||
+                            (startValue > 0.0 && endValue < 0.0)
+                        ) {
+                            val fraction = (0.0 - startValue) / (endValue - startValue)
+                            val zeroPoint = Offset(
+                                x = start.x + (end.x - start.x) * fraction.toFloat(),
+                                y = start.y + (end.y - start.y) * fraction.toFloat()
+                            )
+                            drawLine(
+                                color = if (startValue >= 0.0) gainColor else lossColor,
+                                start = start,
+                                end = zeroPoint,
+                                strokeWidth = 2.dp.toPx(),
+                                cap = StrokeCap.Round
+                            )
+                            drawLine(
+                                color = if (endValue >= 0.0) gainColor else lossColor,
+                                start = zeroPoint,
+                                end = end,
+                                strokeWidth = 2.dp.toPx(),
+                                cap = StrokeCap.Round
+                            )
+                        } else {
+                            drawLine(
+                                color = if (startValue >= 0.0) gainColor else lossColor,
+                                start = start,
+                                end = end,
+                                strokeWidth = 2.dp.toPx(),
+                                cap = StrokeCap.Round
+                            )
+                        }
+                    }
+                } else {
+                    drawPath(
+                        path = linePath,
+                        color = lineColor,
+                        style = Stroke(
+                            width = 2.dp.toPx(),
+                            cap = StrokeCap.Round
+                        )
                     )
-                )
+                }
             }
 
             // 3. Draw Interactive Tooltip Guideline and highlights
@@ -600,7 +729,6 @@ private fun InteractiveLineChart(
         }
 
         // 4. Labels Overlay
-        val isPercentage = selectedMetric == "報酬率"
         Column(
             modifier = Modifier
                 .fillMaxHeight()
