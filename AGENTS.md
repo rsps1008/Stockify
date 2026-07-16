@@ -17,6 +17,7 @@
 
 這個 App 主要用來管理持股、交易紀錄、即時股價與配息配股資訊，也支援匯入匯出與 Google Drive 備份。
 - 對外說明文件與網站頁面目前以「韭菜記帳本（Stockify）」呈現，公開標示時優先使用中文名 `韭菜記帳本`。
+- `docs/web/` 的 Web 版專屬指引在 `docs/web/AGENTS.md`；檔案存在時才套用，無法讀取或目錄尚未初始化（例如 submodule 未拉取）時直接忽略。
 
 ## 2. 主要結構
 
@@ -71,6 +72,25 @@
 ### 即時報價抓取
 
 - 主要即時輪詢邏輯在 `app/src/main/java/com/rsps1008/stockify/data/RealtimeStockDataService.kt`。
+- 目前報價與歷史股價 API 端點整理如下，修改 fetcher 時要同步確認參數與 `assetclass`：
+  - 台股即時報價（TWSE）：
+    - 上市：`https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_{code}.tw&json=1&delay=0`
+    - 上櫃：`https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=otc_{code}.tw&json=1&delay=0`
+    - 實作位置：`TwseStockInfoFetcher.kt`；會依上市/上櫃順序嘗試兩個端點。
+  - 台股歷史股價（TWSE）：
+    - `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date={yyyyMMdd}&stockNo={code}`
+    - `{date}` 使用該月份任一天，API 回傳該月資料；實作位置：`TwseStockHistoryService.kt`。
+  - 美股即時報價（Nasdaq）：
+    - 個股：`https://api.nasdaq.com/api/quote/{ticker}/info?assetclass=stocks`
+    - ETF：`https://api.nasdaq.com/api/quote/{ticker}/info?assetclass=etf`
+    - 實作位置：`NasdaqStockInfoFetcher.kt`；一般股票必須使用 `stocks`，ETF 必須使用 `etf`。
+  - 美股歷史股價（Nasdaq）：
+    - 個股：`https://api.nasdaq.com/api/quote/{ticker}/historical?assetclass=stocks&fromdate={yyyy-MM-dd}&todate={yyyy-MM-dd}&limit=400`
+    - ETF：`https://api.nasdaq.com/api/quote/{ticker}/historical?assetclass=etf&fromdate={yyyy-MM-dd}&todate={yyyy-MM-dd}&limit=400`
+    - 實作位置：`TwseStockHistoryService.kt`；美股歷史 API 一次抓取區間，不要套用台股逐月進度文案。
+  - 美股 Yahoo 備援報價：`https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1d&range=1d&includePrePost=false&events=div%2Csplits`
+  - 台股 Yahoo 備援報價頁：`https://tw.stock.yahoo.com/quote/{code}`
+- Nasdaq API 請保留 `Referer: https://www.nasdaq.com/` 與 `Origin: https://www.nasdaq.com` request headers；TWSE 與 Nasdaq 皆須維持既有 transient network retry 與一次 fallback 規則。
 - 這個服務會：
   - 先載入快取資料
   - 檢查是否為開盤時間
