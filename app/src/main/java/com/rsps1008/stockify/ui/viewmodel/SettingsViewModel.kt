@@ -194,13 +194,18 @@ class SettingsViewModel(
         // 在 init 和 handleSignInResult 中
         val driveScope = Scope(DriveScopes.DRIVE_APPDATA)
 
-        if (account != null && GoogleSignIn.hasPermissions(account, driveScope)) {
-            _googleSignInAccount.value = account
-            refreshCloudBackupTimes(account)
-        } else {
-            // 如果登入成功但沒權限，可以發出一個訊息提示使用者要勾選權限
-            _googleSignInAccount.value = null
-            if (account != null) _message.value = "請務必勾選 Google Drive 權限以進行備份"
+        viewModelScope.launch {
+            // Show the last known holdings backup time immediately while Drive is queried.
+            _cloudDataBackupUpdatedAt.value = settingsDataStore.cloudDataBackupUpdatedAtFlow.first()
+
+            if (account != null && GoogleSignIn.hasPermissions(account, driveScope)) {
+                _googleSignInAccount.value = account
+                refreshCloudBackupTimes(account)
+            } else {
+                // 如果登入成功但沒權限，可以發出一個訊息提示使用者要勾選權限
+                _googleSignInAccount.value = null
+                if (account != null) _message.value = "請務必勾選 Google Drive 權限以進行備份"
+            }
         }
     }
 
@@ -243,9 +248,13 @@ class SettingsViewModel(
     private fun refreshCloudBackupTimes(account: GoogleSignInAccount) {
         viewModelScope.launch {
             val driveService = GoogleDriveService(getApplication(), account)
-            _cloudDataBackupUpdatedAt.value = driveService
+            driveService
                 .getBackupModifiedTime("stockify_backup.csv")
                 .getOrNull()
+                ?.let { updatedAt ->
+                    _cloudDataBackupUpdatedAt.value = updatedAt
+                    settingsDataStore.setCloudDataBackupUpdatedAt(updatedAt)
+                }
             _cloudOrderBackupUpdatedAt.value = driveService
                 .getBackupModifiedTime("stockify_holdings_order.json")
                 .getOrNull()
@@ -329,7 +338,7 @@ class SettingsViewModel(
                 withContext(Dispatchers.IO) {
                     getApplication<Application>().contentResolver.openOutputStream(uri)?.use {
                         csvService.export(transactions, it)
-                    }
+                    } ?: error("無法建立備份檔案")
                 }
                 _message.value = "本地備份成功"
             } catch (e: Exception) {
@@ -349,7 +358,7 @@ class SettingsViewModel(
                 withContext(Dispatchers.IO) {
                     getApplication<Application>().contentResolver.openOutputStream(uri)?.use {
                         it.write(content)
-                    }
+                    } ?: error("無法建立帳戶備份檔案")
                 }
                 _message.value = "本地帳戶名稱備份成功"
             } catch (e: Exception) {
@@ -389,7 +398,7 @@ class SettingsViewModel(
                 withContext(Dispatchers.IO) {
                     getApplication<Application>().contentResolver.openOutputStream(uri)?.use {
                         holdingsOrderBackupService.export(order, realizedOrder, it)
-                    }
+                    } ?: error("無法建立排序備份檔案")
                 }
                 _message.value = "持股排序本地備份成功"
             } catch (e: Exception) {

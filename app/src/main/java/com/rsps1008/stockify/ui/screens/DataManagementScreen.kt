@@ -772,7 +772,9 @@ private fun CloudBackupSection(
     onSignInClick: () -> Unit,
     onSignOutClick: () -> Unit
 ) {
-    val lastBackupAt = listOfNotNull(cloudDataBackupUpdatedAt, cloudOrderBackupUpdatedAt).maxOrNull()
+    // The primary backup time is based on the holdings data backup, not the
+    // separately uploaded holdings-order backup.
+    val lastBackupAt = cloudDataBackupUpdatedAt
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {

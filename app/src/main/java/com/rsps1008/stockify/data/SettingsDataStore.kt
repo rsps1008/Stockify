@@ -58,6 +58,7 @@ class SettingsDataStore(val context: Context) {
     private val showTaiwanPortfolioChartKey = booleanPreferencesKey("show_taiwan_portfolio_chart")
     private val homeHistoryChartExpandedKey = booleanPreferencesKey("home_history_chart_expanded")
     private val detailHistoryChartExpandedKey = booleanPreferencesKey("detail_history_chart_expanded")
+    private val cloudDataBackupUpdatedAtKey = longPreferencesKey("cloud_data_backup_updated_at")
 
     val fetchIntervalFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
@@ -266,6 +267,11 @@ class SettingsDataStore(val context: Context) {
     val detailHistoryChartExpandedFlow: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
             preferences[detailHistoryChartExpandedKey] ?: true
+        }
+
+    val cloudDataBackupUpdatedAtFlow: Flow<Long?> = context.dataStore.data
+        .map { preferences ->
+            preferences[cloudDataBackupUpdatedAtKey]
         }
 
     suspend fun setFetchInterval(interval: Int) {
@@ -493,6 +499,12 @@ class SettingsDataStore(val context: Context) {
     suspend fun setDetailHistoryChartExpanded(expanded: Boolean) {
         context.dataStore.edit {
             it[detailHistoryChartExpandedKey] = expanded
+        }
+    }
+
+    suspend fun setCloudDataBackupUpdatedAt(timeMillis: Long) {
+        context.dataStore.edit {
+            it[cloudDataBackupUpdatedAtKey] = timeMillis
         }
     }
 
