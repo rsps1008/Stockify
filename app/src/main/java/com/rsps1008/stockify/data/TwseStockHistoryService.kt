@@ -13,6 +13,10 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.util.Calendar
+import java.time.DayOfWeek
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
 
 @kotlinx.serialization.Serializable
 data class StockHistoryPoint(
@@ -343,12 +347,19 @@ class TwseStockHistoryService(
 
     private fun getLatestChartDateString(market: String): String {
         val timeZone = if (StockMarket.isUs(market)) "America/New_York" else "Asia/Taipei"
-        val calendar = Calendar.getInstance(java.util.TimeZone.getTimeZone(timeZone)).apply {
-            add(Calendar.DAY_OF_MONTH, -1)
+        val now = ZonedDateTime.now(ZoneId.of(timeZone))
+        val marketCloseTime = if (StockMarket.isUs(market)) {
+            LocalTime.of(16, 0)
+        } else {
+            LocalTime.of(13, 30)
         }
-        return java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply {
-            this.timeZone = java.util.TimeZone.getTimeZone(timeZone)
-        }.format(calendar.time)
+        val isWeekday = now.dayOfWeek in DayOfWeek.MONDAY..DayOfWeek.FRIDAY
+        val latestDate = if (isWeekday && !now.toLocalTime().isBefore(marketCloseTime)) {
+            now.toLocalDate()
+        } else {
+            now.toLocalDate().minusDays(1)
+        }
+        return latestDate.toString()
     }
 
     private fun List<StockHistoryPoint>.filterForChart(latestChartDateStr: String): List<StockHistoryPoint> {

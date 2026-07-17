@@ -596,6 +596,7 @@ class HoldingsViewModel(
     fun refreshAllHoldingsQuotes() {
         viewModelScope.launch {
             realtimeStockDataService.refreshAllHeldStockInfo()
+            fetchPortfolioHistory(selectedHomeHistoryRange.value)
         }
     }
 
