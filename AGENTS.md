@@ -210,6 +210,7 @@ Windows 指令範例：
 - 美股走 Nasdaq API 時會依 `stockType` 切換 `assetclass`，`ETF` 使用 `assetclass=etf`，一般股票使用 `assetclass=stocks`。
 - `StockListRepository.readStocks()` 在本機 `stocks.json` decode 失敗時會先刪掉壞檔，再從 asset 重建一次，避免舊快取格式不一致直接讓 App crash。
 - `retryOnTransientNetworkFailure()` 目前會把 `IOException`、`UnknownHostException`、`UnresolvedAddressException`、`ConnectException`、`SocketTimeoutException` 都視為可重試的暫時性網路錯誤，避免 Ktor 連線階段直接把背景抓價打崩。
+- 即時報價的 TLS 憑證驗證錯誤（`SSLHandshakeException` / `CertPathValidatorException`）會在共用 retry 層轉成可辨識的失敗，主來源失敗後仍會使用一次 fallback；雙來源都無法取得資料且其中一個是憑證錯誤時，前景顯示「抓取報價憑證失效」，不會讓報價 coroutine 崩潰。
 - Ktor 依賴版本統一走 `gradle/libs.versions.toml` 的 `ktor` version catalog；不要在 `app/build.gradle.kts` 另外手寫不同版本，避免 CIO/core/content-negotiation 混版。
 - `AddTransactionScreen` 的日期選擇不可用 `selectedDateMillis!!`，Material DatePicker 可能在未選日期時回傳 `null`，確認時應保留原日期或明確處理空值。
 - `scripts/update_stock_list.py` 可直接抓取 TWSE 上市/上櫃清單並輸出成 `app/src/main/assets/stocks.json` 相同格式的 JSON。

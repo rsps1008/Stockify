@@ -7,7 +7,13 @@ import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.nio.channels.UnresolvedAddressException
+import java.security.cert.CertPathValidatorException
+import java.security.cert.CertificateException
 import kotlin.coroutines.cancellation.CancellationException
+import javax.net.ssl.SSLHandshakeException
+
+class CertificateValidationException(cause: Throwable) :
+    IOException("TLS certificate validation failed", cause)
 
 suspend fun <T> retryOnTransientNetworkFailure(
     tag: String,
@@ -24,6 +30,14 @@ suspend fun <T> retryOnTransientNetworkFailure(
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
+            if (e.containsCertificateValidationFailure()) {
+                Log.e(
+                    tag,
+                    "TLS certificate validation failed for $stockCode: ${e.message}",
+                    e
+                )
+                throw CertificateValidationException(e)
+            }
             if (attempt >= maxAttempts) {
                 Log.e(
                     tag,
@@ -38,6 +52,20 @@ suspend fun <T> retryOnTransientNetworkFailure(
                 "Transient network error for $stockCode on attempt $attempt/$maxAttempts: ${e.message}; retrying"
             )
             delay(initialDelayMs * attempt)
+        } catch (e: CertPathValidatorException) {
+            Log.e(
+                tag,
+                "TLS certificate path validation failed for $stockCode: ${e.message}",
+                e
+            )
+            throw CertificateValidationException(e)
+        } catch (e: CertificateException) {
+            Log.e(
+                tag,
+                "TLS certificate validation failed for $stockCode: ${e.message}",
+                e
+            )
+            throw CertificateValidationException(e)
         } catch (e: UnknownHostException) {
             if (attempt >= maxAttempts) {
                 Log.e(
@@ -120,4 +148,18 @@ suspend fun <T> retryOnTransientNetworkFailure(
     }
 
     return null
+}
+
+private fun Throwable.containsCertificateValidationFailure(): Boolean {
+    var current: Throwable? = this
+    while (current != null) {
+        if (current is SSLHandshakeException ||
+            current is CertPathValidatorException ||
+            current is CertificateException
+        ) {
+            return true
+        }
+        current = current.cause
+    }
+    return false
 }

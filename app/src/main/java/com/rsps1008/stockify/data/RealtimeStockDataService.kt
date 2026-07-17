@@ -45,6 +45,7 @@ class RealtimeStockDataService(
     private val scope = CoroutineScope(Dispatchers.IO)
     private var fetchCount = 0
     private var hasNotifiedAboutFallback = false
+    private var hasNotifiedAboutCertificateFailure = false
 
     private val twseFetcher = TwseStockInfoFetcher()
     private val yahooFetcher = YahooStockInfoFetcher()
@@ -88,12 +89,14 @@ class RealtimeStockDataService(
     data class FetchResult(
         val code: String,
         val info: RealtimeStockInfo?,
-        val fallbackUsed: Boolean
+        val fallbackUsed: Boolean,
+        val certificateFailure: Boolean
     )
 
     private data class FetchOutcome(
         val info: RealtimeStockInfo?,
-        val fallbackUsed: Boolean
+        val fallbackUsed: Boolean,
+        val certificateFailure: Boolean = false
     )
 
     private fun getTwFetchers(): Pair<StockInfoFetcher, StockInfoFetcher> {
@@ -181,7 +184,8 @@ class RealtimeStockDataService(
                             FetchResult(
                                 code = stock.code,
                                 info = outcome.info,
-                                fallbackUsed = outcome.fallbackUsed
+                                fallbackUsed = outcome.fallbackUsed,
+                                certificateFailure = outcome.certificateFailure
                             )
                         }
                     }
@@ -191,6 +195,7 @@ class RealtimeStockDataService(
 
         val fallbackCount = results.count { it.fallbackUsed }
         val successCount = results.count { it.info != null }
+        val certificateFailureCount = results.count { it.certificateFailure }
 
         results.forEach { r ->
             r.info?.let { updatedInfos[r.code] = it }
@@ -215,6 +220,11 @@ class RealtimeStockDataService(
                     hasNotifiedAboutFallback = true
                 }
             }
+        }
+
+        if (certificateFailureCount > 0 && !hasNotifiedAboutCertificateFailure) {
+            postQuoteCertificateFailureToast()
+            hasNotifiedAboutCertificateFailure = true
         }
 
         _realtimeStockInfo.value = updatedInfos
@@ -266,6 +276,11 @@ class RealtimeStockDataService(
         val stock = stockDao.getStockByCode(stockCode)
         val market = StockMarket.normalize(stock?.market ?: StockMarket.inferFromCode(stockCode))
         val outcome = fetchStockInfoForMarket(stockCode, market, stock?.stockType.orEmpty())
+
+        if (outcome.certificateFailure && !hasNotifiedAboutCertificateFailure) {
+            postQuoteCertificateFailureToast()
+            hasNotifiedAboutCertificateFailure = true
+        }
 
         outcome.info?.let {
             val updatedInfos = _realtimeStockInfo.value.toMutableMap()
@@ -436,7 +451,18 @@ class RealtimeStockDataService(
         secondaryFetcher: StockInfoFetcher,
         stockType: String = ""
     ): FetchOutcome {
-        val primaryInfo = primaryFetcher.fetchStockInfo(stockCode, stockType)
+        var primaryCertificateFailure = false
+        val primaryInfo = try {
+            primaryFetcher.fetchStockInfo(stockCode, stockType)
+        } catch (e: CertificateValidationException) {
+            primaryCertificateFailure = true
+            Log.e(
+                "RealtimeStockDataService",
+                "Primary source certificate validation failed for $stockCode",
+                e
+            )
+            null
+        }
         if (primaryInfo != null) {
             return FetchOutcome(info = primaryInfo, fallbackUsed = false)
         }
@@ -446,7 +472,18 @@ class RealtimeStockDataService(
             "Primary source failed for $stockCode → fallback to secondary"
         )
 
-        val secondaryInfo = secondaryFetcher.fetchStockInfo(stockCode, stockType)
+        var secondaryCertificateFailure = false
+        val secondaryInfo = try {
+            secondaryFetcher.fetchStockInfo(stockCode, stockType)
+        } catch (e: CertificateValidationException) {
+            secondaryCertificateFailure = true
+            Log.e(
+                "RealtimeStockDataService",
+                "Fallback source certificate validation failed for $stockCode",
+                e
+            )
+            null
+        }
         return if (secondaryInfo != null) {
             Log.d(
                 "RealtimeStockDataService",
@@ -458,7 +495,21 @@ class RealtimeStockDataService(
                 "RealtimeStockDataService",
                 "Fallback also failed for $stockCode → no data"
             )
-            FetchOutcome(info = null, fallbackUsed = true)
+            FetchOutcome(
+                info = null,
+                fallbackUsed = true,
+                certificateFailure = primaryCertificateFailure || secondaryCertificateFailure
+            )
+        }
+    }
+
+    private fun postQuoteCertificateFailureToast() {
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(
+                applicationContext,
+                "抓取報價憑證失效",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
