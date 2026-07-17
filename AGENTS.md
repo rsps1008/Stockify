@@ -193,6 +193,7 @@ Windows 指令範例：
 - 首頁未實現與已實現持股清單都支援長按拖曳排序，使用 `Calvin-LL/Reorderable`；排序 key 使用 `market:code`，未實現保存到 `SettingsDataStore.holdingsOrderFlow`，已實現保存到 `SettingsDataStore.realizedHoldingsOrderFlow`，避免台股與美股代號衝突且兩個區塊排序互不影響。
 - 只要版本仍低於 `1.4.0`，首次進入首頁且 `SettingsDataStore.holdingsReorderHintShownFlow` 尚未標記，就會顯示一次「長按卡片可拖曳排序」提示；達到 `1.4.0` 以上就不再顯示。
 - 資料管理頁最上方有獨立 Google Drive 帳號卡，顯示目前帳號與雲端資料/排序資料最後備份時間；下方主區塊名稱為「持股資料管理」，備份/還原文案分成「雲端資料」與「本地資料」；另有獨立「持股排序管理」區塊，排序備份使用 `stockify_holdings_order*.json`，內容包含未實現 `order` 與已實現 `realizedOrder`，與交易 CSV / Google Drive 交易備份檔分開，Google Drive 固定檔名為 `stockify_holdings_order.json`，且「其他資料操作」維持在頁面最下面。
+- 資料管理頁主區塊的「最後備份時間」固定以 `stockify_backup.csv` 的 Google Drive 修改時間為準，並快取到 `SettingsDataStore`；進入頁面時先顯示本地快取，再於背景更新雲端時間，避免排序備份較晚完成造成時間跳動。
 - 資料管理頁「其他資料操作」提供「清除圖表歷史價格資料」，會刪除 Room 的 `stock_history_prices` 並清掉 `TwseStockHistoryService` 的記憶體 cache；不影響交易資料，下次開啟圖表時會重新下載歷史股價。
 - 本地 CSV 還原提醒目前改成「每次 App 啟動後只顯示一次」：同一次執行裡只要看過一次，後續本地還原不再重複提示；關掉 App 重新開啟後才會再顯示。雲端還原仍不顯示這個提示。
 - `RealtimeStockDataService` 的盤中更新已改成對齊下一個整數秒邊界。

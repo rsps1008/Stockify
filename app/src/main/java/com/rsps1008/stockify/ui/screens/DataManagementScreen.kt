@@ -1,6 +1,7 @@
 package com.rsps1008.stockify.ui.screens
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.graphics.Bitmap
 import android.net.Uri
 import android.widget.Toast
@@ -127,6 +128,11 @@ fun DataManagementScreen() {
         onResult = { uri: Uri? -> uri?.let(viewModel::exportTransactions) }
     )
 
+    val exportCsvFallbackLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("*/*"),
+        onResult = { uri: Uri? -> uri?.let(viewModel::exportTransactions) }
+    )
+
     val importCsvLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri: Uri? -> uri?.let(viewModel::onImportRequest) }
@@ -137,6 +143,11 @@ fun DataManagementScreen() {
         onResult = { uri: Uri? -> uri?.let(viewModel::exportAccounts) }
     )
 
+    val exportAccountsFallbackLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("*/*"),
+        onResult = { uri: Uri? -> uri?.let(viewModel::exportAccounts) }
+    )
+
     val importAccountsLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri: Uri? -> uri?.let(viewModel::importAccounts) }
@@ -144,6 +155,11 @@ fun DataManagementScreen() {
 
     val exportHoldingsOrderLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json"),
+        onResult = { uri: Uri? -> uri?.let(viewModel::exportHoldingsOrder) }
+    )
+
+    val exportHoldingsOrderFallbackLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("*/*"),
         onResult = { uri: Uri? -> uri?.let(viewModel::exportHoldingsOrder) }
     )
 
@@ -161,6 +177,23 @@ fun DataManagementScreen() {
         message?.let {
             Toast.makeText(context, it, Toast.LENGTH_LONG).show()
             viewModel.onMessageShown()
+        }
+    }
+
+    fun launchCreateDocumentSafely(
+        launcher: ActivityResultLauncher<String>,
+        fallbackLauncher: ActivityResultLauncher<String>,
+        fileName: String,
+        directFallback: () -> Unit
+    ) {
+        try {
+            launcher.launch(fileName)
+        } catch (_: ActivityNotFoundException) {
+            try {
+                fallbackLauncher.launch(fileName)
+            } catch (_: ActivityNotFoundException) {
+                directFallback()
+            }
         }
     }
 
@@ -204,11 +237,15 @@ fun DataManagementScreen() {
                     viewModel = viewModel,
                     isLoading = isLoading,
                     exportCsvLauncher = exportCsvLauncher,
+                    exportCsvFallbackLauncher = exportCsvFallbackLauncher,
                     importCsvLauncher = importCsvLauncher,
                     exportAccountsLauncher = exportAccountsLauncher,
+                    exportAccountsFallbackLauncher = exportAccountsFallbackLauncher,
                     importAccountsLauncher = importAccountsLauncher,
                     exportHoldingsOrderLauncher = exportHoldingsOrderLauncher,
-                    importHoldingsOrderLauncher = importHoldingsOrderLauncher
+                    exportHoldingsOrderFallbackLauncher = exportHoldingsOrderFallbackLauncher,
+                    importHoldingsOrderLauncher = importHoldingsOrderLauncher,
+                    launchCreateDocumentSafely = ::launchCreateDocumentSafely
                 )
             }
 
@@ -831,11 +868,15 @@ private fun LocalBackupSection(
     viewModel: SettingsViewModel,
     isLoading: Boolean,
     exportCsvLauncher: ActivityResultLauncher<String>,
+    exportCsvFallbackLauncher: ActivityResultLauncher<String>,
     importCsvLauncher: ActivityResultLauncher<String>,
     exportAccountsLauncher: ActivityResultLauncher<String>,
+    exportAccountsFallbackLauncher: ActivityResultLauncher<String>,
     importAccountsLauncher: ActivityResultLauncher<String>,
     exportHoldingsOrderLauncher: ActivityResultLauncher<String>,
-    importHoldingsOrderLauncher: ActivityResultLauncher<String>
+    exportHoldingsOrderFallbackLauncher: ActivityResultLauncher<String>,
+    importHoldingsOrderLauncher: ActivityResultLauncher<String>,
+    launchCreateDocumentSafely: (ActivityResultLauncher<String>, ActivityResultLauncher<String>, String, () -> Unit) -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -849,7 +890,12 @@ private fun LocalBackupSection(
                 isLoading = isLoading,
                 onBackup = {
                     val fileName = "stockify_backup_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.csv"
-                    exportCsvLauncher.launch(fileName)
+                    launchCreateDocumentSafely(
+                        exportCsvLauncher,
+                        exportCsvFallbackLauncher,
+                        fileName,
+                        viewModel::exportTransactionsToDownloads
+                    )
                 },
                 onRestore = { importCsvLauncher.launch("*/*") }
             )
@@ -862,7 +908,12 @@ private fun LocalBackupSection(
                 isLoading = isLoading,
                 onBackup = {
                     val fileName = "stockify_accounts_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.json"
-                    exportAccountsLauncher.launch(fileName)
+                    launchCreateDocumentSafely(
+                        exportAccountsLauncher,
+                        exportAccountsFallbackLauncher,
+                        fileName,
+                        viewModel::exportAccountsToDownloads
+                    )
                 },
                 onRestore = { importAccountsLauncher.launch("application/json") }
             )
@@ -875,7 +926,12 @@ private fun LocalBackupSection(
                 isLoading = isLoading,
                 onBackup = {
                     val fileName = "stockify_holdings_order_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.json"
-                    exportHoldingsOrderLauncher.launch(fileName)
+                    launchCreateDocumentSafely(
+                        exportHoldingsOrderLauncher,
+                        exportHoldingsOrderFallbackLauncher,
+                        fileName,
+                        viewModel::exportHoldingsOrderToDownloads
+                    )
                 },
                 onRestore = { importHoldingsOrderLauncher.launch("*/*") }
             )

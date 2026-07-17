@@ -1,8 +1,12 @@
 package com.rsps1008.stockify.ui.viewmodel
 
 import android.app.Application
+import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -349,6 +353,30 @@ class SettingsViewModel(
         }
     }
 
+    fun exportTransactionsToDownloads() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val transactions = stockDao.getTransactionsWithStock().first()
+                val content = withContext(Dispatchers.IO) {
+                    ByteArrayOutputStream().use { output ->
+                        csvService.export(transactions, output)
+                        output.toByteArray()
+                    }
+                }
+                val fileName = "stockify_backup_${backupTimestamp()}.csv"
+                withContext(Dispatchers.IO) {
+                    writeToDownloads(fileName, "text/csv", content)
+                }
+                _message.value = "本地備份成功，已儲存至 Download/Stockify/$fileName"
+            } catch (e: Exception) {
+                _message.value = "本地備份失敗: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
     fun exportAccounts(uri: Uri) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -361,6 +389,25 @@ class SettingsViewModel(
                     } ?: error("無法建立帳戶備份檔案")
                 }
                 _message.value = "本地帳戶名稱備份成功"
+            } catch (e: Exception) {
+                _message.value = "本地帳戶名稱備份失敗: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun exportAccountsToDownloads() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val accounts = stockDao.getAllAccountsFlow().first()
+                val content = Json.encodeToString(accounts).toByteArray(Charsets.UTF_8)
+                val fileName = "stockify_accounts_${backupTimestamp()}.json"
+                withContext(Dispatchers.IO) {
+                    writeToDownloads(fileName, "application/json", content)
+                }
+                _message.value = "本地帳戶名稱備份成功，已儲存至 Download/Stockify/$fileName"
             } catch (e: Exception) {
                 _message.value = "本地帳戶名稱備份失敗: ${e.message}"
             } finally {
@@ -406,6 +453,62 @@ class SettingsViewModel(
             } finally {
                 _isLoading.value = false
             }
+        }
+    }
+
+    fun exportHoldingsOrderToDownloads() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val order = settingsDataStore.holdingsOrderFlow.first()
+                val realizedOrder = settingsDataStore.realizedHoldingsOrderFlow.first()
+                val content = withContext(Dispatchers.IO) {
+                    holdingsOrderBackupService.exportToBytes(order, realizedOrder)
+                }
+                val fileName = "stockify_holdings_order_${backupTimestamp()}.json"
+                withContext(Dispatchers.IO) {
+                    writeToDownloads(fileName, "application/json", content)
+                }
+                _message.value = "持股排序本地備份成功，已儲存至 Download/Stockify/$fileName"
+            } catch (e: Exception) {
+                _message.value = "持股排序本地備份失敗: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    private fun backupTimestamp(): String =
+        java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault())
+            .format(java.util.Date())
+
+    private fun writeToDownloads(fileName: String, mimeType: String, content: ByteArray) {
+        check(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            "Android 9 以下需要檔案選擇器才能儲存備份"
+        }
+
+        val resolver = getApplication<Application>().contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+            put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/Stockify")
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            ?: error("無法建立下載資料夾備份檔案")
+
+        try {
+            resolver.openOutputStream(uri)?.use { it.write(content) }
+                ?: error("無法寫入下載資料夾備份檔案")
+            resolver.update(
+                uri,
+                ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) },
+                null,
+                null
+            )
+        } catch (e: Exception) {
+            resolver.delete(uri, null, null)
+            throw e
         }
     }
 
