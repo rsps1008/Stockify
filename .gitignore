@@ -23,5 +23,6 @@ app/src/main/assets/adi-registration.properties
 .idea/deploymentTargetSelector.xml
 
 .idea/
+.kotlin
 
 Stockify-Web/

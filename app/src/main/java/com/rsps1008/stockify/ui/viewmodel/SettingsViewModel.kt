@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.content.ContentUris
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -51,6 +52,12 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import kotlin.math.roundToInt
 
+data class DownloadBackupFile(
+    val uri: Uri,
+    val displayName: String,
+    val modifiedAt: Long
+)
+
 class SettingsViewModel(
     private val stockDao: StockDao,
     private val settingsDataStore: SettingsDataStore,
@@ -84,6 +91,12 @@ class SettingsViewModel(
 
     private val _showLocalCsvRestoreFeeHintDialog = MutableStateFlow(false)
     val showLocalCsvRestoreFeeHintDialog: StateFlow<Boolean> = _showLocalCsvRestoreFeeHintDialog.asStateFlow()
+
+    private val _downloadBackupFiles = MutableStateFlow<List<DownloadBackupFile>>(emptyList())
+    val downloadBackupFiles: StateFlow<List<DownloadBackupFile>> = _downloadBackupFiles.asStateFlow()
+
+    private val _downloadBackupType = MutableStateFlow<String?>(null)
+    val downloadBackupType: StateFlow<String?> = _downloadBackupType.asStateFlow()
 
     private var importUri: Uri? = null
     private var importData: ByteArray? = null
@@ -775,6 +788,71 @@ class SettingsViewModel(
         } finally {
             accountsBackupData = null
         }
+    }
+
+    fun showDownloadBackups(type: String) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            _message.value = "此裝置沒有可用的檔案選擇器，Android 9 以下請安裝檔案管理 App 後再還原"
+            return
+        }
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val prefix = when (type) {
+                    "transactions" -> "stockify_backup_"
+                    "accounts" -> "stockify_accounts_"
+                    "order" -> "stockify_holdings_order_"
+                    else -> error("未知的備份類型")
+                }
+                _downloadBackupFiles.value = withContext(Dispatchers.IO) {
+                    val resolver = getApplication<Application>().contentResolver
+                    val projection = arrayOf(
+                        MediaStore.MediaColumns._ID,
+                        MediaStore.MediaColumns.DISPLAY_NAME,
+                        MediaStore.MediaColumns.DATE_MODIFIED
+                    )
+                    resolver.query(
+                        MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        projection,
+                        "${MediaStore.MediaColumns.RELATIVE_PATH} = ? AND ${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?",
+                        arrayOf("${Environment.DIRECTORY_DOWNLOADS}/Stockify/", "$prefix%"),
+                        "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
+                    )?.use { cursor ->
+                        val idIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+                        val nameIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+                        val modifiedIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
+                        buildList {
+                            while (cursor.moveToNext()) {
+                                add(DownloadBackupFile(
+                                    uri = ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cursor.getLong(idIndex)),
+                                    displayName = cursor.getString(nameIndex),
+                                    modifiedAt = cursor.getLong(modifiedIndex) * 1000L
+                                ))
+                            }
+                        }
+                    }.orEmpty()
+                }
+                _downloadBackupType.value = type
+            } catch (e: Exception) {
+                _message.value = "讀取 Download/Stockify 備份失敗: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun dismissDownloadBackups() {
+        _downloadBackupType.value = null
+        _downloadBackupFiles.value = emptyList()
+    }
+
+    fun restoreDownloadBackup(file: DownloadBackupFile) {
+        when (_downloadBackupType.value) {
+            "transactions" -> onImportRequest(file.uri)
+            "accounts" -> importAccounts(file.uri)
+            "order" -> importHoldingsOrder(file.uri)
+        }
+        dismissDownloadBackups()
     }
 
     private suspend fun restoreHoldingsOrderIfPresent() {

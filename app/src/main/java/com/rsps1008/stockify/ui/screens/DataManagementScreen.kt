@@ -90,6 +90,8 @@ fun DataManagementScreen() {
     val message by viewModel.message.collectAsState()
     val showImportConfirmDialog by viewModel.showImportConfirmDialog.collectAsState()
     val showLocalCsvRestoreFeeHintDialog by viewModel.showLocalCsvRestoreFeeHintDialog.collectAsState()
+    val downloadBackupFiles by viewModel.downloadBackupFiles.collectAsState()
+    val downloadBackupType by viewModel.downloadBackupType.collectAsState()
     val googleSignInAccount by viewModel.googleSignInAccount.collectAsState()
     val showPdfPasswordDialog by viewModel.showPdfPasswordDialog.collectAsState()
     val pdfPassword by viewModel.pdfPassword.collectAsState()
@@ -197,6 +199,18 @@ fun DataManagementScreen() {
         }
     }
 
+    fun launchImportSafely(
+        launcher: ActivityResultLauncher<String>,
+        mimeType: String,
+        backupType: String
+    ) {
+        try {
+            launcher.launch(mimeType)
+        } catch (_: ActivityNotFoundException) {
+            viewModel.showDownloadBackups(backupType)
+        }
+    }
+
     LaunchedEffect(viewModel) {
         viewModel.onSignOut.collectLatest {
             googleSignInClient.signOut().addOnCompleteListener { viewModel.onSignOutComplete() }
@@ -245,7 +259,8 @@ fun DataManagementScreen() {
                     exportHoldingsOrderLauncher = exportHoldingsOrderLauncher,
                     exportHoldingsOrderFallbackLauncher = exportHoldingsOrderFallbackLauncher,
                     importHoldingsOrderLauncher = importHoldingsOrderLauncher,
-                    launchCreateDocumentSafely = ::launchCreateDocumentSafely
+                    launchCreateDocumentSafely = ::launchCreateDocumentSafely,
+                    launchImportSafely = ::launchImportSafely
                 )
             }
 
@@ -313,6 +328,39 @@ fun DataManagementScreen() {
                 TextButton(onClick = viewModel::onLocalCsvRestoreFeeHintCancel) {
                     Text("取消")
                 }
+            }
+        )
+    }
+
+    downloadBackupType?.let { backupType ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissDownloadBackups,
+            title = { Text("選擇 Download/Stockify 備份") },
+            text = {
+                if (downloadBackupFiles.isEmpty()) {
+                    Text("找不到可還原的本地備份。請先用「備份」建立檔案，或安裝檔案管理 App 後選擇其他位置的檔案。")
+                } else {
+                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                        downloadBackupFiles.forEach { file ->
+                            TextButton(
+                                onClick = { viewModel.restoreDownloadBackup(file) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Text(file.displayName)
+                                    Text(
+                                        formatBackupTime(file.modifiedAt),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissDownloadBackups) { Text("關閉") }
             }
         )
     }
@@ -876,7 +924,8 @@ private fun LocalBackupSection(
     exportHoldingsOrderLauncher: ActivityResultLauncher<String>,
     exportHoldingsOrderFallbackLauncher: ActivityResultLauncher<String>,
     importHoldingsOrderLauncher: ActivityResultLauncher<String>,
-    launchCreateDocumentSafely: (ActivityResultLauncher<String>, ActivityResultLauncher<String>, String, () -> Unit) -> Unit
+    launchCreateDocumentSafely: (ActivityResultLauncher<String>, ActivityResultLauncher<String>, String, () -> Unit) -> Unit,
+    launchImportSafely: (ActivityResultLauncher<String>, String, String) -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -897,7 +946,7 @@ private fun LocalBackupSection(
                         viewModel::exportTransactionsToDownloads
                     )
                 },
-                onRestore = { importCsvLauncher.launch("*/*") }
+                onRestore = { launchImportSafely(importCsvLauncher, "*/*", "transactions") }
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -915,7 +964,7 @@ private fun LocalBackupSection(
                         viewModel::exportAccountsToDownloads
                     )
                 },
-                onRestore = { importAccountsLauncher.launch("application/json") }
+                onRestore = { launchImportSafely(importAccountsLauncher, "application/json", "accounts") }
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -933,7 +982,7 @@ private fun LocalBackupSection(
                         viewModel::exportHoldingsOrderToDownloads
                     )
                 },
-                onRestore = { importHoldingsOrderLauncher.launch("*/*") }
+                onRestore = { launchImportSafely(importHoldingsOrderLauncher, "*/*", "order") }
             )
         }
     }
