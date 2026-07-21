@@ -7,15 +7,16 @@
   <meta name="description" content="韭菜記帳本（Stockify）是一款支援台股、美股、即時報價、損益圖表、配息配股與多種備份方式的 Android App。">
   <style>
     :root {
-      color-scheme: light;
-      --bg: #f5efe7;
-      --panel: rgba(255, 251, 246, 0.94);
-      --text: #2e241b;
-      --muted: #6b5f53;
-      --accent: #8b5a2b;
-      --accent-strong: #6d431d;
-      --border: #e7d8c8;
-      --shadow: rgba(53, 36, 20, 0.10);
+      color-scheme: dark;
+      --bg: #061522;
+      --panel: rgba(10, 31, 51, 0.78);
+      --panel-solid: #0b243b;
+      --text: #f2f8ff;
+      --muted: #9db6cc;
+      --accent: #38c9f5;
+      --accent-strong: #83e4ff;
+      --border: rgba(108, 205, 244, 0.18);
+      --shadow: rgba(0, 0, 0, 0.28);
     }
 
     * { box-sizing: border-box; }
@@ -25,29 +26,47 @@
       font-family: "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
       color: var(--text);
       background:
-        radial-gradient(circle at top left, rgba(139, 90, 43, 0.12), transparent 26%),
-        radial-gradient(circle at bottom right, rgba(139, 90, 43, 0.08), transparent 30%),
-        linear-gradient(180deg, #fbf6ef 0%, #f5efe7 100%);
+        radial-gradient(circle at 8% 0%, rgba(24, 166, 222, 0.28), transparent 30%),
+        radial-gradient(circle at 92% 22%, rgba(25, 92, 185, 0.22), transparent 28%),
+        linear-gradient(180deg, #071b2b 0%, var(--bg) 68%, #04101c 100%);
+      min-height: 100vh;
     }
 
     .wrap {
-      width: min(1040px, calc(100% - 32px));
+      width: min(1120px, calc(100% - 32px));
       margin: 0 auto;
-      padding: 28px 0 56px;
+      padding: 24px 0 56px;
     }
 
     .hero,
     .card {
       background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 24px;
-      box-shadow: 0 18px 48px var(--shadow);
+      border-radius: 26px;
+      box-shadow: 0 22px 60px var(--shadow);
       backdrop-filter: blur(10px);
     }
 
     .hero {
-      padding: 36px 32px;
+      position: relative;
+      min-height: 460px;
+      padding: 34px 42px;
       margin-bottom: 20px;
+      overflow: hidden;
+      isolation: isolate;
+      background: linear-gradient(90deg, rgba(5, 22, 37, 0.98) 0%, rgba(5, 22, 37, 0.90) 42%, rgba(5, 22, 37, 0.34) 100%), url("assets/stockify-hero.png") center / cover;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -12% -42% 18%;
+      height: 260px;
+      border-top: 1px solid rgba(75, 220, 255, 0.35);
+      border-radius: 50%;
+      box-shadow: 0 -12px 0 rgba(75, 220, 255, 0.08), 0 -24px 0 rgba(75, 220, 255, 0.05);
+      transform: rotate(-6deg);
+      pointer-events: none;
     }
 
     .eyebrow {
@@ -63,12 +82,23 @@
       margin: 0;
       font-size: clamp(2.2rem, 4.4vw, 4.2rem);
       line-height: 1.04;
+      letter-spacing: -0.04em;
+    }
+
+    .hero-tagline {
+      max-width: 620px;
+      margin: 12px 0 0;
+      color: #e8f7ff;
+      font-size: clamp(1.35rem, 2.6vw, 2.15rem);
+      font-weight: 700;
+      line-height: 1.35;
+      letter-spacing: -0.03em;
     }
 
     .lead {
-      max-width: 720px;
+      max-width: 590px;
       margin: 16px 0 0;
-      color: var(--muted);
+      color: #c7d9e8;
       font-size: 1.05rem;
       line-height: 1.8;
     }
@@ -77,7 +107,9 @@
       display: flex;
       flex-wrap: wrap;
       gap: 12px;
-      margin-top: 24px;
+      margin-top: 28px;
+      position: relative;
+      z-index: 1;
     }
 
     .button,
@@ -91,18 +123,32 @@
       text-decoration: none;
       font-weight: 700;
       transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+      gap: 8px;
     }
 
     .button {
-      color: #fff9f2;
-      background: var(--accent);
-      box-shadow: 0 10px 22px rgba(139, 90, 43, 0.22);
+      color: #031621;
+      background: linear-gradient(135deg, #6ce7ff, #25afd9);
+      box-shadow: 0 10px 26px rgba(25, 191, 236, 0.26);
+    }
+
+    .button-play {
+      color: #052015;
+      background: linear-gradient(135deg, #6ff5a8, #27c978);
+      box-shadow: 0 10px 26px rgba(39, 201, 120, 0.24);
+    }
+
+    .button-github {
+      color: #eaf7ff;
+      background: linear-gradient(135deg, #2679c7, #15509a);
+      box-shadow: 0 10px 26px rgba(21, 80, 154, 0.28);
     }
 
     .button-secondary {
       color: var(--accent-strong);
-      background: rgba(139, 90, 43, 0.10);
-      border: 1px solid rgba(139, 90, 43, 0.14);
+      background: rgba(164, 204, 227, 0.09);
+      border: 1px solid rgba(164, 204, 227, 0.28);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
     }
 
     .button:hover,
@@ -112,17 +158,26 @@
 
     .grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(6, minmax(0, 1fr));
       gap: 20px;
     }
 
     .card {
       padding: 24px;
+      grid-column: span 2;
+      transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+    }
+
+    .card:hover {
+      transform: translateY(-3px);
+      border-color: rgba(108, 226, 255, 0.42);
+      background: rgba(13, 42, 67, 0.9);
     }
 
     h2 {
       margin: 0 0 12px;
       font-size: 1.2rem;
+      color: #e8f7ff;
     }
 
     p {
@@ -142,6 +197,196 @@
 
     a {
       color: var(--accent-strong);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 54px;
+      color: #dff7ff;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+    }
+
+    .brand img {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      box-shadow: 0 0 24px rgba(65, 212, 255, 0.35);
+    }
+
+    .site-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+      padding: 0 6px;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 18px;
+      align-items: center;
+      font-size: 0.92rem;
+    }
+
+    .nav-links a {
+      color: var(--muted);
+      text-decoration: none;
+    }
+
+    .nav-links a:hover { color: var(--accent-strong); }
+
+    .hero-copy {
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      margin: 0 0 16px;
+      padding: 7px 12px;
+      border: 1px solid rgba(108, 226, 255, 0.24);
+      border-radius: 999px;
+      color: #c8f5ff;
+      background: rgba(56, 201, 245, 0.1);
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    .hero-kicker::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #62efa4;
+      box-shadow: 0 0 12px #62efa4;
+    }
+
+    .hero-note {
+      margin-top: 18px;
+      color: #8fb1c9;
+      font-size: 0.88rem;
+    }
+
+    .section-heading {
+      margin: 36px 0 16px;
+    }
+
+    .section-heading .eyebrow { margin-bottom: 7px; }
+
+    .section-heading h2 {
+      margin: 0;
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      letter-spacing: -0.03em;
+    }
+
+    .section-heading p {
+      max-width: 650px;
+      margin-top: 8px;
+      color: var(--muted);
+    }
+
+    .trust-strip {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .trust-item {
+      padding: 16px 18px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: rgba(10, 31, 51, 0.56);
+    }
+
+    .trust-item strong {
+      display: block;
+      color: #e8f7ff;
+      font-size: 1rem;
+    }
+
+    .trust-item span {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .feature-list {
+      display: grid;
+      gap: 10px 22px;
+      padding-left: 0;
+      list-style: none;
+    }
+
+    .feature-list li {
+      position: relative;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      min-width: 0;
+      color: #d9eaf5;
+      line-height: 1;
+    }
+
+    .feature-list li::before {
+      content: "✓";
+      flex: 0 0 auto;
+      color: #62efa4;
+      font-weight: 800;
+    }
+
+    .wide-card {
+      grid-column: span 4;
+    }
+
+    .small-card {
+      grid-column: span 2;
+    }
+
+    .cta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      margin-top: 20px;
+      padding: 28px 30px;
+      border: 1px solid rgba(56, 201, 245, 0.25);
+      border-radius: 24px;
+      background: linear-gradient(120deg, rgba(15, 81, 119, 0.76), rgba(8, 35, 60, 0.78));
+    }
+
+    .cta h2 { margin: 0 0 6px; }
+    .cta p { color: #b8d1e3; }
+
+    .cta .actions { margin-top: 0; flex-shrink: 0; }
+
+    .card-icon {
+      display: grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      margin-bottom: 18px;
+      border: 1px solid rgba(108, 226, 255, 0.22);
+      border-radius: 13px;
+      color: var(--accent);
+      background: rgba(56, 201, 245, 0.1);
+    }
+
+    .card-icon svg {
+      width: 22px;
+      height: 22px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.8;
     }
 
     .footer {
@@ -164,6 +409,8 @@
 
       .hero {
         padding: 24px 18px;
+        min-height: 540px;
+        background-position: 64% center;
       }
 
       .card {
@@ -173,70 +420,121 @@
       .grid {
         grid-template-columns: 1fr;
       }
+
+      .card,
+      .card:nth-child(1),
+      .card:nth-child(2) {
+        grid-column: span 1;
+      }
+
+      .brand {
+        margin-bottom: 80px;
+      }
+
+      .site-nav,
+      .cta {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .nav-links { flex-wrap: wrap; }
+      .trust-strip,
+      .feature-list { grid-template-columns: 1fr; }
+
+      .wide-card,
+      .small-card { grid-column: span 1; }
+
+      .cta .actions { width: 100%; }
     }
   </style>
 </head>
 <body>
   <main class="wrap">
+    <nav class="site-nav" aria-label="網站導覽">
+      <a class="brand" href="./"><img src="assets/stockify-icon.png" alt="韭菜記帳本圖示"><span>STOCKIFY</span></a>
+      <div class="nav-links">
+        <a href="#features">功能</a>
+        <a href="#security">資料安全</a>
+        <a href="privacy-policy/">隱私權政策</a>
+        <a href="https://github.com/rsps1008/Stockify" target="_blank" rel="noreferrer">GitHub ↗</a>
+      </div>
+    </nav>
+
     <section class="hero">
-      <p class="eyebrow">Stock Portfolio Tracker</p>
-      <h1>韭菜記帳本</h1>
-      <p class="lead">
-        韭菜記帳本（Stockify）是一款 Android 持股管理 App，支援台股與美股，用來整理交易紀錄、持股成本、配息配股資訊、即時股價與歷史損益。
-        使用者可以選擇將交易、帳戶與持股排序資料備份到本機或自己的 Google Drive appDataFolder。
-      </p>
-      <div class="actions">
-        <a class="button" href="https://github.com/rsps1008/Stockify" target="_blank" rel="noreferrer">查看專案</a>
-        <a class="button-secondary" href="privacy-policy/">隱私權政策</a>
+      <div class="hero-copy">
+        <p class="hero-kicker">專為投資紀錄打造的 Android App</p>
+        <h1>韭菜記帳本</h1>
+        <p class="hero-tagline">把每一筆投資，整理成看得懂的成果。</p>
+        <p class="lead">
+          韭菜記帳本（Stockify）讓你集中管理台股與美股交易、持股成本、配息配股與投資報酬。
+          從日常記帳到長期檢視，讓投資資料真正成為你的決策工具。
+        </p>
+        <div class="actions">
+          <a class="button button-play" href="https://play.google.com/store/apps/details?id=com.rsps1008.stockify" target="_blank" rel="noreferrer">Google Play 下載 <span aria-hidden="true">↗</span></a>
+          <a class="button button-github" href="https://github.com/rsps1008/Stockify" target="_blank" rel="noreferrer">查看開源專案</a>
+          <a class="button-secondary" href="privacy-policy/">閱讀隱私權政策</a>
+        </div>
+        <p class="hero-note">支援台股・美股・多帳戶・Google Drive 備份</p>
       </div>
     </section>
 
-    <section class="grid">
-      <article class="card">
-        <h2>App 功能</h2>
-        <ul>
-          <li>管理台股與美股的持股、買賣、配息、配股、減資與分割</li>
-          <li>支援多帳戶、即時報價、匯率換算與台股/美股合併檢視</li>
-          <li>提供未實現、已實現、XIRR 與歷史損益圖表</li>
-          <li>支援 CSV、集保 E 存摺 PDF、本地與 Google Drive 備份還原</li>
-        </ul>
-      </article>
-
-      <article class="card">
-        <h2>Google 資料用途</h2>
-        <p>
-          若使用者主動啟用 Google Drive 備份功能，韭菜記帳本（Stockify）只會要求存取 appDataFolder，
-          以便建立或讀取 App 自己的備份檔，不會讀取使用者一般雲端硬碟中的其他檔案。
-        </p>
-      </article>
-
-      <article class="card">
-        <h2>公開資訊</h2>
-        <ul>
-          <li><a href="privacy-policy/">隱私權政策</a></li>
-          <li><a href="https://github.com/rsps1008/Stockify" target="_blank" rel="noreferrer">GitHub Repository</a></li>
-          <li><a href="https://github.com/rsps1008/Stockify/issues" target="_blank" rel="noreferrer">問題回報</a></li>
-        </ul>
-      </article>
-
-      <article class="card">
-        <h2>聯絡與維護</h2>
-        <p>
-          這個頁面提供 Google OAuth 同意畫面與使用者查閱 App 資訊之用。
-          如需了解資料處理方式，請參考隱私權政策頁面。
-        </p>
-      </article>
-
-      <article class="card">
-        <h2>MIT 授權</h2>
-        <p>
-          韭菜記帳本（Stockify）以 <a href="license/">MIT License</a> 發布。
-          您可以自由使用、修改、散布與再發布本專案原始碼，但必須保留原始授權與版權聲明，且本專案不提供任何保證。
-        </p>
-      </article>
+    <section class="trust-strip" aria-label="產品特色摘要">
+      <div class="trust-item"><strong>台股與美股</strong><span>同一個 App 管理不同市場</span></div>
+      <div class="trust-item"><strong>完整投資紀錄</strong><span>買賣、配息、配股、減資與分割</span></div>
+      <div class="trust-item"><strong>資料掌握在你手上</strong><span>本機儲存，備份到自己的雲端</span></div>
     </section>
 
-    <p class="footer">Last updated: 2026-07-15</p>
+    <section id="features">
+      <div class="section-heading">
+        <p class="eyebrow">Everything in one place</p>
+        <h2>投資管理，從記帳到分析一次完成</h2>
+        <p>不只記下買了什麼，也幫你看見成本、報酬與持股變化。</p>
+      </div>
+
+      <div class="grid">
+        <article class="card wide-card">
+          <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M7 15l3-4 3 2 5-7"/><path d="M15 6h3v3"/></svg></div>
+          <h2>清楚掌握持股與損益</h2>
+          <ul class="feature-list">
+            <li>未實現、已實現損益清楚分開</li>
+            <li>成本均價、市值、報酬率一目了然</li>
+            <li>支援剩餘部位、歷來投入與 XIRR的投資報酬率計算</li>
+            <li>歷史圖表追蹤投資成果</li>
+          </ul>
+        </article>
+
+        <article class="card small-card">
+          <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5z"/><path d="M8 9h8M8 13h5"/></svg></div>
+          <h2>快速記錄每筆交易</h2>
+          <p>買進、賣出、配息、配股、減資與分割，都能保留完整脈絡。</p>
+        </article>
+
+        <article class="card small-card">
+          <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></svg></div>
+          <h2>即時行情與匯率</h2>
+          <p>依市場取得股價與 USD/TWD 匯率，讓總資產檢視更貼近當下。</p>
+        </article>
+
+        <article class="card wide-card">
+          <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 18.5A3.5 3.5 0 0 1 8.5 15H19"/><path d="M8 15V6.5A2.5 2.5 0 0 1 10.5 4H19v14.5A1.5 1.5 0 0 1 17.5 20h-9A3.5 3.5 0 0 1 5 16.5v-1"/></svg></div>
+          <h2>資料匯入、匯出與備份</h2>
+          <p>支援 CSV、集保 E 存摺 PDF、本機備份與 Google Drive appDataFolder。換裝置或整理資料時，保留你的投資紀錄與持股排序。</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="security" class="cta">
+      <div>
+        <p class="eyebrow">Private by design</p>
+        <h2>你的投資資料，應該由你掌握。</h2>
+        <p>交易資料預設儲存在裝置本機；啟用 Google Drive 時，也只使用你自己的備份空間。</p>
+      </div>
+      <div class="actions">
+        <a class="button-secondary" href="privacy-policy/">查看完整隱私政策</a>
+      </div>
+    </section>
+
+    <p class="footer">韭菜記帳本（Stockify）・Open source on GitHub・Last updated: 2026-07-15</p>
   </main>
 </body>
 </html>

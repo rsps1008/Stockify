@@ -7,13 +7,14 @@
   <meta name="description" content="韭菜記帳本（Stockify）隱私政策">
   <style>
     :root {
-      color-scheme: light;
-      --bg: #f4efe6;
-      --panel: #fffaf2;
-      --text: #2f2519;
-      --muted: #6f6256;
-      --accent: #8b5e34;
-      --border: #e6d7c8;
+      color-scheme: dark;
+      --bg: #061522;
+      --panel: rgba(10, 31, 51, 0.82);
+      --text: #f2f8ff;
+      --muted: #9db6cc;
+      --accent: #38c9f5;
+      --accent-strong: #83e4ff;
+      --border: rgba(108, 205, 244, 0.18);
     }
 
     * { box-sizing: border-box; }
@@ -22,9 +23,9 @@
       margin: 0;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background:
-        radial-gradient(circle at top left, rgba(139, 94, 52, 0.10), transparent 28%),
-        radial-gradient(circle at top right, rgba(139, 94, 52, 0.08), transparent 22%),
-        var(--bg);
+        radial-gradient(circle at 8% 0%, rgba(24, 166, 222, 0.28), transparent 30%),
+        radial-gradient(circle at 92% 22%, rgba(25, 92, 185, 0.22), transparent 28%),
+        linear-gradient(180deg, #071b2b 0%, var(--bg) 68%, #04101c 100%);
       color: var(--text);
       line-height: 1.7;
     }
@@ -32,16 +33,46 @@
     main {
       max-width: 920px;
       margin: 0 auto;
-      padding: 40px 20px 64px;
+      padding: 24px 20px 64px;
     }
 
     .card {
-      background: rgba(255, 250, 242, 0.92);
+      background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 24px;
+      border-radius: 26px;
       padding: 28px;
-      box-shadow: 0 18px 50px rgba(47, 37, 25, 0.08);
+      box-shadow: 0 22px 60px rgba(0, 0, 0, 0.28);
       backdrop-filter: blur(8px);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: #dff7ff;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+    }
+
+    .brand img {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      box-shadow: 0 0 24px rgba(65, 212, 255, 0.35);
+    }
+
+    .back-link {
+      color: var(--accent-strong);
+      text-decoration: none;
+      font-weight: 700;
     }
 
     .eyebrow {
@@ -57,6 +88,7 @@
       margin: 0 0 12px;
       font-size: clamp(2rem, 4vw, 3rem);
       line-height: 1.15;
+      letter-spacing: -0.03em;
     }
 
     .meta {
@@ -67,6 +99,9 @@
     h2 {
       margin: 30px 0 10px;
       font-size: 1.2rem;
+      color: #e8f7ff;
+      padding-left: 14px;
+      border-left: 3px solid var(--accent);
     }
 
     p, li {
@@ -79,7 +114,7 @@
     }
 
     a {
-      color: var(--accent);
+      color: var(--accent-strong);
       word-break: break-word;
     }
 
@@ -87,7 +122,7 @@
       margin-top: 28px;
       padding: 14px 16px;
       border-left: 4px solid var(--accent);
-      background: rgba(139, 94, 52, 0.06);
+      background: rgba(56, 201, 245, 0.08);
       border-radius: 12px;
       color: var(--muted);
     }
@@ -95,11 +130,16 @@
     @media (max-width: 640px) {
       main { padding: 18px 12px 32px; }
       .card { padding: 20px 16px; border-radius: 18px; }
+      .topbar { align-items: flex-start; flex-direction: column; }
     }
   </style>
 </head>
 <body>
   <main>
+    <nav class="topbar" aria-label="網站導覽">
+      <a class="brand" href="../"><img src="../assets/stockify-icon.png" alt="韭菜記帳本圖示"><span>STOCKIFY</span></a>
+      <a class="back-link" href="../">返回首頁 →</a>
+    </nav>
     <section class="card">
       <p class="eyebrow">Privacy Policy</p>
       <h1>韭菜記帳本隱私政策</h1>
