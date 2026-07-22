@@ -26,6 +26,14 @@ class TransactionDetailViewModel(transactionId: Int, private val stockDao: Stock
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
+    val hasMarginDependents: StateFlow<Boolean> = transaction.flatMapLatest { tx ->
+        if (tx?.marginLotId.isNullOrBlank()) {
+            kotlinx.coroutines.flow.flowOf(false)
+        } else {
+            stockDao.getMarginRepaymentsForLot(tx!!.marginLotId).map { it.isNotEmpty() }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), false)
+
     fun deleteTransaction() {
         viewModelScope.launch {
             transaction.value?.let { stockDao.deleteTransaction(it) }

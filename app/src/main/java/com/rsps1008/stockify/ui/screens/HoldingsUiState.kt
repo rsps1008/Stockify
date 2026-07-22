@@ -28,5 +28,8 @@ data class HoldingInfo(
     val dailyChangePercentage: Double = 0.0,
     val dividendIncome: Double = 0.0,
     val marketValue: Double = 0.0,
-    val limitState: LimitState = LimitState.NONE
+    val limitState: LimitState = LimitState.NONE,
+    val marginOutstandingPrincipal: Double = 0.0,
+    val marginAccruedInterest: Double = 0.0,
+    val marginNetEquity: Double = 0.0
 )

@@ -59,6 +59,8 @@ class SettingsDataStore(val context: Context) {
     private val homeHistoryChartExpandedKey = booleanPreferencesKey("home_history_chart_expanded")
     private val detailHistoryChartExpandedKey = booleanPreferencesKey("detail_history_chart_expanded")
     private val cloudDataBackupUpdatedAtKey = longPreferencesKey("cloud_data_backup_updated_at")
+    private val marginFeatureEnabledKey = booleanPreferencesKey("margin_feature_enabled")
+    private val marginDayCountKey = intPreferencesKey("margin_day_count")
 
     val fetchIntervalFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
@@ -273,6 +275,12 @@ class SettingsDataStore(val context: Context) {
         .map { preferences ->
             preferences[cloudDataBackupUpdatedAtKey]
         }
+
+    val marginFeatureEnabledFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences -> preferences[marginFeatureEnabledKey] ?: false }
+
+    val marginDayCountFlow: Flow<Int> = context.dataStore.data
+        .map { preferences -> if (preferences[marginDayCountKey] == 360) 360 else 365 }
 
     suspend fun setFetchInterval(interval: Int) {
         context.dataStore.edit {
@@ -512,5 +520,13 @@ class SettingsDataStore(val context: Context) {
         context.dataStore.edit {
             it[activeAccountIdKey] = accountId
         }
+    }
+
+    suspend fun setMarginFeatureEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[marginFeatureEnabledKey] = enabled }
+    }
+
+    suspend fun setMarginDayCount(dayCount: Int) {
+        context.dataStore.edit { it[marginDayCountKey] = if (dayCount == 360) 360 else 365 }
     }
 }

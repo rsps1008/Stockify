@@ -206,6 +206,20 @@ class SettingsViewModel(
     val taxRateDayTrading: StateFlow<Double> = settingsDataStore.taxRateDayTradingFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 0.0015)
 
+    val marginFeatureEnabled: StateFlow<Boolean> = settingsDataStore.marginFeatureEnabledFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), false)
+
+    val marginDayCount: StateFlow<Int> = settingsDataStore.marginDayCountFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 365)
+
+    fun setMarginFeatureEnabled(enabled: Boolean) = viewModelScope.launch {
+        settingsDataStore.setMarginFeatureEnabled(enabled)
+    }
+
+    fun setMarginDayCount(dayCount: Int) = viewModelScope.launch {
+        settingsDataStore.setMarginDayCount(dayCount)
+    }
+
     init {
         val account = GoogleSignIn.getLastSignedInAccount(getApplication())
         // 在 init 和 handleSignInResult 中

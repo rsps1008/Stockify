@@ -107,6 +107,8 @@ fun SettingsScreen() {
     val taxRateDomesticStockEtf by viewModel.taxRateDomesticStockEtf.collectAsState()
     val taxRateBondEtf by viewModel.taxRateBondEtf.collectAsState()
     val taxRateDayTrading by viewModel.taxRateDayTrading.collectAsState()
+    val marginFeatureEnabled by viewModel.marginFeatureEnabled.collectAsState()
+    val marginDayCount by viewModel.marginDayCount.collectAsState()
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val focusManager = LocalFocusManager.current
@@ -143,6 +145,63 @@ fun SettingsScreen() {
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("融資功能（實驗階段）", style = MaterialTheme.typography.titleLarge)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "啟用後可記錄台股融資買進、還款與估算利息。此功能不會連線券商。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("啟用融資功能")
+                            Switch(
+                                checked = marginFeatureEnabled,
+                                onCheckedChange = viewModel::setMarginFeatureEnabled
+                            )
+                        }
+                        if (marginFeatureEnabled) {
+                            var expandedMarginDayCount by remember { mutableStateOf(false) }
+                            ExposedDropdownMenuBox(
+                                expanded = expandedMarginDayCount,
+                                onExpandedChange = { expandedMarginDayCount = !expandedMarginDayCount },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                OutlinedTextField(
+                                    value = if (marginDayCount == 360) "360 天" else "365 天",
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("融資利息計息基準") },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedMarginDayCount) },
+                                    modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = expandedMarginDayCount,
+                                    onDismissRequest = { expandedMarginDayCount = false }
+                                ) {
+                                    listOf(365, 360).forEach { dayCount ->
+                                        DropdownMenuItem(
+                                            text = { Text("$dayCount 天") },
+                                            onClick = {
+                                                viewModel.setMarginDayCount(dayCount)
+                                                expandedMarginDayCount = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {

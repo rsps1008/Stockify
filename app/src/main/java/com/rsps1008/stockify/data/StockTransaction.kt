@@ -91,7 +91,22 @@ data class StockTransaction(
     val sharesBeforeSplit: Double = 0.0,
 
     @ColumnInfo(name = "拆分後股數")
-    val sharesAfterSplit: Double = 0.0
+    val sharesAfterSplit: Double = 0.0,
+
+    @ColumnInfo(name = "融資本金")
+    val marginPrincipal: Double = 0.0,
+
+    @ColumnInfo(name = "融資年利率")
+    val marginAnnualRate: Double = 0.0,
+
+    @ColumnInfo(name = "融資批次ID")
+    val marginLotId: String = "",
+
+    @ColumnInfo(name = "沖抵融資批次ID")
+    val marginRepaymentLotId: String = "",
+
+    @ColumnInfo(name = "融資還款本金")
+    val marginRepayment: Double = 0.0
 )
 
 data class TransactionWithStock(

@@ -262,6 +262,23 @@ private fun StockDetailSummary(
                         Text(text = formatMarketAmount(holdingInfo.dividendIncome, holdingInfo.stock.market), style = MaterialTheme.typography.bodyLarge)
                     }
                 }
+                if (holdingInfo.marginOutstandingPrincipal > 0.0 || holdingInfo.marginAccruedInterest > 0.0) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "融資未償", style = MaterialTheme.typography.bodySmall)
+                            Text(text = formatMarketAmount(holdingInfo.marginOutstandingPrincipal, holdingInfo.stock.market), style = MaterialTheme.typography.bodyLarge)
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "應計利息", style = MaterialTheme.typography.bodySmall)
+                            Text(text = formatMarketAmount(holdingInfo.marginAccruedInterest, holdingInfo.stock.market), style = MaterialTheme.typography.bodyLarge)
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "融資淨值", style = MaterialTheme.typography.bodySmall)
+                            Text(text = formatMarketAmount(holdingInfo.marginNetEquity, holdingInfo.stock.market), style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
             }
             Box(
                 modifier = Modifier

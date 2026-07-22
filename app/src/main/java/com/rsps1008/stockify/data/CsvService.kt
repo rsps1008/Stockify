@@ -23,7 +23,8 @@ class CsvService {
         "配發股數",
         "除息股數", "除權股數", "股息收入",
         "減資比例", "減資前股數", "減資後股數", "減資返還現金",
-        "拆分比例", "拆分前股數", "拆分後股數"
+        "拆分比例", "拆分前股數", "拆分後股數",
+        "融資本金", "融資年利率", "融資批次ID", "沖抵融資批次ID", "融資還款本金"
     )
 
     fun export(transactions: List<TransactionWithStock>, outputStream: OutputStream) {
@@ -78,6 +79,11 @@ class CsvService {
         record["拆分比例"] = transaction.stockSplitRatio
         record["拆分前股數"] = formatShareInputValue(transaction.sharesBeforeSplit)
         record["拆分後股數"] = formatShareInputValue(transaction.sharesAfterSplit)
+        record["融資本金"] = formatMarketPlainAmount(transaction.marginPrincipal, stock.market)
+        record["融資年利率"] = transaction.marginAnnualRate
+        record["融資批次ID"] = transaction.marginLotId
+        record["沖抵融資批次ID"] = transaction.marginRepaymentLotId
+        record["融資還款本金"] = formatMarketPlainAmount(transaction.marginRepayment, stock.market)
 
         // Ensure the order matches the header
         return csvHeader.map { header ->
@@ -163,6 +169,11 @@ class CsvService {
             stockSplitRatio = values.getOrNull(headerMap["拆分比例"]!!)?.toDoubleOrNull() ?: 0.0,
             sharesBeforeSplit = values.getOrNull(headerMap["拆分前股數"]!!)?.toDoubleOrNull() ?: 0.0,
             sharesAfterSplit = values.getOrNull(headerMap["拆分後股數"]!!)?.toDoubleOrNull() ?: 0.0
+            ,marginPrincipal = values.getOrNull(headerMap["融資本金"] ?: -1)?.toDoubleOrNull() ?: 0.0
+            ,marginAnnualRate = values.getOrNull(headerMap["融資年利率"] ?: -1)?.toDoubleOrNull() ?: 0.0
+            ,marginLotId = values.getOrNull(headerMap["融資批次ID"] ?: -1).orEmpty()
+            ,marginRepaymentLotId = values.getOrNull(headerMap["沖抵融資批次ID"] ?: -1).orEmpty()
+            ,marginRepayment = values.getOrNull(headerMap["融資還款本金"] ?: -1)?.toDoubleOrNull() ?: 0.0
         )
     }
 }

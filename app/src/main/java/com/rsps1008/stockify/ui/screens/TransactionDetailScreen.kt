@@ -48,6 +48,7 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
         factory = ViewModelFactory(application.database.stockDao(), transactionId = transactionId)
     )
     val transactionUiState by viewModel.transactionUiState.collectAsState()
+    val hasMarginDependents by viewModel.hasMarginDependents.collectAsState()
     var showDeleteDialog by remember { mutableStateOf(false) }
 
     if (showDeleteDialog) {
@@ -84,7 +85,7 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showDeleteDialog = true }) {
+                    IconButton(onClick = { showDeleteDialog = true }, enabled = !hasMarginDependents) {
                         Icon(Icons.Filled.Delete, contentDescription = "Delete")
                     }
                     IconButton(onClick = { navController.navigate(Screen.AddTransaction.createRoute(transactionId)) }) {
@@ -108,11 +109,15 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                 DetailRow(label = "交易", value = transaction.type)
 
                 when (transaction.type) {
-                    "買進" -> {
+                    "買進", "融資買進" -> {
                         DetailRow(label = "買進價格", value = String.format("%,.2f", transaction.buyPrice))
                         DetailRow(label = "買進股數", value = formatShareCount(transaction.buyShares))
                         DetailRow(label = "手續費", value = formatMarketAmount(transaction.fee, uiState.market))
                         DetailRow(label = "支出", value = formatMarketAmount(transaction.expense, uiState.market), valueColor = StockifyAppTheme.stockColors.loss)
+                        if (transaction.type == "融資買進") {
+                            DetailRow(label = "融資本金", value = formatMarketAmount(transaction.marginPrincipal, uiState.market))
+                            DetailRow(label = "年利率", value = String.format("%.4f%%", transaction.marginAnnualRate))
+                        }
                     }
                     "賣出" -> {
                         DetailRow(label = "賣出價格", value = String.format("%,.2f", transaction.sellPrice))
@@ -142,6 +147,10 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                         DetailRow(label = "每股拆分", value = String.format("%,.0f", transaction.stockSplitRatio))
                         DetailRow(label = "原持股數", value = formatShareCount(transaction.sharesBeforeSplit))
                         DetailRow(label = "新持股數", value = formatShareCount(transaction.sharesAfterSplit))
+                    }
+                    "融資還款" -> {
+                        DetailRow(label = "還款本金", value = formatMarketAmount(transaction.marginRepayment, uiState.market), valueColor = StockifyAppTheme.stockColors.loss)
+                        DetailRow(label = "沖抵融資批次", value = transaction.marginRepaymentLotId)
                     }
                 }
                 if (transaction.note.isNotBlank()) {

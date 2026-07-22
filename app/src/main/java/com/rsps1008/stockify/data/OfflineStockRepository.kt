@@ -26,6 +26,7 @@ class OfflineStockRepository(
             exchangeRateService.usdToTwdRate,
             settingsDataStore.homeDisplayModeFlow,
             settingsDataStore.returnRateModeFlow,
+            settingsDataStore.marginDayCountFlow,
             settingsDataStore.activeAccountIdFlow
         ) { values ->
             val stocks = values[0] as List<Stock>
@@ -35,7 +36,8 @@ class OfflineStockRepository(
             val usdToTwdRate = values[4] as Double
             val homeDisplayMode = values[5] as String
             val returnRateMode = values[6] as ReturnRateMode
-            val activeAccountId = values[7] as Int
+            val marginDayCount = values[7] as Int
+            val activeAccountId = values[8] as Int
 
             val transactions = if (activeAccountId == 0) {
                 allTransactions
@@ -69,7 +71,8 @@ class OfflineStockRepository(
                     limitState = limitState,
                     preDeductSellFees = preDeductSellFees,
                     returnRateMode = returnRateMode,
-                    currentDateMillis = currentDateMillis
+                    currentDateMillis = currentDateMillis,
+                    marginDayCount = marginDayCount
                 )
             }
 
@@ -108,7 +111,7 @@ class OfflineStockRepository(
                         val currentPrice = realTimeData[stock.code]?.currentPrice ?: 0.0
                         val shares = holdingInfos.firstOrNull { it.stock.code == stock.code }?.shares ?: 0.0
                         val rate = if (summaryIsCombined && StockMarket.isUs(stock.market)) usdToTwdRate else 1.0
-                        buildCashFlowsForStock(stockTransactions, currentPrice, shares, currentDateMillis, rate)
+                buildCashFlowsForStock(stockTransactions, currentPrice, shares, currentDateMillis, rate, marginDayCount)
                     }
                     ReturnRateCalculator.calculateXirrPercentage(portfolioCashFlows) ?: 0.0
                 }
@@ -145,8 +148,15 @@ class OfflineStockRepository(
             transactionsFlow,
             realtimeStockDataService.realtimeStockInfo,
             settingsDataStore.preDeductSellFeesFlow,
-            settingsDataStore.returnRateModeFlow
-        ) { stock, transactions, realTimeData, preDeductSellFees, returnRateMode ->
+            settingsDataStore.returnRateModeFlow,
+            settingsDataStore.marginDayCountFlow
+        ) { values ->
+            val stock = values[0] as Stock?
+            val transactions = values[1] as List<StockTransaction>
+            val realTimeData = values[2] as Map<String, RealtimeStockInfo>
+            val preDeductSellFees = values[3] as Boolean
+            val returnRateMode = values[4] as ReturnRateMode
+            val marginDayCount = values[5] as Int
             stock?.let {
                 val realtime = realTimeData[stock.code]
                 val currentPrice = realTimeData[it.code]?.currentPrice ?: 0.0
@@ -162,7 +172,8 @@ class OfflineStockRepository(
                     limitState = limitState,
                     preDeductSellFees = preDeductSellFees,
                     returnRateMode = returnRateMode,
-                    currentDateMillis = System.currentTimeMillis()
+                    currentDateMillis = System.currentTimeMillis(),
+                    marginDayCount = marginDayCount
                 )
             }
         }
@@ -193,7 +204,8 @@ class OfflineStockRepository(
         limitState: LimitState,
         preDeductSellFees: Boolean,
         returnRateMode: ReturnRateMode,
-        currentDateMillis: Long
+        currentDateMillis: Long,
+        marginDayCount: Int
     ): HoldingInfo {
         var shares = 0.0
         var totalBuyExpense = 0.0
@@ -207,7 +219,7 @@ class OfflineStockRepository(
 
         for (it in transactions.sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime })) {
             when (it.type) {
-                "買進" -> {
+                "買進", "融資買進" -> {
                     shares += it.buyShares
                     totalBuyExpense += it.expense
                     buySharesTotal += it.buyShares
@@ -247,6 +259,8 @@ class OfflineStockRepository(
         val averageCost = if (shares > 0) costBasis / shares else 0.0
         val buyAverage = if (buySharesTotal > 0) buyCostTotal / buySharesTotal else 0.0
         val marketValue = shares * currentPrice
+        val marginSummary = MarginCalculationSupport.calculate(transactions, currentDateMillis, marginDayCount)
+        val effectiveTotalInvestment = if (marginSummary.selfFundedCapital > 0.0) marginSummary.selfFundedCapital else totalInvestment
         var totalPL = marketValue - costBasis
 
         if (preDeductSellFees && marketValue > 0.0 && !StockMarket.isUs(stock.market)) {
@@ -259,18 +273,23 @@ class OfflineStockRepository(
             totalPL -= (sellFee + sellTax)
         }
 
+        totalPL -= marginSummary.accruedInterest
+
         val totalPLPercentage = when (returnRateMode) {
             ReturnRateMode.REMAINING_POSITION -> {
                 val denominator = HoldingCalculationSupport.remainingPositionDenominator(
                     shares = shares,
                     costBasis = costBasis,
-                    totalInvestment = totalInvestment
+                        totalInvestment = effectiveTotalInvestment
                 )
                 if (denominator > 0) (totalPL / denominator) * 100 else 0.0
             }
-            ReturnRateMode.CUMULATIVE_INVESTMENT -> if (totalInvestment > 0) (totalPL / totalInvestment) * 100 else 0.0
+            ReturnRateMode.CUMULATIVE_INVESTMENT -> {
+                val denominator = effectiveTotalInvestment
+                if (denominator > 0) (totalPL / denominator) * 100 else 0.0
+            }
             ReturnRateMode.XIRR -> {
-                val cashFlows = buildCashFlowsForStock(transactions, currentPrice, shares, currentDateMillis)
+                val cashFlows = buildCashFlowsForStock(transactions, currentPrice, shares, currentDateMillis, marginDayCount = marginDayCount)
                 ReturnRateCalculator.calculateXirrPercentage(cashFlows) ?: 0.0
             }
         }
@@ -280,7 +299,7 @@ class OfflineStockRepository(
             shares = shares,
             averageCost = averageCost,
             buyAverage = buyAverage,
-            totalInvestment = totalInvestment,
+            totalInvestment = effectiveTotalInvestment,
             sellAverage = sellAverage,
             dividendIncome = totalDividendIncome,
             currentPrice = currentPrice,
@@ -290,6 +309,9 @@ class OfflineStockRepository(
             dailyChange = dailyChange,
             dailyChangePercentage = dailyChangePercentage,
             limitState = limitState
+            ,marginOutstandingPrincipal = marginSummary.outstandingPrincipal
+            ,marginAccruedInterest = marginSummary.accruedInterest
+            ,marginNetEquity = marketValue - marginSummary.outstandingPrincipal - marginSummary.accruedInterest
         )
     }
 
@@ -298,12 +320,15 @@ class OfflineStockRepository(
         currentPrice: Double,
         shares: Double,
         currentDateMillis: Long,
-        currencyRate: Double = 1.0
+        currencyRate: Double = 1.0,
+        marginDayCount: Int = 365
     ): List<CashFlow> {
         val cashFlows = transactions.mapNotNull { transaction ->
             when (transaction.type) {
                 "買進" -> CashFlow(transaction.date, -transaction.expense * currencyRate)
-                "賣出" -> CashFlow(transaction.date, transaction.income * currencyRate)
+                "融資買進" -> CashFlow(transaction.date, -(transaction.expense - transaction.marginPrincipal) * currencyRate)
+                "賣出" -> CashFlow(transaction.date, (transaction.income - transaction.marginRepayment) * currencyRate)
+                "融資還款" -> CashFlow(transaction.date, -transaction.marginRepayment * currencyRate)
                 "配息" -> CashFlow(
                     transaction.date,
                     HoldingCalculationSupport.resolveDividendIncome(transaction) * currencyRate
@@ -314,7 +339,8 @@ class OfflineStockRepository(
         }.toMutableList()
 
         if (shares > 0.0 && currentPrice > 0.0) {
-            cashFlows.add(CashFlow(currentDateMillis, shares * currentPrice * currencyRate))
+            val margin = MarginCalculationSupport.calculate(transactions, currentDateMillis, marginDayCount)
+            cashFlows.add(CashFlow(currentDateMillis, (shares * currentPrice - margin.outstandingPrincipal - margin.accruedInterest) * currencyRate))
         }
 
         return cashFlows

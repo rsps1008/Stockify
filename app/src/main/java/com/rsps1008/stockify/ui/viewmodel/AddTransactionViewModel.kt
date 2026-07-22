@@ -23,6 +23,13 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import kotlin.math.max
+import java.util.UUID
+
+data class MarginLotOption(
+    val lotId: String,
+    val label: String,
+    val remainingPrincipal: Double
+)
 
 class AddTransactionViewModel(
     private val stockDao: StockDao,
@@ -71,6 +78,13 @@ class AddTransactionViewModel(
     val defaultDividendFee: StateFlow<Int> = settingsDataStore.dividendFeeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 10)
 
+    val marginFeatureEnabled: StateFlow<Boolean> = settingsDataStore.marginFeatureEnabledFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), false)
+    val marginDayCount: StateFlow<Int> = settingsDataStore.marginDayCountFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 365)
+    private val _marginLots = MutableStateFlow<List<MarginLotOption>>(emptyList())
+    val marginLots: StateFlow<List<MarginLotOption>> = _marginLots.asStateFlow()
+
     val accounts: StateFlow<List<Account>> = stockDao.getAllAccountsFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
@@ -79,6 +93,23 @@ class AddTransactionViewModel(
 
     fun selectAccount(accountId: Int) {
         _selectedAccountId.value = accountId
+    }
+
+    fun loadMarginLots(stockCode: String) {
+        viewModelScope.launch {
+            val transactions = stockDao.getTransactionsForStock(stockCode).firstOrNull().orEmpty()
+                .filter { it.accountId == _selectedAccountId.value }
+            val summary = com.rsps1008.stockify.data.MarginCalculationSupport.calculate(
+                transactions, System.currentTimeMillis(), marginDayCount.value
+            )
+            _marginLots.value = summary.lots.map {
+                MarginLotOption(
+                    lotId = it.lotId,
+                    label = "${java.text.SimpleDateFormat("yyyy/MM/dd", java.util.Locale.getDefault()).format(java.util.Date(it.openedAt))} / ${it.annualRate}% / 剩餘 ${it.remainingPrincipal}",
+                    remainingPrincipal = it.remainingPrincipal
+                )
+            }
+        }
     }
 
     init {
@@ -249,7 +280,12 @@ class AddTransactionViewModel(
         stockSplitRatio: Double = 0.0,
         sharesBeforeSplit: Double = 0.0,
         sharesAfterSplit: Double = 0.0,
-        dividendIncome: Double? = null
+        dividendIncome: Double? = null,
+        marginPrincipal: Double = 0.0,
+        marginAnnualRate: Double = 0.0,
+        marginLotId: String = "",
+        marginRepaymentLotId: String = "",
+        marginRepayment: Double = 0.0
     ) {
         val finalFee = when (type) {
             "配息" -> dividendFee
@@ -263,7 +299,11 @@ class AddTransactionViewModel(
             else -> 0.0
         }
 
-        val finalExpense = if (type == "買進") _expense.value else 0.0
+        val finalExpense = when (type) {
+            "買進", "融資買進" -> _expense.value
+            "融資還款" -> marginRepayment
+            else -> 0.0
+        }
         val finalTax = if (type == "賣出") _tax.value else 0.0
         val finalShares = if (type == "配股") 0.0 else shares
         val finalDividendShares = if (type == "配股") shares else 0.0
@@ -278,7 +318,8 @@ class AddTransactionViewModel(
                 finalDividendShares, exRightsShares,
                 note, finalDividendIncome, capitalReductionRatio,
                 sharesBeforeReduction, sharesAfterReduction, cashReturned,
-                stockSplitRatio, sharesBeforeSplit, sharesAfterSplit
+                stockSplitRatio, sharesBeforeSplit, sharesAfterSplit,
+                marginPrincipal, marginAnnualRate, marginLotId, marginRepaymentLotId, marginRepayment
             )
         } else {
             updateTransaction(
@@ -289,7 +330,8 @@ class AddTransactionViewModel(
                 finalDividendShares, exRightsShares,
                 note, finalDividendIncome, capitalReductionRatio,
                 sharesBeforeReduction, sharesAfterReduction, cashReturned,
-                stockSplitRatio, sharesBeforeSplit, sharesAfterSplit
+                stockSplitRatio, sharesBeforeSplit, sharesAfterSplit,
+                marginPrincipal, marginAnnualRate, marginLotId, marginRepaymentLotId, marginRepayment
             )
         }
     }
@@ -319,6 +361,11 @@ class AddTransactionViewModel(
         stockSplitRatio: Double,
         sharesBeforeSplit: Double,
         sharesAfterSplit: Double
+        ,marginPrincipal: Double
+        ,marginAnnualRate: Double
+        ,marginLotId: String
+        ,marginRepaymentLotId: String
+        ,marginRepayment: Double
     ) {
         val inferredMarket = StockMarket.inferFromCode(stockCode)
         var stock = stockDao.getStockByCode(stockCode)
@@ -334,14 +381,15 @@ class AddTransactionViewModel(
         }
 
         stock?.let { currentStock ->
+            val resolvedLotId = if (type == "融資買進") marginLotId.ifBlank { UUID.randomUUID().toString() } else marginLotId
             val transaction = StockTransaction(
                 stockCode = currentStock.code,
                 accountId = _selectedAccountId.value,
                 date = date,
                 recordTime = System.currentTimeMillis(),
                 type = type,
-                buyPrice = if (type == "買進") price else 0.0,
-                buyShares = if (type == "買進") shares else 0.0,
+                buyPrice = if (type == "買進" || type == "融資買進") price else 0.0,
+                buyShares = if (type == "買進" || type == "融資買進") shares else 0.0,
                 sellPrice = if (type == "賣出") price else 0.0,
                 sellShares = if (type == "賣出") shares else 0.0,
                 fee = fee,
@@ -361,7 +409,12 @@ class AddTransactionViewModel(
                 cashReturned = cashReturned,
                 stockSplitRatio = stockSplitRatio,
                 sharesBeforeSplit = sharesBeforeSplit,
-                sharesAfterSplit = sharesAfterSplit
+                sharesAfterSplit = sharesAfterSplit,
+                marginPrincipal = marginPrincipal,
+                marginAnnualRate = marginAnnualRate,
+                marginLotId = resolvedLotId,
+                marginRepaymentLotId = marginRepaymentLotId,
+                marginRepayment = marginRepayment
             )
             stockDao.insertTransaction(transaction)
             realtimeStockDataService.refreshStock(stockCode)
@@ -393,6 +446,11 @@ class AddTransactionViewModel(
         stockSplitRatio: Double,
         sharesBeforeSplit: Double,
         sharesAfterSplit: Double
+        ,marginPrincipal: Double
+        ,marginAnnualRate: Double
+        ,marginLotId: String
+        ,marginRepaymentLotId: String
+        ,marginRepayment: Double
     ) {
         _transactionToEdit.value?.let {
             val updatedTransaction = it.copy(
@@ -400,8 +458,8 @@ class AddTransactionViewModel(
                 accountId = _selectedAccountId.value,
                 date = date,
                 type = type,
-                buyPrice = if (type == "買進") price else 0.0,
-                buyShares = if (type == "買進") shares else 0.0,
+                buyPrice = if (type == "買進" || type == "融資買進") price else 0.0,
+                buyShares = if (type == "買進" || type == "融資買進") shares else 0.0,
                 sellPrice = if (type == "賣出") price else 0.0,
                 sellShares = if (type == "賣出") shares else 0.0,
                 fee = fee,
@@ -421,7 +479,12 @@ class AddTransactionViewModel(
                 cashReturned = cashReturned,
                 stockSplitRatio = stockSplitRatio,
                 sharesBeforeSplit = sharesBeforeSplit,
-                sharesAfterSplit = sharesAfterSplit
+                sharesAfterSplit = sharesAfterSplit,
+                marginPrincipal = marginPrincipal,
+                marginAnnualRate = marginAnnualRate,
+                marginLotId = marginLotId,
+                marginRepaymentLotId = marginRepaymentLotId,
+                marginRepayment = marginRepayment
             )
             stockDao.updateTransaction(updatedTransaction)
             realtimeStockDataService.refreshStock(stockCode)

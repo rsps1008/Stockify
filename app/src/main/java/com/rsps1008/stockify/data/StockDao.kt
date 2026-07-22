@@ -58,6 +58,9 @@ interface StockDao {
     @Query("SELECT * FROM stock_transactions WHERE id = :transactionId")
     fun getTransactionById(transactionId: Int): Flow<StockTransaction?>
 
+    @Query("SELECT * FROM stock_transactions WHERE 沖抵融資批次ID = :lotId")
+    fun getMarginRepaymentsForLot(lotId: String): Flow<List<StockTransaction>>
+
     @Query("SELECT * FROM stocks WHERE id = :stockId")
     fun getStockById(stockId: Int): Flow<Stock?>
 
@@ -95,7 +98,7 @@ interface StockDao {
     SELECT IFNULL(
         CAST(SUM(
             CASE
-                WHEN 交易 = '買進' THEN 買進股數
+                WHEN 交易 IN ('買進', '融資買進') THEN 買進股數
                 WHEN 交易 = '賣出' THEN -賣出股數
                 WHEN 交易 = '配股' THEN 配發股數
                 ELSE 0

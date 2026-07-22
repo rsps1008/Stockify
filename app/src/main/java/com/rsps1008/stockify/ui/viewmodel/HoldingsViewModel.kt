@@ -18,6 +18,7 @@ import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.UsdTwdExchangeRateService
 import com.rsps1008.stockify.data.CashFlow
 import com.rsps1008.stockify.data.ReturnRateCalculator
+import com.rsps1008.stockify.data.MarginCalculationSupport
 import com.rsps1008.stockify.data.Account
 import com.rsps1008.stockify.ui.screens.HoldingsUiState
 import kotlinx.coroutines.Dispatchers
@@ -48,7 +49,8 @@ private data class HomeSettingsBundle(
     val preDeductSellFees: Boolean,
     val feeDiscount: Double,
     val minFeeRegular: Int,
-    val returnRateMode: ReturnRateMode
+    val returnRateMode: ReturnRateMode,
+    val marginDayCount: Int
 )
 
 private data class HomeHistoryCalculationBundle(
@@ -186,9 +188,10 @@ class HoldingsViewModel(
         settingsDataStore.preDeductSellFeesFlow,
         settingsDataStore.feeDiscountFlow,
         settingsDataStore.minFeeRegularFlow,
-        settingsDataStore.returnRateModeFlow
-    ) { preDeduct, discount, minFee, mode ->
-        HomeSettingsBundle(preDeduct, discount, minFee, mode)
+        settingsDataStore.returnRateModeFlow,
+        settingsDataStore.marginDayCountFlow
+    ) { preDeduct, discount, minFee, mode, marginDayCount ->
+        HomeSettingsBundle(preDeduct, discount, minFee, mode, marginDayCount)
     }
 
     private val historyCalculationBundle = combine(
@@ -275,7 +278,8 @@ class HoldingsViewModel(
                         minFeeRegular = minFee,
                         market = selectedStocksByCode[stockCode]?.stock?.market ?: StockMarket.inferFromCode(stockCode),
                         stockType = stockType,
-                        dayEnd = dayEnd
+                        dayEnd = dayEnd,
+                        marginDayCount = settings.marginDayCount
                     )
                     val currencyRate = if (
                         normalizedMode == HomeDisplayMode.COMBINED &&
@@ -297,6 +301,7 @@ class HoldingsViewModel(
                             price = dailyPrice,
                             terminalDateMillis = dayEnd,
                             currencyRate = currencyRate
+                            ,marginDayCount = settings.marginDayCount
                         )
                     }
                 }
@@ -490,7 +495,8 @@ class HoldingsViewModel(
         minFeeRegular: Double,
         market: String,
         stockType: String,
-        dayEnd: Long
+        dayEnd: Long,
+        marginDayCount: Int
     ): HistoricalHoldingStats {
         val txs = transactions.filter { it.date <= dayEnd }
             .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime })
@@ -507,7 +513,7 @@ class HoldingsViewModel(
 
         for (it in txs) {
             when (it.type) {
-                "買進" -> {
+                "買進", "融資買進" -> {
                     shares += it.buyShares
                     totalBuyExpense += it.expense
                     buySharesTotal += it.buyShares
@@ -539,9 +545,11 @@ class HoldingsViewModel(
         if (shares < 0) shares = 0.0
         val costBasis = totalBuyExpense - totalSellIncome - totalDividendIncome
         val totalSellFeeAndTax = (sellAmountBeforeFee - totalSellNetIncome).coerceAtLeast(0.0)
-        val totalInvestment = totalBuyExpense + totalSellFeeAndTax
+        val marginSummary = MarginCalculationSupport.calculate(txs, dayEnd, marginDayCount)
+        val totalInvestment = if (marginSummary.selfFundedCapital > 0.0) marginSummary.selfFundedCapital else totalBuyExpense + totalSellFeeAndTax
         val marketValue = shares * ptPrice
         var totalPL = marketValue - costBasis
+        totalPL -= marginSummary.accruedInterest
 
         if (preDeductSellFees && marketValue > 0.0 && StockMarket.isTw(market)) {
             val sellFee = (marketValue * 0.001425 * feeDiscount).coerceAtLeast(minFeeRegular)
@@ -564,12 +572,15 @@ class HoldingsViewModel(
         shares: Double,
         price: Double,
         terminalDateMillis: Long,
-        currencyRate: Double
+        currencyRate: Double,
+        marginDayCount: Int
     ): List<CashFlow> {
         val cashFlows = transactions.mapNotNull { transaction ->
             when (transaction.type) {
                 "買進" -> CashFlow(transaction.date, -transaction.expense * currencyRate)
-                "賣出" -> CashFlow(transaction.date, transaction.income * currencyRate)
+                "融資買進" -> CashFlow(transaction.date, -(transaction.expense - transaction.marginPrincipal) * currencyRate)
+                "賣出" -> CashFlow(transaction.date, (transaction.income - transaction.marginRepayment) * currencyRate)
+                "融資還款" -> CashFlow(transaction.date, -transaction.marginRepayment * currencyRate)
                 "配息" -> CashFlow(
                     transaction.date,
                     HoldingCalculationSupport.resolveDividendIncome(transaction) * currencyRate
@@ -580,7 +591,8 @@ class HoldingsViewModel(
         }.toMutableList()
 
         if (shares > 0.0 && price > 0.0) {
-            cashFlows.add(CashFlow(terminalDateMillis, shares * price * currencyRate))
+            val margin = MarginCalculationSupport.calculate(transactions, terminalDateMillis, marginDayCount)
+            cashFlows.add(CashFlow(terminalDateMillis, (shares * price - margin.outstandingPrincipal - margin.accruedInterest) * currencyRate))
         }
 
         return cashFlows

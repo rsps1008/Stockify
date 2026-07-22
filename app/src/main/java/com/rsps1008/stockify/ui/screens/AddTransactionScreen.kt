@@ -96,6 +96,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     val calculationRoundingMode by viewModel.calculationRoundingMode.collectAsState()
     val selectedAccountId by viewModel.selectedAccountId.collectAsState()
     val accounts by viewModel.accounts.collectAsState()
+    val marginFeatureEnabled by viewModel.marginFeatureEnabled.collectAsState()
+    val marginLots by viewModel.marginLots.collectAsState()
     var dividendFee by remember { mutableStateOf("") }
     var dividendIncome by remember { mutableStateOf("") }
     val coroutineScope = rememberCoroutineScope()
@@ -108,6 +110,12 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     var price by remember { mutableStateOf("") } // Represents total amount for dividend, price per share for buy/sell
     var shares by remember { mutableStateOf("") } // Represents shares for buy/sell/stock_dividend
     var note by remember { mutableStateOf("") }
+    var marginPrincipal by remember { mutableStateOf("") }
+    var marginAnnualRate by remember { mutableStateOf("") }
+    var marginRepaymentLotId by remember { mutableStateOf("") }
+    var marginRepayment by remember { mutableStateOf("") }
+    var sellRepaysMargin by remember { mutableStateOf(false) }
+    var marginLotMenuExpanded by remember { mutableStateOf(false) }
 
     var showDatePicker by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf(false) }
@@ -175,7 +183,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
 
     LaunchedEffect(price, shares, transactionType, stockCode, feeSettings, calculationRoundingMode) {
         when (transactionType) {
-            "買進" -> {
+            "買進", "融資買進" -> {
                 val stock = allStocks.find { it.code == stockCode }
                 viewModel.calculateBuyCosts(
                     price.toDoubleOrNull() ?: 0.0,
@@ -204,6 +212,12 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         }
     }
 
+    LaunchedEffect(stockCode, selectedAccountId, transactionType, marginFeatureEnabled) {
+        if (marginFeatureEnabled && stockCode.isNotBlank() && (transactionType == "融資還款" || transactionType == "賣出")) {
+            viewModel.loadMarginLots(stockCode)
+        }
+    }
+
     LaunchedEffect(stockName) {
         expanded = stockName.isNotBlank() && stockCode.isBlank()
     }
@@ -227,6 +241,17 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                 "賣出" -> {
                     price = it.sellPrice.toString()
                     shares = formatShareInputValue(it.sellShares)
+                }
+                "融資買進" -> {
+                    price = it.buyPrice.toString()
+                    shares = formatShareInputValue(it.buyShares)
+                    marginPrincipal = it.marginPrincipal.toString()
+                    marginAnnualRate = it.marginAnnualRate.toString()
+                }
+                "融資還款" -> {
+                    marginRepaymentLotId = it.marginRepaymentLotId
+                    marginRepayment = it.marginRepayment.toString()
+                    price = it.marginRepayment.toString()
                 }
                 "配息" -> {
                     cashDividend = if (it.cashDividend != 0.0) it.cashDividend.toString() else ""
@@ -276,6 +301,11 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             cashReturned = ""
             stockSplitRatio = ""
             sharesBeforeSplit = ""
+            marginPrincipal = ""
+            marginAnnualRate = ""
+            marginRepaymentLotId = ""
+            marginRepayment = ""
+            sellRepaysMargin = false
             previousTransactionType = transactionType
         }
     }
@@ -315,11 +345,19 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     }
 
     val isFormValid = when (transactionType) {
-        "買進", "賣出" ->
+        "買進", "融資買進", "賣出" ->
             stockName.isNotBlank() &&
             stockCode.isNotBlank() &&
             (price.toDoubleOrNull() ?: 0.0) > 0.0 &&
-            (shares.toDoubleOrNull() ?: 0.0) > 0.0
+            (shares.toDoubleOrNull() ?: 0.0) > 0.0 &&
+            (transactionType != "融資買進" || (
+                (marginPrincipal.toDoubleOrNull() ?: 0.0) > 0.0 &&
+                    (marginPrincipal.toDoubleOrNull() ?: 0.0) <= expense &&
+                    (marginAnnualRate.toDoubleOrNull() ?: -1.0) >= 0.0
+                ))
+        "融資還款" ->
+            stockName.isNotBlank() && stockCode.isNotBlank() && marginRepaymentLotId.isNotBlank() &&
+                (marginRepayment.toDoubleOrNull() ?: 0.0) > 0.0
         "配息" ->
             stockName.isNotBlank() &&
             stockCode.isNotBlank() &&
@@ -488,6 +526,10 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         Spacer(modifier = Modifier.height(4.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
             Button(onClick = { transactionType = "買進" }, enabled = transactionType != "買進", shape = AddTransactionButtonShape) { Text("買進") }
+            if (marginFeatureEnabled && !isUsStock) {
+                Button(onClick = { transactionType = "融資買進" }, enabled = transactionType != "融資買進", shape = AddTransactionButtonShape) { Text("融資買進") }
+                Button(onClick = { transactionType = "融資還款" }, enabled = transactionType != "融資還款", shape = AddTransactionButtonShape) { Text("還融資") }
+            }
             Button(onClick = { transactionType = "賣出" }, enabled = transactionType != "賣出", shape = AddTransactionButtonShape) { Text("賣出") }
             Button(onClick = { transactionType = "配息" }, enabled = transactionType != "配息", shape = AddTransactionButtonShape) { Text("配息") }
             Button(onClick = { transactionType = "配股" }, enabled = transactionType != "配股", shape = AddTransactionButtonShape) { Text("配股") }
@@ -497,7 +539,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         Spacer(modifier = Modifier.height(16.dp))
 
         when (transactionType) {
-            "買進" -> {
+            "買進", "融資買進" -> {
                 // 買進上面
                 androidx.compose.material3.Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -521,6 +563,22 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             step = shareStep,
                             allowDecimal = isUsStock
                         )
+                        if (transactionType == "融資買進") {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            LabeledOutlinedTextField(
+                                label = "融資本金",
+                                value = marginPrincipal,
+                                onValueChange = { marginPrincipal = it },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            LabeledOutlinedTextField(
+                                label = "年利率 (%)",
+                                value = marginAnnualRate,
+                                onValueChange = { marginAnnualRate = it },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                            )
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(10.dp))
@@ -562,6 +620,34 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             keyboardType = KeyboardType.Decimal
                         )
                         androidx.compose.material3.HorizontalDivider()
+                    }
+                }
+            }
+            "融資還款" -> {
+                androidx.compose.material3.Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("選擇融資批次", style = MaterialTheme.typography.titleMedium)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Box {
+                            OutlinedButton(onClick = { marginLotMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) {
+                                Text(marginLots.firstOrNull { it.lotId == marginRepaymentLotId }?.label ?: "請選擇未償融資")
+                            }
+                            DropdownMenu(expanded = marginLotMenuExpanded, onDismissRequest = { marginLotMenuExpanded = false }) {
+                                marginLots.forEach { lot ->
+                                    DropdownMenuItem(text = { Text(lot.label) }, onClick = { marginRepaymentLotId = lot.lotId; marginLotMenuExpanded = false })
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LabeledOutlinedTextField(
+                            label = "還款本金",
+                            value = marginRepayment,
+                            onValueChange = { marginRepayment = it },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                        )
                     }
                 }
             }
@@ -613,6 +699,34 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             step = shareStep,
                             allowDecimal = isUsStock
                         )
+                        if (marginFeatureEnabled && !isUsStock) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = sellRepaysMargin, onCheckedChange = { sellRepaysMargin = it })
+                                Text("本次賣出還融資")
+                            }
+                            if (sellRepaysMargin) {
+                                Box {
+                                    OutlinedButton(onClick = { marginLotMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) {
+                                        Text(marginLots.firstOrNull { it.lotId == marginRepaymentLotId }?.label ?: "選擇還款融資批次")
+                                    }
+                                    DropdownMenu(expanded = marginLotMenuExpanded, onDismissRequest = { marginLotMenuExpanded = false }) {
+                                        marginLots.forEach { lot ->
+                                            DropdownMenuItem(
+                                                text = { Text(lot.label) },
+                                                onClick = { marginRepaymentLotId = lot.lotId; marginLotMenuExpanded = false }
+                                            )
+                                        }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                LabeledOutlinedTextField(
+                                    label = "還款本金（可留白，預設賣出淨收入）",
+                                    value = marginRepayment,
+                                    onValueChange = { marginRepayment = it },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                                )
+                            }
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(10.dp))
@@ -956,7 +1070,16 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         stockSplitRatio = stockSplitRatio.toDoubleOrNull() ?: 0.0,
                         sharesBeforeSplit = sharesBeforeSplit.toDoubleOrNull() ?: 0.0,
                         sharesAfterSplit = sharesAfterSplit.toDoubleOrNull() ?: 0.0,
-                        dividendIncome = dividendIncome.toDoubleOrNull()
+                        dividendIncome = dividendIncome.toDoubleOrNull(),
+                        marginPrincipal = if (transactionType == "融資買進") marginPrincipal.toDoubleOrNull() ?: 0.0 else 0.0,
+                        marginAnnualRate = if (transactionType == "融資買進") marginAnnualRate.toDoubleOrNull() ?: 0.0 else 0.0,
+                        marginLotId = if (transactionType == "融資買進") transactionToEdit?.marginLotId.orEmpty() else "",
+                        marginRepaymentLotId = if (transactionType == "融資還款" || (transactionType == "賣出" && sellRepaysMargin)) marginRepaymentLotId else "",
+                        marginRepayment = if (transactionType == "融資還款") {
+                            marginRepayment.toDoubleOrNull() ?: 0.0
+                        } else if (transactionType == "賣出" && sellRepaysMargin) {
+                            marginRepayment.toDoubleOrNull() ?: income
+                        } else 0.0
                     )
                     val message = if (transactionId == null) "新增成功" else "更新成功"
                     Toast.makeText(context, message, Toast.LENGTH_SHORT).show()

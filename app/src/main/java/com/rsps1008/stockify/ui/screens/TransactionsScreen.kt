@@ -121,18 +121,19 @@ private fun TransactionsListHeader() {
 @Composable
 private fun TransactionRow(transaction: TransactionUiState, navController: NavController) {
     val amountText = when (transaction.transaction.type) {
-        "買進" -> formatMarketAmount(-transaction.transaction.expense, transaction.market)
+        "買進", "融資買進" -> formatMarketAmount(-transaction.transaction.expense, transaction.market)
         "賣出" -> formatMarketAmount(transaction.transaction.income, transaction.market)
         "配息" -> formatMarketAmount(transaction.transaction.income, transaction.market)
         "配股" -> "0"
         "減資" -> String.format("%,.0f", transaction.transaction.cashReturned)
         "分割" -> "-"
+        "融資還款" -> formatMarketAmount(-transaction.transaction.marginRepayment, transaction.market)
         else -> ""
     }
 
     val amountColor = when {
         amountText == "-" || amountText == "0" -> Color.Unspecified
-        transaction.transaction.type == "買進" -> StockifyAppTheme.stockColors.loss
+        transaction.transaction.type == "買進" || transaction.transaction.type == "融資買進" || transaction.transaction.type == "融資還款" -> StockifyAppTheme.stockColors.loss
         else -> StockifyAppTheme.stockColors.gain
     }
 
@@ -157,11 +158,13 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
 
         val transactionText = when (transaction.transaction.type) {
             "買進" -> "買${formatShareCount(transaction.transaction.buyShares)}股"
+            "融資買進" -> "融資買${formatShareCount(transaction.transaction.buyShares)}股"
             "賣出" -> "賣${formatShareCount(transaction.transaction.sellShares)}股"
             "配息" -> "配息${formatMarketAmount(transaction.transaction.income, transaction.market)}元"
             "配股" -> "配股${formatShareCount(transaction.transaction.dividendShares)}股"
             "減資" -> "減資${String.format("%.1f", transaction.transaction.capitalReductionRatio)}%"
             "分割" -> "分割(1→${transaction.transaction.stockSplitRatio.toInt()})"
+            "融資還款" -> "還融資${formatMarketAmount(transaction.transaction.marginRepayment, transaction.market)}"
             else -> transaction.transaction.type
         }
         Text(
