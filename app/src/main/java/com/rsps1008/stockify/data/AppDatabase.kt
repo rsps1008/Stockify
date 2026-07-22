@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
 
-@Database(entities = [Stock::class, StockTransaction::class, StockHistoryPrice::class, Account::class], version = 10, exportSchema = false)
+@Database(entities = [Stock::class, StockTransaction::class, StockHistoryPrice::class, Account::class], version = 11, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun stockDao(): StockDao
@@ -29,7 +29,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "stock_database"
                 )
                 .addCallback(AppDatabaseCallback(context))
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_8_9, MIGRATION_9_10) // Add migrations
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
                 .build()
                 INSTANCE = instance
                 instance
@@ -59,6 +59,14 @@ abstract class AppDatabase : RoomDatabase() {
                     }
                     val settingsDataStore = SettingsDataStore(context)
                     val hasManualTwListUpdate = settingsDataStore.lastStockListUpdateTimeFlow.first() != null
+                    val bundledTwStocks = StockListRepository(context).readBundledStocks()
+
+                    // 舊版只有 market=TW，使用新版 bundled 清單補回上市/上櫃/興櫃分類。
+                    bundledTwStocks.forEach { stock ->
+                        if (stock.exchange.isNotBlank()) {
+                            stockDao.updateTaiwanStockExchange(stock.code, stock.exchange)
+                        }
+                    }
 
                     syncBundledStockList(
                         context = context,
@@ -66,7 +74,7 @@ abstract class AppDatabase : RoomDatabase() {
                         market = StockMarket.TW,
                         assetName = TW_STOCKS_ASSET_NAME,
                         checksumFileName = TW_STOCKS_CHECKSUM_FILE_NAME,
-                        bundledStocks = StockListRepository(context).readBundledStocks(),
+                        bundledStocks = bundledTwStocks,
                         refreshBundledCache = { StockListRepository(context).refreshBundledCacheFromAsset() },
                         skipIfManuallyUpdated = hasManualTwListUpdate
                     )
@@ -166,6 +174,12 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `accounts` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL)")
                 db.execSQL("INSERT OR IGNORE INTO `accounts` (id, name) VALUES (1, '預設帳戶')")
+            }
+        }
+
+        private val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE stocks ADD COLUMN `exchange` TEXT NOT NULL DEFAULT ''")
             }
         }
     }

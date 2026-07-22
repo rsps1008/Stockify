@@ -61,7 +61,8 @@ class StockListRepository(private val context: Context) {
                     Stock(
                         name = it.name,
                         code = it.code,
-                        market = StockMarket.TW,
+                        market = if (it.market == StockMarket.US) StockMarket.US else StockMarket.TW,
+                        exchange = StockExchange.normalize(it.market),
                         industry = it.industry,
                         stockType = it.stockType
                     )
@@ -99,7 +100,8 @@ class StockListRepository(private val context: Context) {
             Stock(
                 name = it.name,
                 code = it.code,
-                market = StockMarket.TW,
+                market = if (it.market == StockMarket.US) StockMarket.US else StockMarket.TW,
+                exchange = StockExchange.normalize(it.market),
                 industry = it.industry,
                 stockType = it.stockType
             )
@@ -111,7 +113,7 @@ class StockListRepository(private val context: Context) {
             JsonStock(
                 name = it.name,
                 code = it.code,
-                market = StockMarket.TW,
+                market = if (StockMarket.isUs(it.market)) StockMarket.US else it.exchange,
                 industry = it.industry,
                 stockType = it.stockType
             )

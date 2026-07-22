@@ -20,6 +20,7 @@ class UsStockListRepository(private val context: Context) {
                         name = item.name,
                         code = item.code,
                         market = StockMarket.US,
+                        exchange = StockExchange.normalize(item.market),
                         industry = item.industry,
                         stockType = item.stockType
                     )

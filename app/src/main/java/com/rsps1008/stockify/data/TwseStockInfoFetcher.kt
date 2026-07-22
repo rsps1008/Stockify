@@ -48,85 +48,98 @@ class TwseStockInfoFetcher : StockInfoFetcher {
     override suspend fun fetchStockInfoList(
         stockCodes: List<String>
     ): Map<String, RealtimeStockInfo> = withContext(Dispatchers.IO) {
-        stockCodes.map { code ->
-            async {
-                fetchStockInfoInternal(code)?.let { info ->
-                    code to info
-                }
-            }
-        }.awaitAll().filterNotNull().toMap()
+        fetchStockInfoListByExchange(stockCodes.associateWith { StockExchange.UNKNOWN })
+    }
+
+    suspend fun fetchStockInfoListByExchange(
+        stocks: List<Stock>
+    ): Map<String, RealtimeStockInfo> = withContext(Dispatchers.IO) {
+        fetchStockInfoListByExchange(stocks.associate { it.code to it.exchange })
     }
 
     override suspend fun fetchStockInfo(stockCode: String, stockType: String): RealtimeStockInfo? =
         withContext(Dispatchers.IO) {
-            fetchStockInfoInternal(stockCode)
+            fetchStockInfoListByExchange(mapOf(stockCode to StockExchange.UNKNOWN))[stockCode]
         }
+
+    private suspend fun fetchStockInfoListByExchange(
+        stockExchanges: Map<String, String>
+    ): Map<String, RealtimeStockInfo> {
+        val normalized = stockExchanges
+            .mapKeys { it.key.trim() }
+            .filterKeys { it.isNotEmpty() }
+        if (normalized.isEmpty()) return emptyMap()
+
+        return normalized.keys.toList()
+            .chunked(5)
+            .flatMap { chunk ->
+                fetchStockInfoBatch(chunk, normalized)
+                    .entries
+            }
+            .associate { it.key to it.value }
+    }
 
     @SuppressLint("UnsafeOptInUsageError")
-    private suspend fun fetchStockInfoInternal(stockCode: String): RealtimeStockInfo? {
-        return retryOnTransientNetworkFailure("TwseStockInfoFetcher", stockCode) {
-            val code = if (stockCode.contains(".")) stockCode else "$stockCode.tw"
-            val urls = listOf(
-                "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_$code&json=1&delay=0",
-                "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=otc_$code&json=1&delay=0"
-            )
-
-            for (url in urls) {
-                val responseText = fetchSemaphore.withPermit {
-                    client.get(url) {
-                        headers.append("User-Agent", "Mozilla/5.0")
-                    }.bodyAsText()
+    private suspend fun fetchStockInfoBatch(
+        stockCodes: List<String>,
+        stockExchanges: Map<String, String>
+    ): Map<String, RealtimeStockInfo> {
+        return retryOnTransientNetworkFailure(
+            "TwseStockInfoFetcher",
+            stockCodes.joinToString(",")
+        ) {
+            val channels = stockCodes.flatMap { stockCode ->
+                val code = if (stockCode.contains(".")) stockCode else "$stockCode.tw"
+                when (StockExchange.normalize(stockExchanges[stockCode])) {
+                    StockExchange.LISTED -> listOf("tse_$code")
+                    StockExchange.OTC -> listOf("otc_$code")
+                    else -> listOf("tse_$code", "otc_$code")
                 }
-
-                if (responseText.isBlank() ||
-                    !responseText.trim().startsWith("{") ||
-                    !responseText.trim().endsWith("}")
-                ) {
-                    continue
-                }
-
-                val root = Json.parseToJsonElement(responseText).jsonObject
-                val msgArray = root["msgArray"]?.jsonArray ?: continue
-                if (msgArray.isEmpty()) continue
-
-                val obj = msgArray[0].jsonObject
-
-                // Parse last price, falling back to bid/ask when z is unavailable.
-                val zRaw = obj["z"]?.jsonPrimitive?.content
-                val price: Double? =
-                    zRaw?.takeIf { it != "-" }?.toDoubleOrNull()
-                        ?: firstValidPrice(obj["a"]?.jsonPrimitive?.content)
-                        ?: firstValidPrice(obj["b"]?.jsonPrimitive?.content)
-
-                val yesterday = obj["y"]?.jsonPrimitive?.content?.toDoubleOrNull()
-                if (price != null && yesterday != null && yesterday != 0.0) {
-                    val change = price - yesterday
-                    val changePercent = (change / yesterday) * 100
-
-                    val up = obj["u"]?.jsonPrimitive?.content?.toDoubleOrNull()
-                    val down = obj["w"]?.jsonPrimitive?.content?.toDoubleOrNull()
-                    val limitState =
-                        when {
-                            up != null && price == up -> LimitState.LIMIT_UP
-                            down != null && price == down -> LimitState.LIMIT_DOWN
-                            else -> LimitState.NONE
-                        }
-
-                    val info = RealtimeStockInfo(
-                        currentPrice = price,
-                        change = change,
-                        changePercent = changePercent,
-                        limitState = limitState
-                    )
-
-                    Log.d("TwseStockInfoFetcher", "TWSE Fetched $stockCode -> $info from $url")
-                    return@retryOnTransientNetworkFailure info
-                }
+            }.distinct().joinToString("%7C")
+            val url = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=$channels&json=1&delay=0"
+            val responseText = fetchSemaphore.withPermit {
+                client.get(url) {
+                    headers.append("User-Agent", "Mozilla/5.0")
+                }.bodyAsText()
             }
 
-            Log.e("TwseStockInfoFetcher", "Failed to fetch price data for $stockCode from all TWSE URLs")
-            null
-        }
+            if (responseText.isBlank() ||
+                !responseText.trim().startsWith("{") ||
+                !responseText.trim().endsWith("}")
+            ) return@retryOnTransientNetworkFailure emptyMap()
+
+            val msgArray = Json.parseToJsonElement(responseText).jsonObject["msgArray"]?.jsonArray
+                ?: return@retryOnTransientNetworkFailure emptyMap()
+            msgArray.mapNotNull { element ->
+                val obj = element.jsonObject
+                val code = obj["c"]?.jsonPrimitive?.content?.trim().orEmpty()
+                if (code !in stockCodes) return@mapNotNull null
+                parseRealtimeInfo(obj)?.let { code to it }
+            }.toMap()
+        } ?: emptyMap()
+    }
+
+    private fun parseRealtimeInfo(obj: kotlinx.serialization.json.JsonObject): RealtimeStockInfo? {
+        val zRaw = obj["z"]?.jsonPrimitive?.content
+        val price = zRaw?.takeIf { it != "-" }?.toDoubleOrNull()
+            ?: firstValidPrice(obj["a"]?.jsonPrimitive?.content)
+            ?: firstValidPrice(obj["b"]?.jsonPrimitive?.content)
+        val yesterday = obj["y"]?.jsonPrimitive?.content?.toDoubleOrNull()
+        if (price == null || yesterday == null || yesterday == 0.0) return null
+
+        val change = price - yesterday
+        val up = obj["u"]?.jsonPrimitive?.content?.toDoubleOrNull()
+        val down = obj["w"]?.jsonPrimitive?.content?.toDoubleOrNull()
+        return RealtimeStockInfo(
+            currentPrice = price,
+            change = change,
+            changePercent = (change / yesterday) * 100,
+            limitState = when {
+                up != null && price == up -> LimitState.LIMIT_UP
+                down != null && price == down -> LimitState.LIMIT_DOWN
+                else -> LimitState.NONE
+            }
+        )
     }
 
     fun firstValidPrice(raw: String?): Double? =

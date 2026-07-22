@@ -46,7 +46,8 @@ class TwseStockHistoryService(
     ): List<StockHistoryPoint> = withContext(Dispatchers.IO) {
         val normalizedCode = stockCode.uppercase().trim()
         val targetMonths = getTargetMonths(rangeMonths)
-        val market = StockMarket.inferFromCode(normalizedCode)
+        val stock = stockDao.getStockByCode(normalizedCode)
+        val market = StockMarket.normalize(stock?.market ?: StockMarket.inferFromCode(normalizedCode))
         val latestChartDateStr = getLatestChartDateString(market)
         val latestChartMonthStr = latestChartDateStr.take(7).replace("-", "")
         val resultPoints = mutableListOf<StockHistoryPoint>()
@@ -79,9 +80,15 @@ class TwseStockHistoryService(
         onProgress: (step: Int, total: Int) -> Unit
     ): List<StockHistoryPoint> {
         val normalizedCode = stockCode.uppercase().trim()
-        val market = StockMarket.inferFromCode(normalizedCode)
+        val stock = stockDao.getStockByCode(normalizedCode)
+        val market = StockMarket.normalize(stock?.market ?: StockMarket.inferFromCode(normalizedCode))
         return if (StockMarket.isTw(market)) {
-            fetchTwHistory(normalizedCode, rangeMonths, onProgress)
+            fetchTwHistory(
+                stockCode = normalizedCode,
+                rangeMonths = rangeMonths,
+                exchange = StockExchange.normalize(stock?.exchange),
+                onProgress = onProgress
+            )
         } else {
             fetchUsHistory(normalizedCode, rangeMonths, onProgress)
         }
@@ -90,6 +97,7 @@ class TwseStockHistoryService(
     private suspend fun fetchTwHistory(
         stockCode: String,
         rangeMonths: Int,
+        exchange: String,
         onProgress: (step: Int, total: Int) -> Unit
     ): List<StockHistoryPoint> = withContext(Dispatchers.IO) {
         val targetMonths = getTargetMonths(rangeMonths)
@@ -124,9 +132,15 @@ class TwseStockHistoryService(
                 }
             }
 
-            // Fetch from TWSE API
+            // 上市／上櫃使用 TWSE；興櫃使用 TPEx 月歷史行情 API。
             val dateParam = "${monthStr}01" // YYYYMM01
-            val url = "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=$dateParam&stockNo=$stockCode"
+            val isEmerging = StockExchange.isEmerging(exchange)
+            val url = if (isEmerging) {
+                val formattedDate = "${monthStr.substring(0, 4)}%2F${monthStr.substring(4, 6)}%2F01"
+                "https://www.tpex.org.tw/www/zh-tw/emerging/historical?type=Monthly&date=$formattedDate&code=$stockCode&response=json"
+            } else {
+                "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=$dateParam&stockNo=$stockCode"
+            }
 
             val body = retryOnTransientNetworkFailure(TAG, stockCode) {
                 client.get(url) {
@@ -136,7 +150,11 @@ class TwseStockHistoryService(
 
             if (body != null) {
                 try {
-                    val points = parseTwseResponse(body).filterForChart(latestChartDateStr)
+                    val points = if (isEmerging) {
+                        parseTpexEmergingResponse(body)
+                    } else {
+                        parseTwseResponse(body)
+                    }.filterForChart(latestChartDateStr)
                     if (points.isNotEmpty()) {
                         cache[cacheKey] = points
                         resultPoints.addAll(points)
@@ -146,7 +164,7 @@ class TwseStockHistoryService(
                         stockDao.insertHistoryPrices(dbEntities)
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error parsing TWSE response for $stockCode in $monthStr", e)
+                    Log.e(TAG, "Error parsing ${if (isEmerging) "TPEx" else "TWSE"} response for $stockCode in $monthStr", e)
                 }
             }
 
@@ -384,6 +402,48 @@ class TwseStockHistoryService(
             val date = parseRocDate(rawDate) ?: continue
             val price = rawPrice.replace(",", "").toDoubleOrNull() ?: continue
             points.add(StockHistoryPoint(date, price))
+        }
+        return points
+    }
+
+    private fun parseTpexEmergingResponse(jsonText: String): List<StockHistoryPoint> {
+        val points = mutableListOf<StockHistoryPoint>()
+        if (jsonText.isBlank()) return points
+
+        val root = Json.parseToJsonElement(jsonText).jsonObject
+        if (!root["stat"]?.jsonPrimitive?.content.orEmpty().equals("ok", ignoreCase = true)) {
+            return points
+        }
+
+        val rows = root["tables"]?.jsonArray
+            ?.firstOrNull()
+            ?.jsonObject
+            ?.get("data")
+            ?.jsonArray
+            ?: return points
+
+        for (rowElement in rows) {
+            val row = rowElement.jsonArray
+            if (row.size <= 5) continue
+
+            val rocDate = row[0].jsonPrimitive.content.trim()
+            val dateParts = rocDate.split("/")
+            if (dateParts.size != 3) continue
+            val year = dateParts[0].toIntOrNull()?.plus(1911) ?: continue
+            val month = dateParts[1].toIntOrNull() ?: continue
+            val day = dateParts[2].toIntOrNull() ?: continue
+            val price = row[5].jsonPrimitive.content
+                .replace(",", "")
+                .trim()
+                .toDoubleOrNull()
+                ?: continue
+
+            points.add(
+                StockHistoryPoint(
+                    date = "%04d-%02d-%02d".format(year, month, day),
+                    price = price
+                )
+            )
         }
         return points
     }

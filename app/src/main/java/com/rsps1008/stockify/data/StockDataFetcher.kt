@@ -21,7 +21,7 @@ class StockDataFetcher {
     }
 
     suspend fun fetchStockList(): List<Stock> = withContext(Dispatchers.IO) {
-        val modes = listOf("2", "4")   // 同時抓上市跟上櫃
+        val modes = listOf("2", "4", "5")   // 同時抓上市、上櫃跟興櫃
         val stocks = mutableListOf<Stock>()
 
         for (mode in modes) {
@@ -70,6 +70,7 @@ class StockDataFetcher {
                                             code = code,
                                             name = name,
                                             market = StockMarket.TW,
+                                            exchange = StockExchange.normalize(cols[3].text()),
                                             industry = industry,
                                             stockType = stockType
                                         )

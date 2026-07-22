@@ -170,6 +170,10 @@ Windows 指令範例：
 
 ## 9. 最近的重要變更
 
+- 台股股票清單現在保留 `Stock.exchange` 交易所分類（上市、上櫃、興櫃），Room 由 v10 migration 升至 v11；App 啟動時會用 bundled `stocks.json` 依代號回填舊資料。`Stock.market` 仍只表示 `TW` / `US`，並維持 `code` 唯一索引。
+- TWSE 即時報價會將上市／上櫃台股每批最多 5 檔組成 `ex_ch` 查詢並解析多筆 `msgArray`；興櫃不使用 TWSE `tse_` / `otc_` endpoint，只走 Yahoo 報價。
+- 興櫃歷史圖表使用 TPEx `www/zh-tw/emerging/historical?type=Monthly` API，逐月解析民國日期與「成交均價」；上市／上櫃歷史圖表仍使用 TWSE `STOCK_DAY`。
+
 - 首頁未實現與已實現持股清單都支援長按拖曳排序，使用 `Calvin-LL/Reorderable`；排序 key 使用 `market:code`，未實現保存到 `SettingsDataStore.holdingsOrderFlow`，已實現保存到 `SettingsDataStore.realizedHoldingsOrderFlow`，避免台股與美股代號衝突且兩個區塊排序互不影響。
 - 只要版本仍低於 `1.4.0`，首次進入首頁且 `SettingsDataStore.holdingsReorderHintShownFlow` 尚未標記，就會顯示一次「長按卡片可拖曳排序」提示；達到 `1.4.0` 以上就不再顯示。
 - 資料管理頁最上方有獨立 Google Drive 帳號卡，顯示目前帳號與雲端資料/排序資料最後備份時間；下方主區塊名稱為「持股資料管理」，備份/還原文案分成「雲端資料」與「本地資料」；另有獨立「持股排序管理」區塊，排序備份使用 `stockify_holdings_order*.json`，內容包含未實現 `order` 與已實現 `realizedOrder`，與交易 CSV / Google Drive 交易備份檔分開，Google Drive 固定檔名為 `stockify_holdings_order.json`，且「其他資料操作」維持在頁面最下面。

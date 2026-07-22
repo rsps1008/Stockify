@@ -156,10 +156,14 @@ class RealtimeStockDataService(
         if (stocks.isEmpty()) return
 
         val updatedInfos = _realtimeStockInfo.value.toMutableMap()
-        val stockGroups = stocks.groupBy { StockMarket.normalize(it.market) }
+        val stockGroups = stocks.groupBy {
+            StockMarket.normalize(it.market) to StockExchange.normalize(it.exchange)
+        }
 
         val results = coroutineScope {
-            stockGroups.flatMap { (market, marketStocks) ->
+            stockGroups.flatMap { (group, marketStocks) ->
+                val market = group.first
+                val exchange = group.second
                 if (!refreshRegardlessOfMarketOpen && !shouldRefreshMarket(market)) {
                     Log.d(
                         "RealtimeStockDataService",
@@ -167,26 +171,39 @@ class RealtimeStockDataService(
                     )
                     emptyList()
                 } else {
-                    val fetcher = getFetcherForMarket(market)
                     Log.d(
                         "RealtimeStockDataService",
-                        "Fetching $market realtime stock info using ${fetcher.javaClass.simpleName}"
+                        "Fetching $market/$exchange realtime stock info"
                     )
 
-                    marketStocks.map { stock ->
-                        async(Dispatchers.IO) {
-                            val outcome = fetchStockInfoForMarket(
-                                stockCode = stock.code,
-                                market = market,
-                                stockType = stock.stockType
-                            )
-
-                            FetchResult(
-                                code = stock.code,
-                                info = outcome.info,
-                                fallbackUsed = outcome.fallbackUsed,
-                                certificateFailure = outcome.certificateFailure
-                            )
+                    if (StockMarket.isTw(market) &&
+                        !StockExchange.isEmerging(exchange) &&
+                        preferredStockDataSource.value == "TWSE"
+                    ) {
+                        val twseInfos = twseFetcher.fetchStockInfoListByExchange(marketStocks)
+                        marketStocks.map { stock ->
+                            async(Dispatchers.IO) {
+                                val twseInfo = twseInfos[stock.code]
+                                val outcome = if (twseInfo != null) {
+                                    FetchOutcome(info = twseInfo, fallbackUsed = false)
+                                } else {
+                                    val fallback = fetchWithFetcher(yahooFetcher, stock.code, stock.stockType)
+                                    fallback.copy(fallbackUsed = true)
+                                }
+                                FetchResult(stock.code, outcome.info, outcome.fallbackUsed, outcome.certificateFailure)
+                            }
+                        }
+                    } else {
+                        marketStocks.map { stock ->
+                            async(Dispatchers.IO) {
+                                val outcome = fetchStockInfoForMarket(
+                                    stockCode = stock.code,
+                                    market = market,
+                                    exchange = exchange,
+                                    stockType = stock.stockType
+                                )
+                                FetchResult(stock.code, outcome.info, outcome.fallbackUsed, outcome.certificateFailure)
+                            }
                         }
                     }
                 }
@@ -263,19 +280,57 @@ class RealtimeStockDataService(
 
         if (distinctCodes.isEmpty()) return
 
-        coroutineScope {
-            distinctCodes.map { stockCode ->
-                async(Dispatchers.IO) {
-                    refreshStockInternal(stockCode)
-                }
-            }.awaitAll()
+        val stocks = distinctCodes.mapNotNull { stockDao.getStockByCode(it) }
+        val batchableTaiwanStocks = stocks.filter {
+            StockMarket.isTw(it.market) && !StockExchange.isEmerging(it.exchange)
         }
+        val updatedInfos = _realtimeStockInfo.value.toMutableMap()
+
+        if (batchableTaiwanStocks.isNotEmpty() && preferredStockDataSource.value == "TWSE") {
+            val twseInfos = twseFetcher.fetchStockInfoListByExchange(batchableTaiwanStocks)
+            updatedInfos.putAll(twseInfos)
+
+            val missingStocks = batchableTaiwanStocks.filter { it.code !in twseInfos }
+            coroutineScope {
+                missingStocks.map { stock ->
+                    async(Dispatchers.IO) {
+                        stock.code to fetchWithFetcher(yahooFetcher, stock.code, stock.stockType).info
+                    }
+                }.awaitAll().forEach { (code, info) ->
+                    info?.let { updatedInfos[code] = it }
+                }
+            }
+        }
+
+        val remainingStocks = stocks.filterNot { it in batchableTaiwanStocks }
+        coroutineScope {
+            remainingStocks.map { stock ->
+                async(Dispatchers.IO) {
+                    stock.code to fetchStockInfoForMarket(
+                        stock.code,
+                        StockMarket.normalize(stock.market),
+                        StockExchange.normalize(stock.exchange),
+                        stock.stockType
+                    ).info
+                }
+            }.awaitAll().forEach { (code, info) ->
+                info?.let { updatedInfos[code] = it }
+            }
+        }
+
+        _realtimeStockInfo.value = updatedInfos
+        settingsDataStore.setRealtimeStockInfoCache(updatedInfos)
     }
 
     private suspend fun refreshStockInternal(stockCode: String) {
         val stock = stockDao.getStockByCode(stockCode)
-        val market = StockMarket.normalize(stock?.market ?: StockMarket.inferFromCode(stockCode))
-        val outcome = fetchStockInfoForMarket(stockCode, market, stock?.stockType.orEmpty())
+            val market = StockMarket.normalize(stock?.market ?: StockMarket.inferFromCode(stockCode))
+            val outcome = fetchStockInfoForMarket(
+                stockCode,
+                market,
+                StockExchange.normalize(stock?.exchange),
+                stock?.stockType.orEmpty()
+            )
 
         if (outcome.certificateFailure && !hasNotifiedAboutCertificateFailure) {
             postQuoteCertificateFailureToast()
@@ -298,10 +353,20 @@ class RealtimeStockDataService(
 
         val stock = stockDao.getStockByCode(stockCode)
         val market = StockMarket.normalize(stock?.market ?: StockMarket.inferFromCode(stockCode))
-        return fetchStockInfoForMarket(stockCode, market, stock?.stockType.orEmpty()).info
+        return fetchStockInfoForMarket(
+            stockCode,
+            market,
+            StockExchange.normalize(stock?.exchange),
+            stock?.stockType.orEmpty()
+        ).info
     }
 
-    private suspend fun fetchStockInfoForMarket(stockCode: String, market: String, stockType: String = ""): FetchOutcome {
+    private suspend fun fetchStockInfoForMarket(
+        stockCode: String,
+        market: String,
+        exchange: String = StockExchange.UNKNOWN,
+        stockType: String = ""
+    ): FetchOutcome {
         return if (StockMarket.isUs(market)) {
             val (primaryFetcher, secondaryFetcher) = getUsFetchers()
             Log.d(
@@ -314,6 +379,9 @@ class RealtimeStockDataService(
                 secondaryFetcher = secondaryFetcher,
                 stockType = stockType
             )
+        } else if (StockExchange.isEmerging(exchange)) {
+            Log.d("RealtimeStockDataService", "Refreshing $stockCode as emerging stock using Yahoo only")
+            fetchWithFetcher(yahooFetcher, stockCode, stockType)
         } else {
             val (primaryFetcher, secondaryFetcher) = getTwFetchers()
             Log.d(
@@ -500,6 +568,19 @@ class RealtimeStockDataService(
                 fallbackUsed = true,
                 certificateFailure = primaryCertificateFailure || secondaryCertificateFailure
             )
+        }
+    }
+
+    private suspend fun fetchWithFetcher(
+        fetcher: StockInfoFetcher,
+        stockCode: String,
+        stockType: String
+    ): FetchOutcome {
+        return try {
+            FetchOutcome(fetcher.fetchStockInfo(stockCode, stockType), fallbackUsed = false)
+        } catch (e: CertificateValidationException) {
+            Log.e("RealtimeStockDataService", "Source certificate validation failed for $stockCode", e)
+            FetchOutcome(info = null, fallbackUsed = false, certificateFailure = true)
         }
     }
 

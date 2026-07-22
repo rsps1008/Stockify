@@ -46,6 +46,7 @@ class TwseStockHistoryServiceTest {
         override suspend fun getStockCountByMarket(market: String): Int = 0
         override suspend fun getStocksByMarket(market: String): List<Stock> = emptyList()
         override suspend fun deleteStocksByMarket(market: String) {}
+        override suspend fun updateTaiwanStockExchange(code: String, exchange: String) {}
         override suspend fun deleteTransactionsByStockCode(stockCode: String) {}
         override suspend fun deleteTransactionsByStockCodeAndAccountId(stockCode: String, accountId: Int) {}
         override suspend fun deleteTransactionsByAccountId(accountId: Int) {}

@@ -2971,7 +2971,7 @@
     "name": "益航",
     "code": "2601",
     "market": "上市",
-    "industry": "貿易百貨業",
+    "industry": "航運業",
     "stockType": "股票"
   },
   {
@@ -5124,6 +5124,13 @@
     "stockType": "股票"
   },
   {
+    "name": "凌陽創新",
+    "code": "5236",
+    "market": "上市",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
     "name": "乙盛-KY",
     "code": "5243",
     "market": "上市",
@@ -6304,13 +6311,6 @@
     "code": "6805",
     "market": "上市",
     "industry": "電子零組件業",
-    "stockType": "股票"
-  },
-  {
-    "name": "森崴能源",
-    "code": "6806",
-    "market": "上市",
-    "industry": "綠能環保",
     "stockType": "股票"
   },
   {
@@ -7735,6 +7735,13 @@
     "stockType": "創新板"
   },
   {
+    "name": "漢康-KY創",
+    "code": "7827",
+    "market": "上市臺灣創新板",
+    "industry": "生技醫療業",
+    "stockType": "創新板"
+  },
+  {
     "name": "微矽電子-創",
     "code": "8162",
     "market": "上市臺灣創新板",
@@ -7763,8 +7770,50 @@
     "stockType": "ETF"
   },
   {
+    "name": "主動安聯美國科技",
+    "code": "00402A",
+    "market": "上市",
+    "industry": "",
+    "stockType": "ETF"
+  },
+  {
     "name": "主動統一升級50",
     "code": "00403A",
+    "market": "上市",
+    "industry": "",
+    "stockType": "ETF"
+  },
+  {
+    "name": "主動聯博動能50",
+    "code": "00404A",
+    "market": "上市",
+    "industry": "",
+    "stockType": "ETF"
+  },
+  {
+    "name": "主動富邦台灣龍耀",
+    "code": "00405A",
+    "market": "上市",
+    "industry": "",
+    "stockType": "ETF"
+  },
+  {
+    "name": "主動中信台灣收益",
+    "code": "00406A",
+    "market": "上市",
+    "industry": "",
+    "stockType": "ETF"
+  },
+  {
+    "name": "主動凱基台灣",
+    "code": "00407A",
+    "market": "上市",
+    "industry": "",
+    "stockType": "ETF"
+  },
+  {
+    "name": "主動第一金優股息",
+    "code": "00408A",
     "market": "上市",
     "industry": "",
     "stockType": "ETF"
@@ -8491,7 +8540,7 @@
     "stockType": "ETF"
   },
   {
-    "name": "新光投等債15+",
+    "name": "台新投等債15+",
     "code": "00775B",
     "market": "上市",
     "industry": "",
@@ -8680,7 +8729,7 @@
     "stockType": "ETF"
   },
   {
-    "name": "新光臺灣半導體30",
+    "name": "台新臺灣半導體30",
     "code": "00904",
     "market": "上市",
     "industry": "",
@@ -9065,7 +9114,7 @@
     "stockType": "ETF"
   },
   {
-    "name": "新光美國電力基建",
+    "name": "台新美國電力基建",
     "code": "009805",
     "market": "上市",
     "industry": "",
@@ -9165,6 +9214,20 @@
   {
     "name": "元大納斯達克精選",
     "code": "009820",
+    "market": "上市",
+    "industry": "",
+    "stockType": "ETF"
+  },
+  {
+    "name": "野村稀土關鍵資源",
+    "code": "009821",
+    "market": "上市",
+    "industry": "",
+    "stockType": "ETF"
+  },
+  {
+    "name": "群益美國科技巨頭",
+    "code": "009824",
     "market": "上市",
     "industry": "",
     "stockType": "ETF"
@@ -9347,13 +9410,6 @@
   {
     "name": "富邦蘋果正二N",
     "code": "02001L",
-    "market": "上市",
-    "industry": "",
-    "stockType": "ETN"
-  },
-  {
-    "name": "富邦蘋果反一N",
-    "code": "02001R",
     "market": "上市",
     "industry": "",
     "stockType": "ETN"
@@ -9828,7 +9884,7 @@
     "stockType": "ETF"
   },
   {
-    "name": "新光15年IG金融債",
+    "name": "台新15年IG金融債",
     "code": "00844B",
     "market": "上櫃",
     "industry": "",
@@ -9933,7 +9989,7 @@
     "stockType": "ETF"
   },
   {
-    "name": "新光A-BBB電信債",
+    "name": "台新A-BBB電信債",
     "code": "00867B",
     "market": "上櫃",
     "industry": "",
@@ -10094,7 +10150,7 @@
     "stockType": "ETF"
   },
   {
-    "name": "新光BBB投等債20+",
+    "name": "台新BBB投等債20+",
     "code": "00970B",
     "market": "上櫃",
     "industry": "",
@@ -10164,6 +10220,27 @@
     "stockType": "ETF"
   },
   {
+    "name": "華南永昌未來金融",
+    "code": "009822",
+    "market": "上櫃",
+    "industry": "",
+    "stockType": "ETF"
+  },
+  {
+    "name": "群益S&P500",
+    "code": "009823",
+    "market": "上櫃",
+    "industry": "",
+    "stockType": "ETF"
+  },
+  {
+    "name": "聯邦美國金融創新",
+    "code": "009825",
+    "market": "上櫃",
+    "industry": "",
+    "stockType": "ETF"
+  },
+  {
     "name": "FT投資級債20+",
     "code": "00982B",
     "market": "上櫃",
@@ -10227,6 +10304,13 @@
     "stockType": "ETF"
   },
   {
+    "name": "國泰收益非投等債",
+    "code": "00990B",
+    "market": "上櫃",
+    "industry": "",
+    "stockType": "ETF"
+  },
+  {
     "name": "主動復華金融股息",
     "code": "00998A",
     "market": "上櫃",
@@ -10243,13 +10327,6 @@
   {
     "name": "統一亞洲半導體N",
     "code": "020025",
-    "market": "上櫃",
-    "industry": "",
-    "stockType": "ETN"
-  },
-  {
-    "name": "元大上櫃ESG成長N",
-    "code": "020027",
     "market": "上櫃",
     "industry": "",
     "stockType": "ETN"
@@ -10391,7 +10468,7 @@
     "name": "川寶",
     "code": "1595",
     "market": "上櫃",
-    "industry": "電子零組件業",
+    "industry": "半導體業",
     "stockType": "股票"
   },
   {
@@ -10413,6 +10490,13 @@
     "code": "1777",
     "market": "上櫃",
     "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "立弘",
+    "code": "1780",
+    "market": "上櫃",
+    "industry": "食品工業",
     "stockType": "股票"
   },
   {
@@ -10545,7 +10629,7 @@
     "name": "泰茂",
     "code": "2230",
     "market": "上櫃",
-    "industry": "電機機械",
+    "industry": "居家生活",
     "stockType": "股票"
   },
   {
@@ -10769,7 +10853,7 @@
     "name": "全域",
     "code": "3067",
     "market": "上櫃",
-    "industry": "其他電子業",
+    "industry": "居家生活",
     "stockType": "股票"
   },
   {
@@ -10888,7 +10972,7 @@
     "name": "弘塑",
     "code": "3131",
     "market": "上櫃",
-    "industry": "其他電子業",
+    "industry": "半導體業",
     "stockType": "股票"
   },
   {
@@ -11238,7 +11322,7 @@
     "name": "斐成",
     "code": "3313",
     "market": "上櫃",
-    "industry": "其他業",
+    "industry": "建材營造業",
     "stockType": "股票"
   },
   {
@@ -11379,13 +11463,6 @@
     "code": "3402",
     "market": "上櫃",
     "industry": "其他電子業",
-    "stockType": "股票"
-  },
-  {
-    "name": "台興",
-    "code": "3426",
-    "market": "上櫃",
-    "industry": "電機機械",
     "stockType": "股票"
   },
   {
@@ -12701,7 +12778,7 @@
     "name": "台聯電",
     "code": "4905",
     "market": "上櫃",
-    "industry": "通信網路業",
+    "industry": "生技醫療業",
     "stockType": "股票"
   },
   {
@@ -12743,7 +12820,7 @@
     "name": "欣厚-KY",
     "code": "4924",
     "market": "上櫃",
-    "industry": "電腦及週邊設備業",
+    "industry": "綠能環保",
     "stockType": "股票"
   },
   {
@@ -12835,13 +12912,6 @@
     "code": "4979",
     "market": "上櫃",
     "industry": "通信網路業",
-    "stockType": "股票"
-  },
-  {
-    "name": "科誠",
-    "code": "4987",
-    "market": "上櫃",
-    "industry": "電腦及週邊設備業",
     "stockType": "股票"
   },
   {
@@ -12996,13 +13066,6 @@
     "code": "5230",
     "market": "上櫃",
     "industry": "光電業",
-    "stockType": "股票"
-  },
-  {
-    "name": "凌陽創新",
-    "code": "5236",
-    "market": "上櫃",
-    "industry": "半導體業",
     "stockType": "股票"
   },
   {
@@ -13233,7 +13296,7 @@
     "name": "光譜",
     "code": "5381",
     "market": "上櫃",
-    "industry": "電子零組件業",
+    "industry": "電機機械",
     "stockType": "股票"
   },
   {
@@ -13765,7 +13828,7 @@
     "name": "廣運",
     "code": "6125",
     "market": "上櫃",
-    "industry": "光電業",
+    "industry": "電機機械",
     "stockType": "股票"
   },
   {
@@ -13905,7 +13968,7 @@
     "name": "華電網",
     "code": "6163",
     "market": "上櫃",
-    "industry": "通信網路業",
+    "industry": "資訊服務業",
     "stockType": "股票"
   },
   {
@@ -14178,7 +14241,7 @@
     "name": "中湛",
     "code": "6236",
     "market": "上櫃",
-    "industry": "其他業",
+    "industry": "數位雲端",
     "stockType": "股票"
   },
   {
@@ -15351,6 +15414,13 @@
     "stockType": "股票"
   },
   {
+    "name": "圓祥生技",
+    "code": "6945",
+    "market": "上櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
     "name": "家碩",
     "code": "6953",
     "market": "上櫃",
@@ -15397,6 +15467,13 @@
     "code": "6983",
     "market": "上櫃",
     "industry": "其他電子業",
+    "stockType": "股票"
+  },
+  {
+    "name": "和迅",
+    "code": "6986",
+    "market": "上櫃",
+    "industry": "生技醫療業",
     "stockType": "股票"
   },
   {
@@ -15522,7 +15599,7 @@
     "name": "友鋮",
     "code": "7718",
     "market": "上櫃",
-    "industry": "鋼鐵工業",
+    "industry": "電機機械",
     "stockType": "股票"
   },
   {
@@ -15666,6 +15743,20 @@
     "stockType": "股票"
   },
   {
+    "name": "海昌生技",
+    "code": "7814",
+    "market": "上櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "精誠金融",
+    "code": "7819",
+    "market": "上櫃",
+    "industry": "資訊服務業",
+    "stockType": "股票"
+  },
+  {
     "name": "立盈",
     "code": "7820",
     "market": "上櫃",
@@ -15677,6 +15768,13 @@
     "code": "7828",
     "market": "上櫃",
     "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "達人網",
+    "code": "7839",
+    "market": "上櫃",
+    "industry": "數位雲端",
     "stockType": "股票"
   },
   {
@@ -16411,7 +16509,7 @@
     "name": "智通*",
     "code": "8932",
     "market": "上櫃",
-    "industry": "其他業",
+    "industry": "數位雲端",
     "stockType": "股票"
   },
   {
@@ -16504,5 +16602,2504 @@
     "market": "上櫃",
     "industry": "",
     "stockType": "特別股"
+  },
+  {
+    "name": "富味鄉",
+    "code": "1260",
+    "market": "興櫃",
+    "industry": "食品工業",
+    "stockType": "股票"
+  },
+  {
+    "name": "乾杯",
+    "code": "1269",
+    "market": "興櫃",
+    "industry": "觀光餐旅",
+    "stockType": "股票"
+  },
+  {
+    "name": "晨暉生技",
+    "code": "1271",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "利統",
+    "code": "1293",
+    "market": "興櫃",
+    "industry": "食品工業",
+    "stockType": "股票"
+  },
+  {
+    "name": "旭東環保",
+    "code": "1343",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "東盟開發",
+    "code": "1480",
+    "market": "興櫃",
+    "industry": "鋼鐵工業",
+    "stockType": "股票"
+  },
+  {
+    "name": "日高",
+    "code": "1594",
+    "market": "興櫃",
+    "industry": "電機機械",
+    "stockType": "股票"
+  },
+  {
+    "name": "震南鐵",
+    "code": "2071",
+    "market": "興櫃",
+    "industry": "鋼鐵工業",
+    "stockType": "股票"
+  },
+  {
+    "name": "華德動能",
+    "code": "2237",
+    "market": "興櫃",
+    "industry": "電機機械",
+    "stockType": "股票"
+  },
+  {
+    "name": "詠勝昌*",
+    "code": "2245",
+    "market": "興櫃",
+    "industry": "電機機械",
+    "stockType": "股票"
+  },
+  {
+    "name": "湧盛",
+    "code": "2249",
+    "market": "興櫃",
+    "industry": "電機機械",
+    "stockType": "股票"
+  },
+  {
+    "name": "為昇科",
+    "code": "2252",
+    "market": "興櫃",
+    "industry": "其他電子業",
+    "stockType": "股票"
+  },
+  {
+    "name": "凱銳光電",
+    "code": "2255",
+    "market": "興櫃",
+    "industry": "其他電子業",
+    "stockType": "股票"
+  },
+  {
+    "name": "歐特明",
+    "code": "2256",
+    "market": "興櫃",
+    "industry": "其他電子業",
+    "stockType": "股票"
+  },
+  {
+    "name": "中信造船",
+    "code": "2644",
+    "market": "興櫃",
+    "industry": "航運業",
+    "stockType": "股票"
+  },
+  {
+    "name": "維格餅家",
+    "code": "2733",
+    "market": "興櫃",
+    "industry": "觀光餐旅",
+    "stockType": "股票"
+  },
+  {
+    "name": "老四川",
+    "code": "2741",
+    "market": "興櫃",
+    "industry": "觀光餐旅",
+    "stockType": "股票"
+  },
+  {
+    "name": "路易莎咖啡",
+    "code": "2758",
+    "market": "興櫃",
+    "industry": "觀光餐旅",
+    "stockType": "股票"
+  },
+  {
+    "name": "巨宇翔",
+    "code": "2760",
+    "market": "興櫃",
+    "industry": "觀光餐旅",
+    "stockType": "股票"
+  },
+  {
+    "name": "橘焱胡同",
+    "code": "2761",
+    "market": "興櫃",
+    "industry": "觀光餐旅",
+    "stockType": "股票"
+  },
+  {
+    "name": "床的世界",
+    "code": "2938",
+    "market": "興櫃",
+    "industry": "居家生活",
+    "stockType": "股票"
+  },
+  {
+    "name": "歐都納",
+    "code": "2940",
+    "market": "興櫃",
+    "industry": "運動休閒",
+    "stockType": "股票"
+  },
+  {
+    "name": "京站",
+    "code": "2942",
+    "market": "興櫃",
+    "industry": "居家生活",
+    "stockType": "股票"
+  },
+  {
+    "name": "拍檔",
+    "code": "3097",
+    "market": "興櫃",
+    "industry": "電腦及週邊設備業",
+    "stockType": "股票"
+  },
+  {
+    "name": "年程",
+    "code": "3117",
+    "market": "興櫃",
+    "industry": "電子零組件業",
+    "stockType": "股票"
+  },
+  {
+    "name": "微邦",
+    "code": "3184",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "智通聯網",
+    "code": "3473",
+    "market": "興櫃",
+    "industry": "通信網路業",
+    "stockType": "股票"
+  },
+  {
+    "name": "聯致",
+    "code": "3585",
+    "market": "興櫃",
+    "industry": "電子零組件業",
+    "stockType": "股票"
+  },
+  {
+    "name": "山太士",
+    "code": "3595",
+    "market": "興櫃",
+    "industry": "光電業",
+    "stockType": "股票"
+  },
+  {
+    "name": "建祥國際",
+    "code": "3603",
+    "market": "興櫃",
+    "industry": "電子通路業",
+    "stockType": "股票"
+  },
+  {
+    "name": "云光",
+    "code": "3633",
+    "market": "興櫃",
+    "industry": "光電業",
+    "stockType": "股票"
+  },
+  {
+    "name": "凌嘉科",
+    "code": "3644",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "百辰",
+    "code": "3659",
+    "market": "興櫃",
+    "industry": "光電業",
+    "stockType": "股票"
+  },
+  {
+    "name": "聯享",
+    "code": "3678",
+    "market": "興櫃",
+    "industry": "光電業",
+    "stockType": "股票"
+  },
+  {
+    "name": "善德生技",
+    "code": "4115",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "普生",
+    "code": "4117",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "優你康",
+    "code": "4150",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "鑫品生醫",
+    "code": "4170",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "因華",
+    "code": "4172",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "尖端醫",
+    "code": "4186",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "禾生技",
+    "code": "4194",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "暐世",
+    "code": "4197",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "敏成健康",
+    "code": "4431",
+    "market": "興櫃",
+    "industry": "其他業",
+    "stockType": "股票"
+  },
+  {
+    "name": "旭東",
+    "code": "4537",
+    "market": "興櫃",
+    "industry": "光電業",
+    "stockType": "股票"
+  },
+  {
+    "name": "春日",
+    "code": "4544",
+    "market": "興櫃",
+    "industry": "電機機械",
+    "stockType": "股票"
+  },
+  {
+    "name": "長亨",
+    "code": "4546",
+    "market": "興櫃",
+    "industry": "電機機械",
+    "stockType": "股票"
+  },
+  {
+    "name": "盛復",
+    "code": "4553",
+    "market": "興櫃",
+    "industry": "電機機械",
+    "stockType": "股票"
+  },
+  {
+    "name": "久裕興",
+    "code": "4559",
+    "market": "興櫃",
+    "industry": "運動休閒",
+    "stockType": "股票"
+  },
+  {
+    "name": "宏偉",
+    "code": "4565",
+    "market": "興櫃",
+    "industry": "電機機械",
+    "stockType": "股票"
+  },
+  {
+    "name": "傑生",
+    "code": "4570",
+    "market": "興櫃",
+    "industry": "電機機械",
+    "stockType": "股票"
+  },
+  {
+    "name": "高明鐵",
+    "code": "4573",
+    "market": "興櫃",
+    "industry": "電機機械",
+    "stockType": "股票"
+  },
+  {
+    "name": "銓寶",
+    "code": "4575",
+    "market": "興櫃",
+    "industry": "電機機械",
+    "stockType": "股票"
+  },
+  {
+    "name": "寶元數控",
+    "code": "4587",
+    "market": "興櫃",
+    "industry": "電機機械",
+    "stockType": "股票"
+  },
+  {
+    "name": "碩陽電機",
+    "code": "4589",
+    "market": "興櫃",
+    "industry": "電機機械",
+    "stockType": "股票"
+  },
+  {
+    "name": "宣捷幹細胞",
+    "code": "4724",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "彥臣",
+    "code": "4732",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "大同精化",
+    "code": "4738",
+    "market": "興櫃",
+    "industry": "化學工業",
+    "stockType": "股票"
+  },
+  {
+    "name": "磐采",
+    "code": "4765",
+    "market": "興櫃",
+    "industry": "化學工業",
+    "stockType": "股票"
+  },
+  {
+    "name": "智微",
+    "code": "4925",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "佐臻",
+    "code": "4980",
+    "market": "興櫃",
+    "industry": "電子零組件業",
+    "stockType": "股票"
+  },
+  {
+    "name": "建騰",
+    "code": "5240",
+    "market": "興櫃",
+    "industry": "光電業",
+    "stockType": "股票"
+  },
+  {
+    "name": "勵威",
+    "code": "5246",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "景傳",
+    "code": "5248",
+    "market": "興櫃",
+    "industry": "光電業",
+    "stockType": "股票"
+  },
+  {
+    "name": "欣訊科技",
+    "code": "5254",
+    "market": "興櫃",
+    "industry": "電子零組件業",
+    "stockType": "股票"
+  },
+  {
+    "name": "立達",
+    "code": "5262",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "龍翩",
+    "code": "5267",
+    "market": "興櫃",
+    "industry": "光電業",
+    "stockType": "股票"
+  },
+  {
+    "name": "紘通",
+    "code": "5271",
+    "market": "興櫃",
+    "industry": "電子零組件業",
+    "stockType": "股票"
+  },
+  {
+    "name": "廣化",
+    "code": "5297",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "遠壽",
+    "code": "5859",
+    "market": "興櫃",
+    "industry": "金融保險業",
+    "stockType": "股票"
+  },
+  {
+    "name": "瑞興銀",
+    "code": "5863",
+    "market": "興櫃",
+    "industry": "金融保險業",
+    "stockType": "股票"
+  },
+  {
+    "name": "德信",
+    "code": "6027",
+    "market": "興櫃",
+    "industry": "金融保險業",
+    "stockType": "股票"
+  },
+  {
+    "name": "悠遊卡",
+    "code": "6035",
+    "market": "興櫃",
+    "industry": "金融保險業",
+    "stockType": "股票"
+  },
+  {
+    "name": "相互",
+    "code": "6407",
+    "market": "興櫃",
+    "industry": "電子零組件業",
+    "stockType": "股票"
+  },
+  {
+    "name": "淘米",
+    "code": "6428",
+    "market": "興櫃",
+    "industry": "文化創意業",
+    "stockType": "股票"
+  },
+  {
+    "name": "達輝光電",
+    "code": "6434",
+    "market": "興櫃",
+    "industry": "光電業",
+    "stockType": "股票"
+  },
+  {
+    "name": "泰合",
+    "code": "6467",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "美賣*",
+    "code": "6473",
+    "market": "興櫃",
+    "industry": "數位雲端",
+    "stockType": "股票"
+  },
+  {
+    "name": "原創生醫",
+    "code": "6483",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "雷虎生",
+    "code": "6493",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "康科特",
+    "code": "6518",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "碩豐",
+    "code": "6536",
+    "market": "興櫃",
+    "industry": "資訊服務業",
+    "stockType": "股票"
+  },
+  {
+    "name": "麗彤",
+    "code": "6539",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "普惠醫工",
+    "code": "6543",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "景凱",
+    "code": "6549",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "榮炭",
+    "code": "6555",
+    "market": "興櫃",
+    "industry": "電子零組件業",
+    "stockType": "股票"
+  },
+  {
+    "name": "研晶",
+    "code": "6559",
+    "market": "興櫃",
+    "industry": "光電業",
+    "stockType": "股票"
+  },
+  {
+    "name": "映智",
+    "code": "6563",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "安特羅",
+    "code": "6564",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "物聯",
+    "code": "6565",
+    "market": "興櫃",
+    "industry": "數位雲端",
+    "stockType": "股票"
+  },
+  {
+    "name": "博錸",
+    "code": "6572",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "台睿",
+    "code": "6580",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "友松",
+    "code": "6583",
+    "market": "興櫃",
+    "industry": "文化創意業",
+    "stockType": "股票"
+  },
+  {
+    "name": "醣基",
+    "code": "6586",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "光禹國際",
+    "code": "6595",
+    "market": "興櫃",
+    "industry": "文化創意業",
+    "stockType": "股票"
+  },
+  {
+    "name": "普達系統",
+    "code": "6599",
+    "market": "興櫃",
+    "industry": "電腦及週邊設備業",
+    "stockType": "股票"
+  },
+  {
+    "name": "儒億",
+    "code": "6604",
+    "market": "興櫃",
+    "industry": "電機機械",
+    "stockType": "股票"
+  },
+  {
+    "name": "安成生技",
+    "code": "6610",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "永虹先進",
+    "code": "6618",
+    "market": "興櫃",
+    "industry": "化學工業",
+    "stockType": "股票"
+  },
+  {
+    "name": "華宇藥",
+    "code": "6621",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "百聿數碼",
+    "code": "6622",
+    "market": "興櫃",
+    "industry": "文化創意業",
+    "stockType": "股票"
+  },
+  {
+    "name": "欣耀",
+    "code": "6634",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "沅聖",
+    "code": "6638",
+    "market": "興櫃",
+    "industry": "電腦及週邊設備業",
+    "stockType": "股票"
+  },
+  {
+    "name": "源大環能",
+    "code": "6639",
+    "market": "興櫃",
+    "industry": "油電燃氣業",
+    "stockType": "股票"
+  },
+  {
+    "name": "斯其大",
+    "code": "6648",
+    "market": "興櫃",
+    "industry": "其他電子業",
+    "stockType": "股票"
+  },
+  {
+    "name": "帝圖",
+    "code": "6650",
+    "market": "興櫃",
+    "industry": "文化創意業",
+    "stockType": "股票"
+  },
+  {
+    "name": "天明製藥",
+    "code": "6659",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "康聯生醫",
+    "code": "6665",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "和詮",
+    "code": "6673",
+    "market": "興櫃",
+    "industry": "光電業",
+    "stockType": "股票"
+  },
+  {
+    "name": "祥翊",
+    "code": "6676",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "瑩碩生技",
+    "code": "6677",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "華旭先進",
+    "code": "6682",
+    "market": "興櫃",
+    "industry": "光電業",
+    "stockType": "股票"
+  },
+  {
+    "name": "仁新",
+    "code": "6696",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "國璽幹細胞",
+    "code": "6704",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "振躍精密",
+    "code": "6705",
+    "market": "興櫃",
+    "industry": "電機機械",
+    "stockType": "股票"
+  },
+  {
+    "name": "富基電通",
+    "code": "6707",
+    "market": "興櫃",
+    "industry": "電子通路業",
+    "stockType": "股票"
+  },
+  {
+    "name": "昱厚生技",
+    "code": "6709",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "傑智環境",
+    "code": "6723",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "機光科技",
+    "code": "6729",
+    "market": "興櫃",
+    "industry": "光電業",
+    "stockType": "股票"
+  },
+  {
+    "name": "安盛生",
+    "code": "6734",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "秀育",
+    "code": "6737",
+    "market": "興櫃",
+    "industry": "電腦及週邊設備業",
+    "stockType": "股票"
+  },
+  {
+    "name": "鼎��",
+    "code": "6738",
+    "market": "興櫃",
+    "industry": "資訊服務業",
+    "stockType": "股票"
+  },
+  {
+    "name": "豐技生技",
+    "code": "6744",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "亞果生醫",
+    "code": "6748",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "泰創工程",
+    "code": "6750",
+    "market": "興櫃",
+    "industry": "其他電子業",
+    "stockType": "股票"
+  },
+  {
+    "name": "連鋐科技",
+    "code": "6755",
+    "market": "興櫃",
+    "industry": "電子零組件業",
+    "stockType": "股票"
+  },
+  {
+    "name": "冠亞",
+    "code": "6758",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "穎台科技",
+    "code": "6775",
+    "market": "興櫃",
+    "industry": "光電業",
+    "stockType": "股票"
+  },
+  {
+    "name": "學習王",
+    "code": "6780",
+    "market": "興櫃",
+    "industry": "文化創意業",
+    "stockType": "股票"
+  },
+  {
+    "name": "天凱科技",
+    "code": "6784",
+    "market": "興櫃",
+    "industry": "通信網路業",
+    "stockType": "股票"
+  },
+  {
+    "name": "芯測",
+    "code": "6786",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "晶瑞光",
+    "code": "6787",
+    "market": "興櫃",
+    "industry": "光電業",
+    "stockType": "股票"
+  },
+  {
+    "name": "天力離岸",
+    "code": "6793",
+    "market": "興櫃",
+    "industry": "其他業",
+    "stockType": "股票"
+  },
+  {
+    "name": "圓點奈米",
+    "code": "6797",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "展逸",
+    "code": "6798",
+    "market": "興櫃",
+    "industry": "運動休閒",
+    "stockType": "股票"
+  },
+  {
+    "name": "三鼎生技",
+    "code": "6808",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "新穎生醫",
+    "code": "6810",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "梭特",
+    "code": "6812",
+    "market": "興櫃",
+    "industry": "光電業",
+    "stockType": "股票"
+  },
+  {
+    "name": "路迦生醫",
+    "code": "6814",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "晶鑽生醫",
+    "code": "6815",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "捷智商訊",
+    "code": "6816",
+    "market": "興櫃",
+    "industry": "資訊服務業",
+    "stockType": "股票"
+  },
+  {
+    "name": "溫士頓",
+    "code": "6817",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "連騰",
+    "code": "6818",
+    "market": "興櫃",
+    "industry": "通信網路業",
+    "stockType": "股票"
+  },
+  {
+    "name": "眾智",
+    "code": "6819",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "連訊",
+    "code": "6820",
+    "market": "興櫃",
+    "industry": "通信網路業",
+    "stockType": "股票"
+  },
+  {
+    "name": "和暢科技",
+    "code": "6825",
+    "market": "興櫃",
+    "industry": "電腦及週邊設備業",
+    "stockType": "股票"
+  },
+  {
+    "name": "和淞",
+    "code": "6826",
+    "market": "興櫃",
+    "industry": "其他電子業",
+    "stockType": "股票"
+  },
+  {
+    "name": "巨生醫",
+    "code": "6827",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "金鼎科",
+    "code": "6832",
+    "market": "興櫃",
+    "industry": "其他業",
+    "stockType": "股票"
+  },
+  {
+    "name": "太康精密",
+    "code": "6833",
+    "market": "興櫃",
+    "industry": "電子零組件業",
+    "stockType": "股票"
+  },
+  {
+    "name": "開陽能源",
+    "code": "6839",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "瑞宇",
+    "code": "6842",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "普瑞博",
+    "code": "6847",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "拉法醫",
+    "code": "6848",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "奇鼎科技",
+    "code": "6849",
+    "market": "興櫃",
+    "industry": "其他電子業",
+    "stockType": "股票"
+  },
+  {
+    "name": "光鼎生技",
+    "code": "6850",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "宏�硒撢�",
+    "code": "6857",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "愛比科技",
+    "code": "6858",
+    "market": "興櫃",
+    "industry": "電腦及週邊設備業",
+    "stockType": "股票"
+  },
+  {
+    "name": "元樟生技",
+    "code": "6864",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "坦德科技",
+    "code": "6867",
+    "market": "興櫃",
+    "industry": "光電業",
+    "stockType": "股票"
+  },
+  {
+    "name": "采威國際",
+    "code": "6868",
+    "market": "興櫃",
+    "industry": "資訊服務業",
+    "stockType": "股票"
+  },
+  {
+    "name": "朗齊生醫*",
+    "code": "6876",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "歐付寶",
+    "code": "6878",
+    "market": "興櫃",
+    "industry": "金融保險業",
+    "stockType": "股票"
+  },
+  {
+    "name": "大江基因",
+    "code": "6879",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "甲尚",
+    "code": "6882",
+    "market": "興櫃",
+    "industry": "資訊服務業",
+    "stockType": "股票"
+  },
+  {
+    "name": "遠東生技",
+    "code": "6886",
+    "market": "興櫃",
+    "industry": "食品工業",
+    "stockType": "股票"
+  },
+  {
+    "name": "樂迦再生",
+    "code": "6891",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "台寶生醫",
+    "code": "6892",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "程曦資訊",
+    "code": "6898",
+    "market": "興櫃",
+    "industry": "資訊服務業",
+    "stockType": "股票"
+  },
+  {
+    "name": "群運",
+    "code": "6911",
+    "market": "興櫃",
+    "industry": "其他業",
+    "stockType": "股票"
+  },
+  {
+    "name": "益鈞環科*",
+    "code": "6912",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "美強光",
+    "code": "6915",
+    "market": "興櫃",
+    "industry": "電子零組件業",
+    "stockType": "股票"
+  },
+  {
+    "name": "竟天",
+    "code": "6917",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "恆勁科技",
+    "code": "6920",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "聖安生醫",
+    "code": "6926",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "聯合聚晶",
+    "code": "6927",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "水星生醫*",
+    "code": "6932",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "王子製藥",
+    "code": "6935",
+    "market": "興櫃",
+    "industry": "食品工業",
+    "stockType": "股票"
+  },
+  {
+    "name": "藍新資訊",
+    "code": "6938",
+    "market": "興櫃",
+    "industry": "資訊服務業",
+    "stockType": "股票"
+  },
+  {
+    "name": "啟弘生技",
+    "code": "6939",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "格斯科技*",
+    "code": "6940",
+    "market": "興櫃",
+    "industry": "電子零組件業",
+    "stockType": "股票"
+  },
+  {
+    "name": "三地能源",
+    "code": "6946",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "台鎔科技",
+    "code": "6947",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "兆捷科技",
+    "code": "6959",
+    "market": "興櫃",
+    "industry": "化學工業",
+    "stockType": "股票"
+  },
+  {
+    "name": "品元",
+    "code": "6963",
+    "market": "興櫃",
+    "industry": "食品工業",
+    "stockType": "股票"
+  },
+  {
+    "name": "博瑞達應材",
+    "code": "6972",
+    "market": "興櫃",
+    "industry": "化學工業",
+    "stockType": "股票"
+  },
+  {
+    "name": "永立榮",
+    "code": "6973",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "育世博-KY",
+    "code": "6976",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "聯純",
+    "code": "6977",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "勝釩",
+    "code": "6979",
+    "market": "興櫃",
+    "industry": "光電業",
+    "stockType": "股票"
+  },
+  {
+    "name": "鐳洋科技",
+    "code": "6980",
+    "market": "興櫃",
+    "industry": "通信網路業",
+    "stockType": "股票"
+  },
+  {
+    "name": "ACPAY",
+    "code": "6984",
+    "market": "興櫃",
+    "industry": "數位雲端",
+    "stockType": "股票"
+  },
+  {
+    "name": "寶晶能源*",
+    "code": "6987",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "華鉬",
+    "code": "6990",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "萬勝發科技",
+    "code": "6992",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "野獸國",
+    "code": "6995",
+    "market": "興櫃",
+    "industry": "其他業",
+    "stockType": "股票"
+  },
+  {
+    "name": "瀚醫生技",
+    "code": "6999",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "元澄半導體",
+    "code": "7415",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "香繼光",
+    "code": "7418",
+    "market": "興櫃",
+    "industry": "觀光餐旅",
+    "stockType": "股票"
+  },
+  {
+    "name": "達勝",
+    "code": "7419",
+    "market": "興櫃",
+    "industry": "電子零組件業",
+    "stockType": "股票"
+  },
+  {
+    "name": "華上生醫",
+    "code": "7427",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "凡事康",
+    "code": "7443",
+    "market": "興櫃",
+    "industry": "其他業",
+    "stockType": "股票"
+  },
+  {
+    "name": "樺緯物聯",
+    "code": "7455",
+    "market": "興櫃",
+    "industry": "電腦及週邊設備業",
+    "stockType": "股票"
+  },
+  {
+    "name": "環拓科技",
+    "code": "7507",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "清淨海",
+    "code": "7516",
+    "market": "興櫃",
+    "industry": "其他業",
+    "stockType": "股票"
+  },
+  {
+    "name": "鋒魁科技",
+    "code": "7530",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "知識科技",
+    "code": "7551",
+    "market": "興櫃",
+    "industry": "數位雲端",
+    "stockType": "股票"
+  },
+  {
+    "name": "群利",
+    "code": "7558",
+    "market": "興櫃",
+    "industry": "其他業",
+    "stockType": "股票"
+  },
+  {
+    "name": "光晟生技",
+    "code": "7561",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "博來科技",
+    "code": "7562",
+    "market": "興櫃",
+    "industry": "電腦及週邊設備業",
+    "stockType": "股票"
+  },
+  {
+    "name": "亞果遊艇",
+    "code": "7566",
+    "market": "興櫃",
+    "industry": "觀光餐旅",
+    "stockType": "股票"
+  },
+  {
+    "name": "安美得",
+    "code": "7575",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "利百景",
+    "code": "7578",
+    "market": "興櫃",
+    "industry": "其他業",
+    "stockType": "股票"
+  },
+  {
+    "name": "國際海洋",
+    "code": "7583",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "怡和國際",
+    "code": "7590",
+    "market": "興櫃",
+    "industry": "其他業",
+    "stockType": "股票"
+  },
+  {
+    "name": "世基生醫",
+    "code": "7595",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "通用幹細胞*",
+    "code": "7607",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "碩正科技",
+    "code": "7669",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "大鵬科CLMX",
+    "code": "7689",
+    "market": "興櫃",
+    "industry": "通信網路業",
+    "stockType": "股票"
+  },
+  {
+    "name": "前端風電",
+    "code": "7702",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "宏�硈邿F",
+    "code": "7706",
+    "market": "興櫃",
+    "industry": "其他業",
+    "stockType": "股票"
+  },
+  {
+    "name": "益芯科",
+    "code": "7707",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "東擎科技",
+    "code": "7710",
+    "market": "興櫃",
+    "industry": "電腦及週邊設備業",
+    "stockType": "股票"
+  },
+  {
+    "name": "碳基",
+    "code": "7719",
+    "market": "興櫃",
+    "industry": "其他業",
+    "stockType": "股票"
+  },
+  {
+    "name": "諾亞克",
+    "code": "7724",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "列特博",
+    "code": "7725",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "暄達",
+    "code": "7726",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "仲恩生醫",
+    "code": "7729",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "火星生技*",
+    "code": "7731",
+    "market": "興櫃",
+    "industry": "食品工業",
+    "stockType": "股票"
+  },
+  {
+    "name": "台智雲",
+    "code": "7735",
+    "market": "興櫃",
+    "industry": "資訊服務業",
+    "stockType": "股票"
+  },
+  {
+    "name": "凱鈿",
+    "code": "7737",
+    "market": "興櫃",
+    "industry": "數位雲端",
+    "stockType": "股票"
+  },
+  {
+    "name": "天弘化",
+    "code": "7742",
+    "market": "興櫃",
+    "industry": "化學工業",
+    "stockType": "股票"
+  },
+  {
+    "name": "紅陽",
+    "code": "7745",
+    "market": "興櫃",
+    "industry": "數位雲端",
+    "stockType": "股票"
+  },
+  {
+    "name": "鑫囍創業",
+    "code": "7748",
+    "market": "興櫃",
+    "industry": "其他業",
+    "stockType": "股票"
+  },
+  {
+    "name": "世紀樺欣",
+    "code": "7752",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "安基生技",
+    "code": "7754",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "多那之",
+    "code": "7756",
+    "market": "興櫃",
+    "industry": "觀光餐旅",
+    "stockType": "股票"
+  },
+  {
+    "name": "睿騰能源",
+    "code": "7758",
+    "market": "興櫃",
+    "industry": "電子零組件業",
+    "stockType": "股票"
+  },
+  {
+    "name": "視航生醫",
+    "code": "7759",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "三大未來",
+    "code": "7761",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "吉晟生",
+    "code": "7762",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "崇舜",
+    "code": "7763",
+    "market": "興櫃",
+    "industry": "化學工業",
+    "stockType": "股票"
+  },
+  {
+    "name": "聖州",
+    "code": "7764",
+    "market": "興櫃",
+    "industry": "其他業",
+    "stockType": "股票"
+  },
+  {
+    "name": "綠基",
+    "code": "7771",
+    "market": "興櫃",
+    "industry": "光電業",
+    "stockType": "股票"
+  },
+  {
+    "name": "富禾生醫",
+    "code": "7773",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "奧孟亞",
+    "code": "7776",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "鍇睿國際",
+    "code": "7779",
+    "market": "興櫃",
+    "industry": "運動休閒",
+    "stockType": "股票"
+  },
+  {
+    "name": "昕力資*",
+    "code": "7781",
+    "market": "興櫃",
+    "industry": "數位雲端",
+    "stockType": "股票"
+  },
+  {
+    "name": "佳運",
+    "code": "7783",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "安邦生技*",
+    "code": "7784",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "北祥科服",
+    "code": "7785",
+    "market": "興櫃",
+    "industry": "數位雲端",
+    "stockType": "股票"
+  },
+  {
+    "name": "開展",
+    "code": "7789",
+    "market": "興櫃",
+    "industry": "觀光餐旅",
+    "stockType": "股票"
+  },
+  {
+    "name": "思必瑞特",
+    "code": "7790",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "擷發科",
+    "code": "7796",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "Q BURGER",
+    "code": "7797",
+    "market": "興櫃",
+    "industry": "觀光餐旅",
+    "stockType": "股票"
+  },
+  {
+    "name": "將捷",
+    "code": "7798",
+    "market": "興櫃",
+    "industry": "建材營造業",
+    "stockType": "股票"
+  },
+  {
+    "name": "華芸科技",
+    "code": "7801",
+    "market": "興櫃",
+    "industry": "資訊服務業",
+    "stockType": "股票"
+  },
+  {
+    "name": "精華生醫",
+    "code": "7806",
+    "market": "興櫃",
+    "industry": "食品工業",
+    "stockType": "股票"
+  },
+  {
+    "name": "訊聯智藥",
+    "code": "7808",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "稜研科技*",
+    "code": "7812",
+    "market": "興櫃",
+    "industry": "通信網路業",
+    "stockType": "股票"
+  },
+  {
+    "name": "宇辰系統",
+    "code": "7813",
+    "market": "興櫃",
+    "industry": "其他電子業",
+    "stockType": "股票"
+  },
+  {
+    "name": "新特",
+    "code": "7815",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "來穎",
+    "code": "7816",
+    "market": "興櫃",
+    "industry": "電子零組件業",
+    "stockType": "股票"
+  },
+  {
+    "name": "智寶",
+    "code": "7824",
+    "market": "興櫃",
+    "industry": "其他業",
+    "stockType": "股票"
+  },
+  {
+    "name": "和亞智慧",
+    "code": "7825",
+    "market": "興櫃",
+    "industry": "其他電子業",
+    "stockType": "股票"
+  },
+  {
+    "name": "極風雲創",
+    "code": "7826",
+    "market": "興櫃",
+    "industry": "數位雲端",
+    "stockType": "股票"
+  },
+  {
+    "name": "思捷優達-KY",
+    "code": "7829",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "捷博",
+    "code": "7831",
+    "market": "興櫃",
+    "industry": "居家生活",
+    "stockType": "股票"
+  },
+  {
+    "name": "智新生技*",
+    "code": "7832",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "綠岩能源",
+    "code": "7833",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "來毅數位",
+    "code": "7834",
+    "market": "興櫃",
+    "industry": "資訊服務業",
+    "stockType": "股票"
+  },
+  {
+    "name": "智生活",
+    "code": "7836",
+    "market": "興櫃",
+    "industry": "其他業",
+    "stockType": "股票"
+  },
+  {
+    "name": "啟新生",
+    "code": "7837",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "祥圃",
+    "code": "7840",
+    "market": "興櫃",
+    "industry": "農業科技業",
+    "stockType": "股票"
+  },
+  {
+    "name": "經貿聯網",
+    "code": "7841",
+    "market": "興櫃",
+    "industry": "資訊服務業",
+    "stockType": "股票"
+  },
+  {
+    "name": "英柏得",
+    "code": "7843",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "德揚",
+    "code": "7846",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "豊漁",
+    "code": "7847",
+    "market": "興櫃",
+    "industry": "觀光餐旅",
+    "stockType": "股票"
+  },
+  {
+    "name": "騏億鑫",
+    "code": "7848",
+    "market": "興櫃",
+    "industry": "其他電子業",
+    "stockType": "股票"
+  },
+  {
+    "name": "旭誼",
+    "code": "7849",
+    "market": "興櫃",
+    "industry": "其他電子業",
+    "stockType": "股票"
+  },
+  {
+    "name": "寶泰生醫",
+    "code": "7850",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "慧康生技*-KY",
+    "code": "7851",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "政美應用",
+    "code": "7853",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "佐茂",
+    "code": "7854",
+    "market": "興櫃",
+    "industry": "電腦及週邊設備業",
+    "stockType": "股票"
+  },
+  {
+    "name": "和運租車",
+    "code": "7855",
+    "market": "興櫃",
+    "industry": "其他業",
+    "stockType": "股票"
+  },
+  {
+    "name": "漢測",
+    "code": "7856",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "合水先進",
+    "code": "7857",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "芝普",
+    "code": "7858",
+    "market": "興櫃",
+    "industry": "化學工業",
+    "stockType": "股票"
+  },
+  {
+    "name": "得生製藥",
+    "code": "7860",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "貝爾威勒",
+    "code": "7861",
+    "market": "興櫃",
+    "industry": "電子零組件業",
+    "stockType": "股票"
+  },
+  {
+    "name": "聚泰",
+    "code": "7862",
+    "market": "興櫃",
+    "industry": "紡織纖維",
+    "stockType": "股票"
+  },
+  {
+    "name": "中科物流",
+    "code": "7863",
+    "market": "興櫃",
+    "industry": "航運業",
+    "stockType": "股票"
+  },
+  {
+    "name": "金聯成",
+    "code": "7865",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "丹立",
+    "code": "7866",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "特力屋",
+    "code": "7867",
+    "market": "興櫃",
+    "industry": "居家生活",
+    "stockType": "股票"
+  },
+  {
+    "name": "聖育",
+    "code": "7868",
+    "market": "興櫃",
+    "industry": "資訊服務業",
+    "stockType": "股票"
+  },
+  {
+    "name": "宏于電機",
+    "code": "7869",
+    "market": "興櫃",
+    "industry": "電機機械",
+    "stockType": "股票"
+  },
+  {
+    "name": "聯剛科技",
+    "code": "7870",
+    "market": "興櫃",
+    "industry": "其他電子業",
+    "stockType": "股票"
+  },
+  {
+    "name": "安立璽榮-KY",
+    "code": "7871",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "登豐",
+    "code": "7872",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "瑞峰",
+    "code": "7873",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "安圖斯",
+    "code": "7875",
+    "market": "興櫃",
+    "industry": "電腦及週邊設備業",
+    "stockType": "股票"
+  },
+  {
+    "name": "鼎晉生技",
+    "code": "7876",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "海利普",
+    "code": "7877",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "藥祇",
+    "code": "7878",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "益材科技",
+    "code": "7879",
+    "market": "興櫃",
+    "industry": "電機機械",
+    "stockType": "股票"
+  },
+  {
+    "name": "聖凰",
+    "code": "7880",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "科明",
+    "code": "7881",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "倍利創投",
+    "code": "7882",
+    "market": "興櫃",
+    "industry": "其他業",
+    "stockType": "股票"
+  },
+  {
+    "name": "饗賓",
+    "code": "7883",
+    "market": "興櫃",
+    "industry": "觀光餐旅",
+    "stockType": "股票"
+  },
+  {
+    "name": "宏羚",
+    "code": "7885",
+    "market": "興櫃",
+    "industry": "其他電子業",
+    "stockType": "股票"
+  },
+  {
+    "name": "科建",
+    "code": "7886",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "宇川精材",
+    "code": "7887",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "麗寶新藥",
+    "code": "7888",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "騰勢",
+    "code": "7889",
+    "market": "興櫃",
+    "industry": "食品工業",
+    "stockType": "股票"
+  },
+  {
+    "name": "明曜科技",
+    "code": "7890",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "博研醫藥",
+    "code": "7891",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "元鈦科",
+    "code": "7892",
+    "market": "興櫃",
+    "industry": "電腦及週邊設備業",
+    "stockType": "股票"
+  },
+  {
+    "name": "睿信",
+    "code": "7893",
+    "market": "興櫃",
+    "industry": "電子零組件業",
+    "stockType": "股票"
+  },
+  {
+    "name": "瀚軒",
+    "code": "7894",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "元進莊",
+    "code": "7895",
+    "market": "興櫃",
+    "industry": "農業科技業",
+    "stockType": "股票"
+  },
+  {
+    "name": "喬越",
+    "code": "7896",
+    "market": "興櫃",
+    "industry": "電子零組件業",
+    "stockType": "股票"
+  },
+  {
+    "name": "禾迅綠電",
+    "code": "7897",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "乾瞻",
+    "code": "7898",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "景美",
+    "code": "7899",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "大大寬頻",
+    "code": "7901",
+    "market": "興櫃",
+    "industry": "通信網路業",
+    "stockType": "股票"
+  },
+  {
+    "name": "宇越生醫*",
+    "code": "7902",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "任開數位",
+    "code": "7904",
+    "market": "興櫃",
+    "industry": "數位雲端",
+    "stockType": "股票"
+  },
+  {
+    "name": "錸恩帕斯",
+    "code": "7907",
+    "market": "興櫃",
+    "industry": "其他電子業",
+    "stockType": "股票"
+  },
+  {
+    "name": "鈺祥",
+    "code": "7909",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "阿波羅電力",
+    "code": "7911",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "新聿科",
+    "code": "7912",
+    "market": "興櫃",
+    "industry": "電子零組件業",
+    "stockType": "股票"
+  },
+  {
+    "name": "通寶半導體",
+    "code": "7913",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "廌家",
+    "code": "7915",
+    "market": "興櫃",
+    "industry": "通信網路業",
+    "stockType": "股票"
+  },
+  {
+    "name": "創鉅材料",
+    "code": "7918",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "禾蒼",
+    "code": "7919",
+    "market": "興櫃",
+    "industry": "光電業",
+    "stockType": "股票"
+  },
+  {
+    "name": "瀚陽*",
+    "code": "7920",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "台普威",
+    "code": "7921",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "源點*",
+    "code": "7922",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "TLC-KY",
+    "code": "7924",
+    "market": "興櫃",
+    "industry": "生技醫療業",
+    "stockType": "股票"
+  },
+  {
+    "name": "中華立鼎",
+    "code": "7926",
+    "market": "興櫃",
+    "industry": "光電業",
+    "stockType": "股票"
+  },
+  {
+    "name": "連距電機",
+    "code": "7927",
+    "market": "興櫃",
+    "industry": "電機機械",
+    "stockType": "股票"
+  },
+  {
+    "name": "合聖科技*",
+    "code": "7928",
+    "market": "興櫃",
+    "industry": "通信網路業",
+    "stockType": "股票"
+  },
+  {
+    "name": "碩通",
+    "code": "7929",
+    "market": "興櫃",
+    "industry": "電腦及週邊設備業",
+    "stockType": "股票"
+  },
+  {
+    "name": "威世波",
+    "code": "7930",
+    "market": "興櫃",
+    "industry": "通信網路業",
+    "stockType": "股票"
+  },
+  {
+    "name": "續升綠能",
+    "code": "7931",
+    "market": "興櫃",
+    "industry": "綠能環保",
+    "stockType": "股票"
+  },
+  {
+    "name": "安富",
+    "code": "7935",
+    "market": "興櫃",
+    "industry": "通信網路業",
+    "stockType": "股票"
+  },
+  {
+    "name": "寰聖",
+    "code": "7936",
+    "market": "興櫃",
+    "industry": "電子零組件業",
+    "stockType": "股票"
+  },
+  {
+    "name": "耐特",
+    "code": "8058",
+    "market": "興櫃",
+    "industry": "其他電子業",
+    "stockType": "股票"
+  },
+  {
+    "name": "慶康科技",
+    "code": "8098",
+    "market": "興櫃",
+    "industry": "半導體業",
+    "stockType": "股票"
+  },
+  {
+    "name": "公信",
+    "code": "8119",
+    "market": "興櫃",
+    "industry": "電腦及週邊設備業",
+    "stockType": "股票"
+  },
+  {
+    "name": "威睿",
+    "code": "8298",
+    "market": "興櫃",
+    "industry": "資訊服務業",
+    "stockType": "股票"
+  },
+  {
+    "name": "台視",
+    "code": "8329",
+    "market": "興櫃",
+    "industry": "文化創意業",
+    "stockType": "股票"
+  },
+  {
+    "name": "超秦",
+    "code": "8345",
+    "market": "興櫃",
+    "industry": "農業科技業",
+    "stockType": "股票"
+  },
+  {
+    "name": "錢櫃",
+    "code": "8359",
+    "market": "興櫃",
+    "industry": "觀光餐旅",
+    "stockType": "股票"
+  },
+  {
+    "name": "影一",
+    "code": "8458",
+    "market": "興櫃",
+    "industry": "文化創意業",
+    "stockType": "股票"
+  },
+  {
+    "name": "台灣積層",
+    "code": "8999",
+    "market": "興櫃",
+    "industry": "其他業",
+    "stockType": "股票"
+  },
+  {
+    "name": "燁聯",
+    "code": "9957",
+    "market": "興櫃",
+    "industry": "鋼鐵工業",
+    "stockType": "股票"
   }
 ]

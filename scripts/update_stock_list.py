@@ -120,7 +120,7 @@ def parse_stock_list(html: str) -> List[dict]:
 
 def fetch_twse_stocks() -> List[dict]:
     stocks: List[dict] = []
-    for mode in ("2", "4"):
+    for mode in ("2", "4", "5"):
         url = TWSE_URL_TEMPLATE.format(mode=mode)
         html = fetch_html(url)
         stocks.extend(parse_stock_list(html))
