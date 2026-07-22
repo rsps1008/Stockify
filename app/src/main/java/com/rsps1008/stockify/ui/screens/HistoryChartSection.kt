@@ -96,7 +96,7 @@ fun HistoryChartSectionContent(
     modifier: Modifier = Modifier
 ) {
     var selectedRange by remember { mutableStateOf(HistoryRange.ONE_MONTH) }
-    var selectedMetric by remember { mutableStateOf("市值") }
+    var selectedMetric by remember { mutableStateOf("報酬") }
     val normalizedDisplayMode = HomeDisplayMode.normalize(displayMode)
     LaunchedEffect(controlledSelectedRange) {
         controlledSelectedRange?.let { selectedRange = it }
@@ -242,7 +242,7 @@ private fun MetricSelectorRow(
     selectedMetric: String,
     onMetricSelected: (String) -> Unit
 ) {
-    val metrics = listOf("市值", "報酬率")
+    val metrics = listOf("報酬", "市值")
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
@@ -467,7 +467,7 @@ private fun InteractiveLineChart(
     val values = points.map {
         if (selectedMetric == "市值") it.marketValue else it.totalPLPercentage
     }
-    val isPercentage = selectedMetric == "報酬率"
+    val isPercentage = selectedMetric == "報酬"
     val profitValues = points.map { it.totalPLPercentage }
     val shouldColorByProfitLoss = selectedMetric == "市值" || isPercentage
     val rawMinVal = values.minOrNull() ?: 0.0
