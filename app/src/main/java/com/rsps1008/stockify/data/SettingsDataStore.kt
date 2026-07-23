@@ -61,6 +61,7 @@ class SettingsDataStore(val context: Context) {
     private val cloudDataBackupUpdatedAtKey = longPreferencesKey("cloud_data_backup_updated_at")
     private val marginFeatureEnabledKey = booleanPreferencesKey("margin_feature_enabled")
     private val marginDayCountKey = intPreferencesKey("margin_day_count")
+    private val shortSellingFeatureEnabledKey = booleanPreferencesKey("short_selling_feature_enabled")
 
     val fetchIntervalFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
@@ -281,6 +282,9 @@ class SettingsDataStore(val context: Context) {
 
     val marginDayCountFlow: Flow<Int> = context.dataStore.data
         .map { preferences -> if (preferences[marginDayCountKey] == 360) 360 else 365 }
+
+    val shortSellingFeatureEnabledFlow: Flow<Boolean> = context.dataStore.data
+        .map { it[shortSellingFeatureEnabledKey] ?: false }
 
     suspend fun setFetchInterval(interval: Int) {
         context.dataStore.edit {
@@ -528,5 +532,9 @@ class SettingsDataStore(val context: Context) {
 
     suspend fun setMarginDayCount(dayCount: Int) {
         context.dataStore.edit { it[marginDayCountKey] = if (dayCount == 360) 360 else 365 }
+    }
+
+    suspend fun setShortSellingFeatureEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[shortSellingFeatureEnabledKey] = enabled }
     }
 }

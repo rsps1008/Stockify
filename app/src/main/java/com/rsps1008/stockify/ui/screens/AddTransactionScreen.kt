@@ -98,6 +98,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     val accounts by viewModel.accounts.collectAsState()
     val marginFeatureEnabled by viewModel.marginFeatureEnabled.collectAsState()
     val marginLots by viewModel.marginLots.collectAsState()
+    val shortSellingFeatureEnabled by viewModel.shortSellingFeatureEnabled.collectAsState()
+    val shortLots by viewModel.shortLots.collectAsState()
     var dividendFee by remember { mutableStateOf("") }
     var dividendIncome by remember { mutableStateOf("") }
     val coroutineScope = rememberCoroutineScope()
@@ -116,6 +118,9 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     var marginRepayment by remember { mutableStateOf("") }
     var sellRepaysMargin by remember { mutableStateOf(false) }
     var marginLotMenuExpanded by remember { mutableStateOf(false) }
+    var shortBorrowAnnualRate by remember { mutableStateOf("") }
+    var shortLotId by remember { mutableStateOf("") }
+    var shortLotMenuExpanded by remember { mutableStateOf(false) }
 
     var showDatePicker by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf(false) }
@@ -191,7 +196,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                     stock?.market ?: ""
                 )
             }
-            "賣出" -> {
+            "買券還券" -> viewModel.calculateBuyCosts(price.toDoubleOrNull() ?: 0.0, shares.toDoubleOrNull() ?: 0.0, allStocks.find { it.code == stockCode }?.market ?: "")
+            "賣出", "融券賣出" -> {
                 val stock = allStocks.find { it.code == stockCode }
                 viewModel.calculateSellCosts(
                     price.toDoubleOrNull() ?: 0.0,
@@ -212,10 +218,11 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         }
     }
 
-    LaunchedEffect(stockCode, selectedAccountId, transactionType, marginFeatureEnabled) {
+    LaunchedEffect(stockCode, selectedAccountId, transactionType, marginFeatureEnabled, shortSellingFeatureEnabled) {
         if (marginFeatureEnabled && stockCode.isNotBlank() && (transactionType == "融資還款" || transactionType == "賣出")) {
             viewModel.loadMarginLots(stockCode)
         }
+        if (shortSellingFeatureEnabled && stockCode.isNotBlank() && transactionType == "買券還券") viewModel.loadShortLots(stockCode)
     }
 
     LaunchedEffect(stockName) {
@@ -345,7 +352,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     }
 
     val isFormValid = when (transactionType) {
-        "買進", "融資買進", "賣出" ->
+        "買進", "融資買進", "賣出", "融券賣出" ->
             stockName.isNotBlank() &&
             stockCode.isNotBlank() &&
             (price.toDoubleOrNull() ?: 0.0) > 0.0 &&
@@ -355,6 +362,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                     (marginPrincipal.toDoubleOrNull() ?: 0.0) <= expense &&
                     (marginAnnualRate.toDoubleOrNull() ?: -1.0) >= 0.0
                 ))
+        "買券還券" -> stockName.isNotBlank() && stockCode.isNotBlank() && shortLotId.isNotBlank() && (price.toDoubleOrNull() ?: 0.0) > 0.0 && (shares.toDoubleOrNull() ?: 0.0) > 0.0
         "融資還款" ->
             stockName.isNotBlank() && stockCode.isNotBlank() && marginRepaymentLotId.isNotBlank() &&
                 (marginRepayment.toDoubleOrNull() ?: 0.0) > 0.0
@@ -526,15 +534,20 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         Spacer(modifier = Modifier.height(4.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
             Button(onClick = { transactionType = "買進" }, enabled = transactionType != "買進", shape = AddTransactionButtonShape) { Text("買進") }
-            if (marginFeatureEnabled && !isUsStock) {
-                Button(onClick = { transactionType = "融資買進" }, enabled = transactionType != "融資買進", shape = AddTransactionButtonShape) { Text("融資買進") }
-                Button(onClick = { transactionType = "融資還款" }, enabled = transactionType != "融資還款", shape = AddTransactionButtonShape) { Text("還融資") }
-            }
             Button(onClick = { transactionType = "賣出" }, enabled = transactionType != "賣出", shape = AddTransactionButtonShape) { Text("賣出") }
             Button(onClick = { transactionType = "配息" }, enabled = transactionType != "配息", shape = AddTransactionButtonShape) { Text("配息") }
             Button(onClick = { transactionType = "配股" }, enabled = transactionType != "配股", shape = AddTransactionButtonShape) { Text("配股") }
             Button(onClick = { transactionType = "減資" }, enabled = transactionType != "減資", shape = AddTransactionButtonShape) { Text("減資") }
             Button(onClick = { transactionType = "分割" }, enabled = transactionType != "分割", shape = AddTransactionButtonShape) { Text("分割") }
+        }
+        if (marginFeatureEnabled && !isUsStock) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                Button(onClick = { transactionType = "融資買進" }, enabled = transactionType != "融資買進", shape = AddTransactionButtonShape) { Text("融資買進") }
+                Button(onClick = { transactionType = "融資還款" }, enabled = transactionType != "融資還款", shape = AddTransactionButtonShape) { Text("還融資") }
+                Button(onClick = { transactionType = "融券賣出" }, enabled = transactionType != "融券賣出", shape = AddTransactionButtonShape) { Text("融券賣出") }
+                Button(onClick = { transactionType = "買券還券" }, enabled = transactionType != "買券還券", shape = AddTransactionButtonShape) { Text("買券還券") }
+            }
         }
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -651,7 +664,25 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                     }
                 }
             }
-            "賣出" -> {
+            "買券還券" -> {
+                androidx.compose.material3.Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("選擇融券批次", style = MaterialTheme.typography.titleMedium)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Box {
+                            OutlinedButton(onClick = { shortLotMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) { Text(shortLots.firstOrNull { it.lotId == shortLotId }?.label ?: "請選擇未償融券") }
+                            DropdownMenu(expanded = shortLotMenuExpanded, onDismissRequest = { shortLotMenuExpanded = false }) {
+                                shortLots.forEach { lot -> DropdownMenuItem(text = { Text(lot.label) }, onClick = { shortLotId = lot.lotId; shortLotMenuExpanded = false }) }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LabeledOutlinedTextField(label = "買券價格", value = price, onValueChange = { price = it }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        ShareInputWithStepper(label = "還券股數", value = shares, onValueChange = { shares = it }, step = shareStep, allowDecimal = false)
+                    }
+                }
+            }
+            "賣出", "融券賣出" -> {
                 // 賣出上面
                 androidx.compose.material3.Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -664,7 +695,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
 
                         // ★ 賣出價格 + 當沖 checkbox
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(text = "賣出價格", style = MaterialTheme.typography.titleMedium)
+                            Text(text = if (transactionType == "融券賣出") "融券賣出價格" else "賣出價格", style = MaterialTheme.typography.titleMedium)
                             Spacer(modifier = Modifier.height(4.dp))
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -693,12 +724,16 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         Spacer(modifier = Modifier.height(12.dp))
 
                         ShareInputWithStepper(
-                            label = "賣出股數",
+                            label = if (transactionType == "融券賣出") "融券賣出股數" else "賣出股數",
                             value = shares,
                             onValueChange = { shares = it },
                             step = shareStep,
                             allowDecimal = isUsStock
                         )
+                        if (transactionType == "融券賣出") {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            LabeledOutlinedTextField(label = "借券年費率 (%)", value = shortBorrowAnnualRate, onValueChange = { shortBorrowAnnualRate = it }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                        }
                         if (marginFeatureEnabled && !isUsStock) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Checkbox(checked = sellRepaysMargin, onCheckedChange = { sellRepaysMargin = it })
@@ -1079,7 +1114,12 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             marginRepayment.toDoubleOrNull() ?: 0.0
                         } else if (transactionType == "賣出" && sellRepaysMargin) {
                             marginRepayment.toDoubleOrNull() ?: income
-                        } else 0.0
+                        } else 0.0,
+                        shortBorrowPrincipal = if (transactionType == "融券賣出") (price.toDoubleOrNull() ?: 0.0) * (shares.toDoubleOrNull() ?: 0.0) else 0.0,
+                        shortBorrowAnnualRate = if (transactionType == "融券賣出") shortBorrowAnnualRate.toDoubleOrNull() ?: 0.0 else 0.0,
+                        shortLotId = if (transactionType == "融券賣出") transactionToEdit?.shortLotId.orEmpty() else "",
+                        shortCoverLotId = if (transactionType == "買券還券") shortLotId else "",
+                        shortCoverShares = if (transactionType == "買券還券") shares.toDoubleOrNull() ?: 0.0 else 0.0
                     )
                     val message = if (transactionId == null) "新增成功" else "更新成功"
                     Toast.makeText(context, message, Toast.LENGTH_SHORT).show()

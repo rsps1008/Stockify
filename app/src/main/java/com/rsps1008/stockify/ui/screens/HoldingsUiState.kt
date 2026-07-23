@@ -31,5 +31,9 @@ data class HoldingInfo(
     val limitState: LimitState = LimitState.NONE,
     val marginOutstandingPrincipal: Double = 0.0,
     val marginAccruedInterest: Double = 0.0,
-    val marginNetEquity: Double = 0.0
+    val marginNetEquity: Double = 0.0,
+    val shortOutstandingShares: Double = 0.0,
+    val shortMarketLiability: Double = 0.0,
+    val shortAccruedBorrowFee: Double = 0.0,
+    val shortCompensationExpense: Double = 0.0
 )

@@ -106,7 +106,28 @@ data class StockTransaction(
     val marginRepaymentLotId: String = "",
 
     @ColumnInfo(name = "融資還款本金")
-    val marginRepayment: Double = 0.0
+    val marginRepayment: Double = 0.0,
+
+    @ColumnInfo(name = "融券本金")
+    val shortBorrowPrincipal: Double = 0.0,
+
+    @ColumnInfo(name = "融券年費率")
+    val shortBorrowAnnualRate: Double = 0.0,
+
+    @ColumnInfo(name = "融券批次ID")
+    val shortLotId: String = "",
+
+    @ColumnInfo(name = "沖抵融券批次ID")
+    val shortCoverLotId: String = "",
+
+    @ColumnInfo(name = "買券還券股數")
+    val shortCoverShares: Double = 0.0,
+
+    @ColumnInfo(name = "融券補償批次ID")
+    val shortCompensationLotId: String = "",
+
+    @ColumnInfo(name = "融券補償金")
+    val shortCompensation: Double = 0.0
 )
 
 data class TransactionWithStock(

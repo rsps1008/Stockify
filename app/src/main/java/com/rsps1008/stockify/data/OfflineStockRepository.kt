@@ -260,7 +260,9 @@ class OfflineStockRepository(
         val buyAverage = if (buySharesTotal > 0) buyCostTotal / buySharesTotal else 0.0
         val marketValue = shares * currentPrice
         val marginSummary = MarginCalculationSupport.calculate(transactions, currentDateMillis, marginDayCount)
-        val effectiveTotalInvestment = if (marginSummary.selfFundedCapital > 0.0) marginSummary.selfFundedCapital else totalInvestment
+        val shortSummary = ShortSellingCalculationSupport.calculate(transactions, currentDateMillis, marginDayCount)
+        val shortMarketLiability = shortSummary.outstandingShares * currentPrice
+        val effectiveTotalInvestment = (if (marginSummary.selfFundedCapital > 0.0) marginSummary.selfFundedCapital else totalInvestment) + shortSummary.openedPrincipal
         var totalPL = marketValue - costBasis
 
         if (preDeductSellFees && marketValue > 0.0 && !StockMarket.isUs(stock.market)) {
@@ -273,6 +275,9 @@ class OfflineStockRepository(
             totalPL -= (sellFee + sellTax)
         }
 
+        val shortIncome = transactions.filter { it.type == "融券賣出" }.sumOf { it.income }
+        val shortCoverExpense = transactions.filter { it.type == "買券還券" }.sumOf { it.expense }
+        totalPL += shortIncome - shortCoverExpense - shortMarketLiability - shortSummary.accruedBorrowFee - shortSummary.compensationExpense
         totalPL -= marginSummary.accruedInterest
 
         val totalPLPercentage = when (returnRateMode) {
@@ -312,6 +317,10 @@ class OfflineStockRepository(
             ,marginOutstandingPrincipal = marginSummary.outstandingPrincipal
             ,marginAccruedInterest = marginSummary.accruedInterest
             ,marginNetEquity = marketValue - marginSummary.outstandingPrincipal - marginSummary.accruedInterest
+            ,shortOutstandingShares = shortSummary.outstandingShares
+            ,shortMarketLiability = shortMarketLiability
+            ,shortAccruedBorrowFee = shortSummary.accruedBorrowFee
+            ,shortCompensationExpense = shortSummary.compensationExpense
         )
     }
 
@@ -329,6 +338,9 @@ class OfflineStockRepository(
                 "融資買進" -> CashFlow(transaction.date, -(transaction.expense - transaction.marginPrincipal) * currencyRate)
                 "賣出" -> CashFlow(transaction.date, (transaction.income - transaction.marginRepayment) * currencyRate)
                 "融資還款" -> CashFlow(transaction.date, -transaction.marginRepayment * currencyRate)
+                "融券賣出" -> CashFlow(transaction.date, transaction.income * currencyRate)
+                "買券還券" -> CashFlow(transaction.date, -transaction.expense * currencyRate)
+                "融券補償" -> CashFlow(transaction.date, -transaction.shortCompensation * currencyRate)
                 "配息" -> CashFlow(
                     transaction.date,
                     HoldingCalculationSupport.resolveDividendIncome(transaction) * currencyRate
@@ -338,9 +350,10 @@ class OfflineStockRepository(
             }
         }.toMutableList()
 
-        if (shares > 0.0 && currentPrice > 0.0) {
+        val short = ShortSellingCalculationSupport.calculate(transactions, currentDateMillis, marginDayCount)
+        if ((shares > 0.0 || short.outstandingShares > 0.0) && currentPrice > 0.0) {
             val margin = MarginCalculationSupport.calculate(transactions, currentDateMillis, marginDayCount)
-            cashFlows.add(CashFlow(currentDateMillis, (shares * currentPrice - margin.outstandingPrincipal - margin.accruedInterest) * currencyRate))
+            cashFlows.add(CashFlow(currentDateMillis, (shares * currentPrice - short.outstandingShares * currentPrice - margin.outstandingPrincipal - margin.accruedInterest - short.accruedBorrowFee) * currencyRate))
         }
 
         return cashFlows

@@ -148,63 +148,6 @@ fun SettingsScreen() {
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("融資功能（實驗階段）", style = MaterialTheme.typography.titleLarge)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "啟用後可記錄台股融資買進、還款與估算利息。此功能不會連線券商。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("啟用融資功能")
-                            Switch(
-                                checked = marginFeatureEnabled,
-                                onCheckedChange = viewModel::setMarginFeatureEnabled
-                            )
-                        }
-                        if (marginFeatureEnabled) {
-                            var expandedMarginDayCount by remember { mutableStateOf(false) }
-                            ExposedDropdownMenuBox(
-                                expanded = expandedMarginDayCount,
-                                onExpandedChange = { expandedMarginDayCount = !expandedMarginDayCount },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                OutlinedTextField(
-                                    value = if (marginDayCount == 360) "360 天" else "365 天",
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    label = { Text("融資利息計息基準") },
-                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedMarginDayCount) },
-                                    modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
-                                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
-                                )
-                                ExposedDropdownMenu(
-                                    expanded = expandedMarginDayCount,
-                                    onDismissRequest = { expandedMarginDayCount = false }
-                                ) {
-                                    listOf(365, 360).forEach { dayCount ->
-                                        DropdownMenuItem(
-                                            text = { Text("$dayCount 天") },
-                                            onClick = {
-                                                viewModel.setMarginDayCount(dayCount)
-                                                expandedMarginDayCount = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
                         Text("外觀", style = MaterialTheme.typography.titleLarge)
                         Spacer(modifier = Modifier.height(16.dp))
 
@@ -476,6 +419,29 @@ fun SettingsScreen() {
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
+                        Text("融資／融券功能（實驗階段）", style = MaterialTheme.typography.titleLarge)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("啟用後可記錄台股融資買進、還款、融券賣出與買券還券，並估算利息或借券費；此功能不會連線券商。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("啟用融資／融券功能")
+                            Switch(checked = marginFeatureEnabled, onCheckedChange = viewModel::setMarginFeatureEnabled)
+                        }
+                        if (marginFeatureEnabled) {
+                            var expandedMarginDayCount by remember { mutableStateOf(false) }
+                            ExposedDropdownMenuBox(expanded = expandedMarginDayCount, onExpandedChange = { expandedMarginDayCount = !expandedMarginDayCount }, modifier = Modifier.fillMaxWidth()) {
+                                OutlinedTextField(value = if (marginDayCount == 360) "360 天" else "365 天", onValueChange = {}, readOnly = true, label = { Text("融資／融券計息基準") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedMarginDayCount) }, modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(), colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors())
+                                ExposedDropdownMenu(expanded = expandedMarginDayCount, onDismissRequest = { expandedMarginDayCount = false }) {
+                                    listOf(365, 360).forEach { dayCount -> DropdownMenuItem(text = { Text("$dayCount 天") }, onClick = { viewModel.setMarginDayCount(dayCount); expandedMarginDayCount = false }) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         Text("股票資料來源", style = MaterialTheme.typography.titleLarge)
                         Spacer(modifier = Modifier.height(16.dp))
 
@@ -520,6 +486,12 @@ fun SettingsScreen() {
                                 }
                             }
                         }
+                        Text(
+                            text = "興櫃股票僅能透過 Yahoo 取得即時報價。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
                         Spacer(modifier = Modifier.height(16.dp))
 
                         ExposedDropdownMenuBox(

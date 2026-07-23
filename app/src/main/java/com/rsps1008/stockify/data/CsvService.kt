@@ -24,7 +24,8 @@ class CsvService {
         "除息股數", "除權股數", "股息收入",
         "減資比例", "減資前股數", "減資後股數", "減資返還現金",
         "拆分比例", "拆分前股數", "拆分後股數",
-        "融資本金", "融資年利率", "融資批次ID", "沖抵融資批次ID", "融資還款本金"
+        "融資本金", "融資年利率", "融資批次ID", "沖抵融資批次ID", "融資還款本金",
+        "融券本金", "融券年費率", "融券批次ID", "沖抵融券批次ID", "買券還券股數", "融券補償批次ID", "融券補償金"
     )
 
     fun export(transactions: List<TransactionWithStock>, outputStream: OutputStream) {
@@ -84,6 +85,13 @@ class CsvService {
         record["融資批次ID"] = transaction.marginLotId
         record["沖抵融資批次ID"] = transaction.marginRepaymentLotId
         record["融資還款本金"] = formatMarketPlainAmount(transaction.marginRepayment, stock.market)
+        record["融券本金"] = formatMarketPlainAmount(transaction.shortBorrowPrincipal, stock.market)
+        record["融券年費率"] = transaction.shortBorrowAnnualRate
+        record["融券批次ID"] = transaction.shortLotId
+        record["沖抵融券批次ID"] = transaction.shortCoverLotId
+        record["買券還券股數"] = formatShareInputValue(transaction.shortCoverShares)
+        record["融券補償批次ID"] = transaction.shortCompensationLotId
+        record["融券補償金"] = formatMarketPlainAmount(transaction.shortCompensation, stock.market)
 
         // Ensure the order matches the header
         return csvHeader.map { header ->
@@ -174,6 +182,13 @@ class CsvService {
             ,marginLotId = values.getOrNull(headerMap["融資批次ID"] ?: -1).orEmpty()
             ,marginRepaymentLotId = values.getOrNull(headerMap["沖抵融資批次ID"] ?: -1).orEmpty()
             ,marginRepayment = values.getOrNull(headerMap["融資還款本金"] ?: -1)?.toDoubleOrNull() ?: 0.0
+            ,shortBorrowPrincipal = values.getOrNull(headerMap["融券本金"] ?: -1)?.toDoubleOrNull() ?: 0.0
+            ,shortBorrowAnnualRate = values.getOrNull(headerMap["融券年費率"] ?: -1)?.toDoubleOrNull() ?: 0.0
+            ,shortLotId = values.getOrNull(headerMap["融券批次ID"] ?: -1).orEmpty()
+            ,shortCoverLotId = values.getOrNull(headerMap["沖抵融券批次ID"] ?: -1).orEmpty()
+            ,shortCoverShares = values.getOrNull(headerMap["買券還券股數"] ?: -1)?.toDoubleOrNull() ?: 0.0
+            ,shortCompensationLotId = values.getOrNull(headerMap["融券補償批次ID"] ?: -1).orEmpty()
+            ,shortCompensation = values.getOrNull(headerMap["融券補償金"] ?: -1)?.toDoubleOrNull() ?: 0.0
         )
     }
 }

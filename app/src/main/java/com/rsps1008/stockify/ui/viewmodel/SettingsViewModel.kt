@@ -214,6 +214,7 @@ class SettingsViewModel(
 
     fun setMarginFeatureEnabled(enabled: Boolean) = viewModelScope.launch {
         settingsDataStore.setMarginFeatureEnabled(enabled)
+        settingsDataStore.setShortSellingFeatureEnabled(enabled)
     }
 
     fun setMarginDayCount(dayCount: Int) = viewModelScope.launch {
