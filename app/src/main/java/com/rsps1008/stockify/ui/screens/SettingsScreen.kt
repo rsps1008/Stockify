@@ -102,7 +102,7 @@ fun SettingsScreen() {
     val showTaiwanPortfolioChart by viewModel.showTaiwanPortfolioChart.collectAsState()
     val stockDataSource by viewModel.stockDataSource.collectAsState()
     val usStockDataSource by viewModel.usStockDataSource.collectAsState()
-    val notifyFallbackRepeatedly by viewModel.notifyFallbackRepeatedly.collectAsState()
+    val fallbackNoticeEnabled by viewModel.fallbackNoticeEnabled.collectAsState()
     val taxRateNormalListedStock by viewModel.taxRateNormalListedStock.collectAsState()
     val taxRateDomesticStockEtf by viewModel.taxRateDomesticStockEtf.collectAsState()
     val taxRateBondEtf by viewModel.taxRateBondEtf.collectAsState()
@@ -541,16 +541,16 @@ fun SettingsScreen() {
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column(modifier = Modifier.weight(1f, fill = false)) {
-                                Text("重複提示備援來源", style = MaterialTheme.typography.bodyLarge)
+                                Text("提示備援來源", style = MaterialTheme.typography.bodyLarge)
                                 Text(
-                                    "當主要資料來源失效時，持續顯示通知",
+                                    "當主要資料來源失效並改用備援來源時，提示通知",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Switch(
-                                checked = notifyFallbackRepeatedly,
-                                onCheckedChange = viewModel::setNotifyFallbackRepeatedly
+                                checked = fallbackNoticeEnabled,
+                                onCheckedChange = viewModel::setFallbackNoticeEnabled
                             )
                         }
 

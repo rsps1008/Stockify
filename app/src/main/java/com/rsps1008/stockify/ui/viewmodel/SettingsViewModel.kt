@@ -185,7 +185,7 @@ class SettingsViewModel(
     val usStockDataSource: StateFlow<String> = settingsDataStore.usStockDataSourceFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), "Nasdaq")
 
-    val notifyFallbackRepeatedly: StateFlow<Boolean> = settingsDataStore.notifyFallbackRepeatedlyFlow
+    val fallbackNoticeEnabled: StateFlow<Boolean> = settingsDataStore.fallbackNoticeEnabledFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), false)
 
     val skipPdfImportTutorial: StateFlow<Boolean> = settingsDataStore.skipPdfImportTutorialFlow
@@ -1044,9 +1044,9 @@ class SettingsViewModel(
         }
     }
 
-    fun setNotifyFallbackRepeatedly(shouldNotifyRepeatedly: Boolean) {
+    fun setFallbackNoticeEnabled(enabled: Boolean) {
         viewModelScope.launch {
-            settingsDataStore.setNotifyFallbackRepeatedly(shouldNotifyRepeatedly)
+            settingsDataStore.setFallbackNoticeEnabled(enabled)
         }
     }
 

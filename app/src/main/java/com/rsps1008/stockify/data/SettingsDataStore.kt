@@ -34,7 +34,8 @@ class SettingsDataStore(val context: Context) {
     private val textSizeModeKey = stringPreferencesKey("text_size_mode")
     private val stockDataSourceKey = stringPreferencesKey("stock_data_source")
     private val usStockDataSourceKey = stringPreferencesKey("us_stock_data_source")
-    private val notifyFallbackRepeatedlyKey = booleanPreferencesKey("notify_fallback_repeatedly")
+    // 保留原 key，以便既有設定升級後可直接採用新的提示語意。
+    private val fallbackNoticeEnabledKey = booleanPreferencesKey("notify_fallback_repeatedly")
     private val taxRateNormalListedStockKey = doublePreferencesKey("tax_rate_normal_listed_stock")
     private val taxRateDomesticStockEtfKey = doublePreferencesKey("tax_rate_domestic_stock_etf")
     private val taxRateBondEtfKey = doublePreferencesKey("tax_rate_bond_etf")
@@ -149,9 +150,9 @@ class SettingsDataStore(val context: Context) {
             preferences[usStockDataSourceKey] ?: "Nasdaq"
         }
 
-    val notifyFallbackRepeatedlyFlow: Flow<Boolean> = context.dataStore.data
+    val fallbackNoticeEnabledFlow: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
-            preferences[notifyFallbackRepeatedlyKey] ?: false
+            preferences[fallbackNoticeEnabledKey] ?: false
         }
 
     val taxRateNormalListedStockFlow: Flow<Double> = context.dataStore.data
@@ -387,9 +388,9 @@ class SettingsDataStore(val context: Context) {
         }
     }
 
-    suspend fun setNotifyFallbackRepeatedly(shouldNotifyRepeatedly: Boolean) {
+    suspend fun setFallbackNoticeEnabled(enabled: Boolean) {
         context.dataStore.edit {
-            it[notifyFallbackRepeatedlyKey] = shouldNotifyRepeatedly
+            it[fallbackNoticeEnabledKey] = enabled
         }
     }
 

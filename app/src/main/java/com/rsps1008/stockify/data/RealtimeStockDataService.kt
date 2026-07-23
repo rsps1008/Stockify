@@ -219,8 +219,8 @@ class RealtimeStockDataService(
         }
 
         if (fallbackCount > 0) {
-            val shouldNotifyRepeatedly = settingsDataStore.notifyFallbackRepeatedlyFlow.first()
-            val shouldShowNotification = shouldNotifyRepeatedly || !hasNotifiedAboutFallback
+            val fallbackNoticeEnabled = settingsDataStore.fallbackNoticeEnabledFlow.first()
+            val shouldShowNotification = fallbackNoticeEnabled && !hasNotifiedAboutFallback
 
             if (shouldShowNotification) {
                 val message = when {
@@ -233,9 +233,7 @@ class RealtimeStockDataService(
                     Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show()
                 }
 
-                if (!shouldNotifyRepeatedly) {
-                    hasNotifiedAboutFallback = true
-                }
+                hasNotifiedAboutFallback = true
             }
         }
 
