@@ -108,6 +108,15 @@ data class StockTransaction(
     @ColumnInfo(name = "融資還款本金")
     val marginRepayment: Double = 0.0,
 
+    @ColumnInfo(name = "融資自備款")
+    val marginSelfFunded: Double = 0.0,
+
+    @ColumnInfo(name = "融資自備款是否覆寫")
+    val marginSelfFundedOverridden: Boolean = false,
+
+    @ColumnInfo(name = "融資實際利息")
+    val marginActualInterest: Double = 0.0,
+
     @ColumnInfo(name = "融券本金")
     val shortBorrowPrincipal: Double = 0.0,
 

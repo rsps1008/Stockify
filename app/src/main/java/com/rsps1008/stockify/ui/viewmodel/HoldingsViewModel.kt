@@ -19,6 +19,7 @@ import com.rsps1008.stockify.data.UsdTwdExchangeRateService
 import com.rsps1008.stockify.data.CashFlow
 import com.rsps1008.stockify.data.ReturnRateCalculator
 import com.rsps1008.stockify.data.MarginCalculationSupport
+import com.rsps1008.stockify.data.ShortSellingCalculationSupport
 import com.rsps1008.stockify.data.Account
 import com.rsps1008.stockify.ui.screens.HoldingsUiState
 import kotlinx.coroutines.Dispatchers
@@ -61,8 +62,8 @@ private data class HomeHistoryCalculationBundle(
 
 private data class HistoricalHoldingStats(
     val shares: Double,
-    val costBasis: Double,
     val totalInvestment: Double,
+    val remainingPositionInvestment: Double,
     val marketValue: Double,
     val totalPL: Double
 )
@@ -256,8 +257,8 @@ class HoldingsViewModel(
                 }
 
                 var totalMarketValue = 0.0
-                var totalCostBasis = 0.0
                 var totalInvestment = 0.0
+                var totalRemainingPositionInvestment = 0.0
                 var totalPL = 0.0
                 var totalShares = 0.0
                 val portfolioCashFlows = mutableListOf<CashFlow>()
@@ -290,8 +291,8 @@ class HoldingsViewModel(
                         1.0
                     }
                     totalMarketValue += stats.marketValue * currencyRate
-                    totalCostBasis += stats.costBasis * currencyRate
                     totalInvestment += stats.totalInvestment * currencyRate
+                    totalRemainingPositionInvestment += stats.remainingPositionInvestment * currencyRate
                     totalPL += stats.totalPL * currencyRate
                     totalShares += stats.shares
                     if (settings.returnRateMode == ReturnRateMode.XIRR) {
@@ -308,11 +309,7 @@ class HoldingsViewModel(
 
                 val totalPLPercentage = when (settings.returnRateMode) {
                     ReturnRateMode.REMAINING_POSITION -> {
-                        val denominator = HoldingCalculationSupport.remainingPositionDenominator(
-                            shares = totalShares,
-                            costBasis = totalCostBasis,
-                            totalInvestment = totalInvestment
-                        )
+                        val denominator = totalRemainingPositionInvestment
                         if (denominator > 0) (totalPL / denominator) * 100 else 0.0
                     }
                     ReturnRateMode.CUMULATIVE_INVESTMENT -> if (totalInvestment > 0) (totalPL / totalInvestment) * 100 else 0.0
@@ -546,10 +543,28 @@ class HoldingsViewModel(
         val costBasis = totalBuyExpense - totalSellIncome - totalDividendIncome
         val totalSellFeeAndTax = (sellAmountBeforeFee - totalSellNetIncome).coerceAtLeast(0.0)
         val marginSummary = MarginCalculationSupport.calculate(txs, dayEnd, marginDayCount)
-        val totalInvestment = if (marginSummary.selfFundedCapital > 0.0) marginSummary.selfFundedCapital else totalBuyExpense + totalSellFeeAndTax
+        val shortSummary = ShortSellingCalculationSupport.calculate(txs, dayEnd, marginDayCount)
+        val hasMarginPurchase = txs.any { it.type == "融資買進" }
+        val longInvestment = if (hasMarginPurchase) {
+            marginSummary.selfFundedCapital + totalSellFeeAndTax
+        } else {
+            totalBuyExpense + totalSellFeeAndTax
+        }
+        val investmentBasis = HoldingCalculationSupport.positionInvestmentBasis(
+            shares = shares,
+            costBasis = costBasis,
+            longInvestment = longInvestment,
+            marginDebt = marginSummary.outstandingPrincipal + marginSummary.accruedInterest,
+            shortOutstandingShares = shortSummary.outstandingShares,
+            shortRemainingInvestment = shortSummary.openedPrincipal,
+            shortCumulativeInvestment = shortSummary.cumulativeOpenedPrincipal
+        )
         val marketValue = shares * ptPrice
         var totalPL = marketValue - costBasis
-        totalPL -= marginSummary.accruedInterest
+        totalPL -= marginSummary.totalInterestExpense
+        val shortIncome = txs.filter { it.type == "融券賣出" }.sumOf { it.income }
+        val shortCoverExpense = txs.filter { it.type == "買券還券" }.sumOf { it.expense }
+        totalPL += shortIncome - shortCoverExpense - shortSummary.outstandingShares * ptPrice - shortSummary.accruedBorrowFee - shortSummary.compensationExpense
 
         if (preDeductSellFees && marketValue > 0.0 && StockMarket.isTw(market)) {
             val sellFee = (marketValue * 0.001425 * feeDiscount).coerceAtLeast(minFeeRegular)
@@ -560,8 +575,8 @@ class HoldingsViewModel(
 
         return HistoricalHoldingStats(
             shares = shares,
-            costBasis = costBasis,
-            totalInvestment = totalInvestment,
+            totalInvestment = investmentBasis.cumulative,
+            remainingPositionInvestment = investmentBasis.remaining,
             marketValue = marketValue,
             totalPL = totalPL
         )
@@ -578,9 +593,9 @@ class HoldingsViewModel(
         val cashFlows = transactions.mapNotNull { transaction ->
             when (transaction.type) {
                 "買進" -> CashFlow(transaction.date, -transaction.expense * currencyRate)
-                "融資買進" -> CashFlow(transaction.date, -(transaction.expense - transaction.marginPrincipal) * currencyRate)
-                "賣出" -> CashFlow(transaction.date, (transaction.income - transaction.marginRepayment) * currencyRate)
-                "融資還款" -> CashFlow(transaction.date, -transaction.marginRepayment * currencyRate)
+                "融資買進" -> CashFlow(transaction.date, -(if (transaction.marginSelfFundedOverridden) transaction.marginSelfFunded else transaction.expense - transaction.marginPrincipal) * currencyRate)
+                "賣出" -> CashFlow(transaction.date, (transaction.income - transaction.marginRepayment - transaction.marginActualInterest) * currencyRate)
+                "融資還款" -> CashFlow(transaction.date, -(transaction.marginRepayment + transaction.marginActualInterest) * currencyRate)
                 "配息" -> CashFlow(
                     transaction.date,
                     HoldingCalculationSupport.resolveDividendIncome(transaction) * currencyRate
@@ -590,8 +605,17 @@ class HoldingsViewModel(
             }
         }.toMutableList()
 
-        if (shares > 0.0 && price > 0.0) {
-            val margin = MarginCalculationSupport.calculate(transactions, terminalDateMillis, marginDayCount)
+        val margin = MarginCalculationSupport.calculate(transactions, terminalDateMillis, marginDayCount)
+        cashFlows += ShortSellingCalculationSupport.buildXirrCashFlows(
+            transactions = transactions,
+            valuationDate = terminalDateMillis,
+            currentPrice = price,
+            dayCount = marginDayCount
+        ).map { it.copy(amount = it.amount * currencyRate) }
+
+        val hasValuedPosition = shares > 0.0 && price > 0.0
+        val hasMarginDebt = margin.outstandingPrincipal > 0.0 || margin.accruedInterest > 0.0
+        if (hasValuedPosition || hasMarginDebt) {
             cashFlows.add(CashFlow(terminalDateMillis, (shares * price - margin.outstandingPrincipal - margin.accruedInterest) * currencyRate))
         }
 

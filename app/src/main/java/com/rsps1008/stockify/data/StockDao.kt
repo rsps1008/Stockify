@@ -61,6 +61,9 @@ interface StockDao {
     @Query("SELECT * FROM stock_transactions WHERE 沖抵融資批次ID = :lotId")
     fun getMarginRepaymentsForLot(lotId: String): Flow<List<StockTransaction>>
 
+    @Query("SELECT * FROM stock_transactions WHERE 沖抵融券批次ID = :lotId OR 融券補償批次ID = :lotId")
+    fun getShortDependentsForLot(lotId: String): Flow<List<StockTransaction>>
+
     @Query("SELECT * FROM stocks WHERE id = :stockId")
     fun getStockById(stockId: Int): Flow<Stock?>
 

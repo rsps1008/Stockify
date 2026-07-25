@@ -18,9 +18,10 @@ data class MarginSummary(
     val accruedInterest: Double = 0.0,
     val lots: List<MarginLotSummary> = emptyList(),
     val selfFundedCapital: Double = 0.0,
-    val cashBalance: Double = 0.0
+    val cashBalance: Double = 0.0,
+    val actualInterestPaid: Double = 0.0
 ) {
-    val netEquity: Double get() = cashBalance
+    val totalInterestExpense: Double get() = accruedInterest + actualInterestPaid
 }
 
 /** Pure replay of financing lots. It never changes share counts. */
@@ -32,6 +33,7 @@ object MarginCalculationSupport {
         val originalPrincipal: Double,
         var remainingPrincipal: Double,
         var accruedInterest: Double = 0.0,
+        var actualInterestPaid: Double = 0.0,
         var lastAccrualDate: Long
     )
 
@@ -52,7 +54,10 @@ object MarginCalculationSupport {
             lot.lastAccrualDate = date
         }
 
-        transactions.sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime }).forEach { tx ->
+        transactions.asSequence()
+            .filter { it.date <= valuationDate }
+            .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime })
+            .forEach { tx ->
             lots.values.forEach { accrueUntil(it, tx.date) }
             when (tx.type) {
                 "融資買進" -> {
@@ -61,24 +66,38 @@ object MarginCalculationSupport {
                     if (principal > 0.0) {
                         lots[id] = LotState(id, tx.date, tx.marginAnnualRate, principal, principal, lastAccrualDate = tx.date)
                     }
-                    cashBalance -= (tx.expense - principal)
-                    selfFundedCapital += (tx.expense - principal).coerceAtLeast(0.0)
+                    val selfFunded = if (tx.marginSelfFundedOverridden) {
+                        tx.marginSelfFunded
+                    } else {
+                        tx.expense - principal
+                    }
+                    cashBalance -= selfFunded
+                    selfFundedCapital += selfFunded.coerceAtLeast(0.0)
                 }
                 "買進" -> {
                     cashBalance -= tx.expense
                     selfFundedCapital += tx.expense
                 }
-                "賣出" -> cashBalance += tx.income - tx.marginRepayment.coerceAtLeast(0.0)
+                "賣出" -> cashBalance += tx.income - tx.marginRepayment.coerceAtLeast(0.0) - tx.marginActualInterest.coerceAtLeast(0.0)
                 "配息" -> cashBalance += HoldingCalculationSupport.resolveDividendIncome(tx)
                 "減資" -> cashBalance += tx.cashReturned
             }
-            if (tx.marginRepayment > 0.0 && tx.marginRepaymentLotId.isNotBlank()) {
+            val isMarginRepayment = tx.marginRepaymentLotId.isNotBlank() && (tx.marginRepayment > 0.0 || tx.marginActualInterest > 0.0)
+            if (isMarginRepayment) {
                 lots[tx.marginRepaymentLotId]?.let { lot ->
                     accrueUntil(lot, tx.date)
-                    lot.remainingPrincipal = (lot.remainingPrincipal - tx.marginRepayment).coerceAtLeast(0.0)
+                    if (tx.marginActualInterest > 0.0) {
+                        lot.actualInterestPaid += tx.marginActualInterest
+                        lot.accruedInterest = 0.0
+                    }
+                    if (tx.marginRepayment > 0.0) {
+                        lot.remainingPrincipal = (lot.remainingPrincipal - tx.marginRepayment).coerceAtLeast(0.0)
+                    }
                     lot.lastAccrualDate = tx.date
                 }
-                if (tx.type == "融資還款") cashBalance -= tx.marginRepayment
+                if (tx.type == "融資還款") cashBalance -= tx.marginRepayment + tx.marginActualInterest
+            } else if (tx.marginActualInterest > 0.0 && tx.type != "賣出") {
+                cashBalance -= tx.marginActualInterest
             }
         }
 
@@ -91,8 +110,39 @@ object MarginCalculationSupport {
                 MarginLotSummary(it.id, it.openedAt, it.annualRate, it.originalPrincipal, it.remainingPrincipal, it.accruedInterest)
             },
             selfFundedCapital = selfFundedCapital,
-            cashBalance = cashBalance
+            cashBalance = cashBalance,
+            actualInterestPaid = lots.values.sumOf { it.actualInterestPaid }
         )
+    }
+
+    /**
+     * Validates every repayment in chronological order without clamping an
+     * overpayment. This is intentionally separate from [calculate], whose
+     * tolerant replay is kept for legacy/imported records.
+     */
+    fun hasValidRepaymentBalances(transactions: List<StockTransaction>): Boolean {
+        val remainingByLot = mutableMapOf<String, Double>()
+
+        transactions
+            .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime })
+            .forEach { transaction ->
+                if (transaction.type == "融資買進") {
+                    val lotId = transaction.marginLotId.ifBlank { "legacy-${transaction.id}" }
+                    remainingByLot[lotId] = transaction.marginPrincipal.coerceAtLeast(0.0)
+                }
+
+                val hasMarginPayment = transaction.marginRepayment > 0.0 || transaction.marginActualInterest > 0.0
+                if (hasMarginPayment) {
+                    val lotId = transaction.marginRepaymentLotId
+                    val remaining = remainingByLot[lotId] ?: return false
+                    if (transaction.marginRepayment > remaining + BALANCE_EPSILON) return false
+                    if (transaction.marginRepayment > 0.0) {
+                        remainingByLot[lotId] = (remaining - transaction.marginRepayment).coerceAtLeast(0.0)
+                    }
+                }
+            }
+
+        return true
     }
 
     private fun daysBetween(start: Long, end: Long): Long {
@@ -101,4 +151,6 @@ object MarginCalculationSupport {
         val endDate = Instant.ofEpochMilli(end).atZone(zone).toLocalDate()
         return ChronoUnit.DAYS.between(startDate, endDate).coerceAtLeast(0L)
     }
+
+    private const val BALANCE_EPSILON = 1e-6
 }

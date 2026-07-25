@@ -121,19 +121,36 @@ private fun TransactionsListHeader() {
 @Composable
 private fun TransactionRow(transaction: TransactionUiState, navController: NavController) {
     val amountText = when (transaction.transaction.type) {
-        "買進", "融資買進" -> formatMarketAmount(-transaction.transaction.expense, transaction.market)
-        "賣出" -> formatMarketAmount(transaction.transaction.income, transaction.market)
+        "買進" -> formatMarketAmount(-transaction.transaction.expense, transaction.market)
+        "融資買進" -> {
+            val selfFunded = if (transaction.transaction.marginSelfFundedOverridden) {
+                transaction.transaction.marginSelfFunded
+            } else {
+                transaction.transaction.expense - transaction.transaction.marginPrincipal
+            }
+            formatMarketAmount(-selfFunded, transaction.market)
+        }
+        "賣出" -> formatMarketAmount(
+            transaction.transaction.income - transaction.transaction.marginRepayment - transaction.transaction.marginActualInterest,
+            transaction.market
+        )
+        "融券賣出" -> formatMarketAmount(transaction.transaction.income, transaction.market)
+        "買券還券" -> formatMarketAmount(-transaction.transaction.expense, transaction.market)
+        "融券補償" -> formatMarketAmount(-transaction.transaction.shortCompensation, transaction.market)
         "配息" -> formatMarketAmount(transaction.transaction.income, transaction.market)
         "配股" -> "0"
         "減資" -> String.format("%,.0f", transaction.transaction.cashReturned)
         "分割" -> "-"
-        "融資還款" -> formatMarketAmount(-transaction.transaction.marginRepayment, transaction.market)
+        "融資還款" -> formatMarketAmount(
+            -(transaction.transaction.marginRepayment + transaction.transaction.marginActualInterest),
+            transaction.market
+        )
         else -> ""
     }
 
     val amountColor = when {
         amountText == "-" || amountText == "0" -> Color.Unspecified
-        transaction.transaction.type == "買進" || transaction.transaction.type == "融資買進" || transaction.transaction.type == "融資還款" -> StockifyAppTheme.stockColors.loss
+        transaction.transaction.type in setOf("買進", "融資買進", "融資還款", "買券還券", "融券補償") -> StockifyAppTheme.stockColors.loss
         else -> StockifyAppTheme.stockColors.gain
     }
 
@@ -164,7 +181,14 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
             "配股" -> "配股${formatShareCount(transaction.transaction.dividendShares)}股"
             "減資" -> "減資${String.format("%.1f", transaction.transaction.capitalReductionRatio)}%"
             "分割" -> "分割(1→${transaction.transaction.stockSplitRatio.toInt()})"
-            "融資還款" -> "還融資${formatMarketAmount(transaction.transaction.marginRepayment, transaction.market)}"
+            "融資還款" -> if (transaction.transaction.marginRepayment > 0.0) {
+                "還融資${formatMarketAmount(transaction.transaction.marginRepayment, transaction.market)}"
+            } else {
+                "付融資利息${formatMarketAmount(transaction.transaction.marginActualInterest, transaction.market)}"
+            }
+            "融券賣出" -> "融券賣${formatShareCount(transaction.transaction.sellShares)}股"
+            "買券還券" -> "買券還${formatShareCount(transaction.transaction.shortCoverShares)}股"
+            "融券補償" -> "融券補償${formatMarketAmount(transaction.transaction.shortCompensation, transaction.market)}"
             else -> transaction.transaction.type
         }
         Text(
@@ -175,8 +199,8 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
         )
 
         val priceText = when (transaction.transaction.type) {
-            "買進" -> String.format("%,.2f", transaction.transaction.buyPrice)
-            "賣出" -> String.format("%,.2f", transaction.transaction.sellPrice)
+            "買進", "融資買進", "買券還券" -> String.format("%,.2f", transaction.transaction.buyPrice)
+            "賣出", "融券賣出" -> String.format("%,.2f", transaction.transaction.sellPrice)
             else -> "-"
         }
         Text(

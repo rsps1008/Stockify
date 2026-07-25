@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -27,11 +28,13 @@ class TransactionDetailViewModel(transactionId: Int, private val stockDao: Stock
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
     val hasMarginDependents: StateFlow<Boolean> = transaction.flatMapLatest { tx ->
-        if (tx?.marginLotId.isNullOrBlank()) {
-            kotlinx.coroutines.flow.flowOf(false)
-        } else {
-            stockDao.getMarginRepaymentsForLot(tx!!.marginLotId).map { it.isNotEmpty() }
-        }
+        val marginDependents = tx?.marginLotId?.takeIf { it.isNotBlank() }
+            ?.let { stockDao.getMarginRepaymentsForLot(it).map { dependents -> dependents.isNotEmpty() } }
+            ?: kotlinx.coroutines.flow.flowOf(false)
+        val shortDependents = tx?.shortLotId?.takeIf { it.isNotBlank() }
+            ?.let { stockDao.getShortDependentsForLot(it).map { dependents -> dependents.isNotEmpty() } }
+            ?: kotlinx.coroutines.flow.flowOf(false)
+        combine(marginDependents, shortDependents) { hasMargin, hasShort -> hasMargin || hasShort }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), false)
 
     fun deleteTransaction() {

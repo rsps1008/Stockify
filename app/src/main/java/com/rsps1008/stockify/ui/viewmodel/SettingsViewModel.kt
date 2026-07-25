@@ -214,7 +214,6 @@ class SettingsViewModel(
 
     fun setMarginFeatureEnabled(enabled: Boolean) = viewModelScope.launch {
         settingsDataStore.setMarginFeatureEnabled(enabled)
-        settingsDataStore.setShortSellingFeatureEnabled(enabled)
     }
 
     fun setMarginDayCount(dayCount: Int) = viewModelScope.launch {
@@ -889,20 +888,23 @@ class SettingsViewModel(
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                if (deleteOldData) {
-                    deleteAllData()
-                }
-                restoreAccountsIfPresent(deleteOldData)
-
                 val csvTransactions = withContext(Dispatchers.IO) {
                     getApplication<Application>().contentResolver.openInputStream(uri)?.use {
                         csvService.import(it)
                     }
                 } ?: emptyList()
 
+                validateImportedTransactions(
+                    csvTransactions,
+                    includeExistingTransactions = !deleteOldData
+                )
+                if (deleteOldData) {
+                    deleteAllData()
+                }
+                restoreAccountsIfPresent(deleteOldData)
                 processImportedTransactions(csvTransactions)
                 restoreHoldingsOrderIfPresent()
-                
+
             } catch (e: Exception) {
                 _message.value = "還原失敗: ${e.message}"
             } finally {
@@ -941,17 +943,20 @@ class SettingsViewModel(
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                if (deleteOldData) {
-                    deleteAllData()
-                }
-                restoreAccountsIfPresent(deleteOldData)
-
                 val csvTransactions = withContext(Dispatchers.IO) {
                     ByteArrayInputStream(data).use { 
                         csvService.import(it)
                     }
                 }
 
+                validateImportedTransactions(
+                    csvTransactions,
+                    includeExistingTransactions = !deleteOldData
+                )
+                if (deleteOldData) {
+                    deleteAllData()
+                }
+                restoreAccountsIfPresent(deleteOldData)
                 processImportedTransactions(csvTransactions)
                 restoreHoldingsOrderIfPresent()
 
@@ -964,7 +969,46 @@ class SettingsViewModel(
         }
     }
 
+    private suspend fun validateImportedTransactions(
+        transactions: List<CsvTransaction>,
+        includeExistingTransactions: Boolean
+    ) {
+        val allStockCodes = transactions.map { it.stockCode }.distinct()
+        val financingTypes = setOf("融資買進", "融資還款", "融券賣出", "買券還券", "融券補償")
+        for (code in allStockCodes) {
+            val importedForCode = transactions.filter { it.stockCode == code }
+            val existingStock = stockDao.getStockByCode(code)
+            val effectiveMarket = existingStock?.market
+                ?: importedForCode.firstOrNull()?.market?.takeIf { it.isNotBlank() }
+                    ?.let(StockMarket::normalize)
+                ?: StockMarket.inferFromCode(code)
+            if (importedForCode.any { it.transaction.type in financingTypes } && !StockMarket.isTw(effectiveMarket)) {
+                throw Exception("股票 $code 的融資融券僅支援台股，匯入被拒絕。")
+            }
+
+            val existingTxs = if (includeExistingTransactions) {
+                stockDao.getTransactionsForStock(code).first()
+            } else {
+                emptyList()
+            }
+            val newTxs = importedForCode.map { it.transaction }
+            val mergedTxs = existingTxs + newTxs
+            val accountIds = mergedTxs.map { it.accountId }.distinct()
+
+            for (accountId in accountIds) {
+                val accountTxs = mergedTxs.filter { it.accountId == accountId }
+                if (!com.rsps1008.stockify.data.MarginCalculationSupport.hasValidRepaymentBalances(accountTxs)) {
+                    throw Exception("股票 $code 包含超過剩餘本金的融資還款，匯入被拒絕。")
+                }
+                if (!com.rsps1008.stockify.data.ShortSellingCalculationSupport.hasValidCoverBalances(accountTxs)) {
+                    throw Exception("股票 $code 包含超過剩餘股數或無效批次的融券操作，匯入被拒絕。")
+                }
+            }
+        }
+    }
+
     private suspend fun processImportedTransactions(transactions: List<CsvTransaction>) {
+
         val refreshedStockCodes = linkedSetOf<String>()
 
         transactions.forEach { csvTransaction ->

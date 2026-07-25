@@ -101,12 +101,12 @@ class AddTransactionViewModel(
         _selectedAccountId.value = accountId
     }
 
-    fun loadMarginLots(stockCode: String) {
+    fun loadMarginLots(stockCode: String, valuationDate: Long, excludeTransactionId: Int? = null) {
         viewModelScope.launch {
             val transactions = stockDao.getTransactionsForStock(stockCode).firstOrNull().orEmpty()
-                .filter { it.accountId == _selectedAccountId.value }
+                .filter { it.accountId == _selectedAccountId.value && it.id != excludeTransactionId }
             val summary = com.rsps1008.stockify.data.MarginCalculationSupport.calculate(
-                transactions, System.currentTimeMillis(), marginDayCount.value
+                transactions, valuationDate, marginDayCount.value
             )
             _marginLots.value = summary.lots.map {
                 MarginLotOption(
@@ -118,11 +118,12 @@ class AddTransactionViewModel(
         }
     }
 
-    fun loadShortLots(stockCode: String) {
+    fun loadShortLots(stockCode: String, valuationDate: Long, excludeTransactionId: Int? = null) {
         viewModelScope.launch {
-            val transactions = stockDao.getTransactionsForStock(stockCode).firstOrNull().orEmpty().filter { it.accountId == _selectedAccountId.value }
+            val transactions = stockDao.getTransactionsForStock(stockCode).firstOrNull().orEmpty()
+                .filter { it.accountId == _selectedAccountId.value && it.id != excludeTransactionId }
             _shortLots.value = com.rsps1008.stockify.data.ShortSellingCalculationSupport
-                .calculate(transactions, System.currentTimeMillis(), marginDayCount.value).lots.map {
+                .calculate(transactions, valuationDate, marginDayCount.value).lots.map {
                     ShortLotOption(it.lotId, "${java.text.SimpleDateFormat("yyyy/MM/dd", java.util.Locale.getDefault()).format(java.util.Date(it.openedAt))} / ${it.annualRate}% / 剩餘 ${it.remainingShares} 股", it.remainingShares)
                 }
         }
@@ -302,6 +303,9 @@ class AddTransactionViewModel(
         marginLotId: String = "",
         marginRepaymentLotId: String = "",
         marginRepayment: Double = 0.0,
+        marginSelfFunded: Double = 0.0,
+        marginSelfFundedOverridden: Boolean = false,
+        marginActualInterest: Double = 0.0,
         shortBorrowPrincipal: Double = 0.0,
         shortBorrowAnnualRate: Double = 0.0,
         shortLotId: String = "",
@@ -309,7 +313,7 @@ class AddTransactionViewModel(
         shortCoverShares: Double = 0.0,
         shortCompensationLotId: String = "",
         shortCompensation: Double = 0.0
-    ) {
+    ): String? {
         val finalFee = when (type) {
             "配息" -> dividendFee
             else -> _fee.value
@@ -324,16 +328,16 @@ class AddTransactionViewModel(
 
         val finalExpense = when (type) {
             "買進", "融資買進", "買券還券" -> _expense.value
-            "融資還款" -> marginRepayment
+            "融資還款" -> marginRepayment + marginActualInterest
             "融券補償" -> shortCompensation
             else -> 0.0
         }
-        val finalTax = if (type == "賣出") _tax.value else 0.0
+        val finalTax = if (type == "賣出" || type == "融券賣出") _tax.value else 0.0
         val finalShares = if (type == "配股") 0.0 else shares
         val finalDividendShares = if (type == "配股") shares else 0.0
         val finalDividendIncome = if (type == "配息") finalIncome else 0.0
 
-        if (transactionId == null) {
+        return if (transactionId == null) {
             addTransaction(
                 stockName, stockCode, date, type,
                 price, finalShares,
@@ -343,7 +347,7 @@ class AddTransactionViewModel(
                 note, finalDividendIncome, capitalReductionRatio,
                 sharesBeforeReduction, sharesAfterReduction, cashReturned,
                 stockSplitRatio, sharesBeforeSplit, sharesAfterSplit,
-                marginPrincipal, marginAnnualRate, marginLotId, marginRepaymentLotId, marginRepayment, shortBorrowPrincipal, shortBorrowAnnualRate, shortLotId, shortCoverLotId, shortCoverShares, shortCompensationLotId, shortCompensation
+                marginPrincipal, marginAnnualRate, marginLotId, marginRepaymentLotId, marginRepayment, marginSelfFunded, marginSelfFundedOverridden, marginActualInterest, shortBorrowPrincipal, shortBorrowAnnualRate, shortLotId, shortCoverLotId, shortCoverShares, shortCompensationLotId, shortCompensation
             )
         } else {
             updateTransaction(
@@ -355,7 +359,7 @@ class AddTransactionViewModel(
                 note, finalDividendIncome, capitalReductionRatio,
                 sharesBeforeReduction, sharesAfterReduction, cashReturned,
                 stockSplitRatio, sharesBeforeSplit, sharesAfterSplit,
-                marginPrincipal, marginAnnualRate, marginLotId, marginRepaymentLotId, marginRepayment, shortBorrowPrincipal, shortBorrowAnnualRate, shortLotId, shortCoverLotId, shortCoverShares, shortCompensationLotId, shortCompensation
+                marginPrincipal, marginAnnualRate, marginLotId, marginRepaymentLotId, marginRepayment, marginSelfFunded, marginSelfFundedOverridden, marginActualInterest, shortBorrowPrincipal, shortBorrowAnnualRate, shortLotId, shortCoverLotId, shortCoverShares, shortCompensationLotId, shortCompensation
             )
         }
     }
@@ -389,8 +393,8 @@ class AddTransactionViewModel(
         ,marginAnnualRate: Double
         ,marginLotId: String
         ,marginRepaymentLotId: String
-        ,marginRepayment: Double, shortBorrowPrincipal: Double, shortBorrowAnnualRate: Double, shortLotId: String, shortCoverLotId: String, shortCoverShares: Double, shortCompensationLotId: String, shortCompensation: Double
-    ) {
+        ,marginRepayment: Double, marginSelfFunded: Double, marginSelfFundedOverridden: Boolean, marginActualInterest: Double, shortBorrowPrincipal: Double, shortBorrowAnnualRate: Double, shortLotId: String, shortCoverLotId: String, shortCoverShares: Double, shortCompensationLotId: String, shortCompensation: Double
+    ): String? {
         val inferredMarket = StockMarket.inferFromCode(stockCode)
         var stock = stockDao.getStockByCode(stockCode)
 
@@ -404,7 +408,7 @@ class AddTransactionViewModel(
             stock = updatedStock
         }
 
-        stock?.let { currentStock ->
+        return stock?.let { currentStock ->
             val resolvedLotId = if (type == "融資買進") marginLotId.ifBlank { UUID.randomUUID().toString() } else marginLotId
             val resolvedShortLotId = if (type == "融券賣出") shortLotId.ifBlank { UUID.randomUUID().toString() } else shortLotId
             val transaction = StockTransaction(
@@ -413,8 +417,8 @@ class AddTransactionViewModel(
                 date = date,
                 recordTime = System.currentTimeMillis(),
                 type = type,
-                buyPrice = if (type == "買進" || type == "融資買進") price else 0.0,
-                buyShares = if (type == "買進" || type == "融資買進") shares else 0.0,
+                buyPrice = if (type == "買進" || type == "融資買進" || type == "買券還券") price else 0.0,
+                buyShares = if (type == "買進" || type == "融資買進" || type == "買券還券") shares else 0.0,
                 sellPrice = if (type == "賣出" || type == "融券賣出") price else 0.0,
                 sellShares = if (type == "賣出" || type == "融券賣出") shares else 0.0,
                 fee = fee,
@@ -439,12 +443,13 @@ class AddTransactionViewModel(
                 marginAnnualRate = marginAnnualRate,
                 marginLotId = resolvedLotId,
                 marginRepaymentLotId = marginRepaymentLotId,
-                marginRepayment = marginRepayment, shortBorrowPrincipal = shortBorrowPrincipal, shortBorrowAnnualRate = shortBorrowAnnualRate, shortLotId = resolvedShortLotId, shortCoverLotId = shortCoverLotId, shortCoverShares = shortCoverShares, shortCompensationLotId = shortCompensationLotId, shortCompensation = shortCompensation
+                marginRepayment = marginRepayment, marginSelfFunded = marginSelfFunded, marginSelfFundedOverridden = marginSelfFundedOverridden, marginActualInterest = marginActualInterest, shortBorrowPrincipal = shortBorrowPrincipal, shortBorrowAnnualRate = shortBorrowAnnualRate, shortLotId = resolvedShortLotId, shortCoverLotId = shortCoverLotId, shortCoverShares = shortCoverShares, shortCompensationLotId = shortCompensationLotId, shortCompensation = shortCompensation
             )
+            validateLotBalances(transaction)?.let { return it }
             stockDao.insertTransaction(transaction)
             realtimeStockDataService.refreshStock(stockCode)
-
-        }
+            null
+        } ?: "找不到股票資料，無法儲存交易"
     }
 
     private suspend fun updateTransaction(
@@ -475,16 +480,16 @@ class AddTransactionViewModel(
         ,marginAnnualRate: Double
         ,marginLotId: String
         ,marginRepaymentLotId: String
-        ,marginRepayment: Double, shortBorrowPrincipal: Double, shortBorrowAnnualRate: Double, shortLotId: String, shortCoverLotId: String, shortCoverShares: Double, shortCompensationLotId: String, shortCompensation: Double
-    ) {
-        _transactionToEdit.value?.let {
+        ,marginRepayment: Double, marginSelfFunded: Double, marginSelfFundedOverridden: Boolean, marginActualInterest: Double, shortBorrowPrincipal: Double, shortBorrowAnnualRate: Double, shortLotId: String, shortCoverLotId: String, shortCoverShares: Double, shortCompensationLotId: String, shortCompensation: Double
+    ): String? {
+        return _transactionToEdit.value?.let {
             val updatedTransaction = it.copy(
                 stockCode = stockCode,
                 accountId = _selectedAccountId.value,
                 date = date,
                 type = type,
-                buyPrice = if (type == "買進" || type == "融資買進") price else 0.0,
-                buyShares = if (type == "買進" || type == "融資買進") shares else 0.0,
+                buyPrice = if (type == "買進" || type == "融資買進" || type == "買券還券") price else 0.0,
+                buyShares = if (type == "買進" || type == "融資買進" || type == "買券還券") shares else 0.0,
                 sellPrice = if (type == "賣出" || type == "融券賣出") price else 0.0,
                 sellShares = if (type == "賣出" || type == "融券賣出") shares else 0.0,
                 fee = fee,
@@ -509,11 +514,28 @@ class AddTransactionViewModel(
                 marginAnnualRate = marginAnnualRate,
                 marginLotId = marginLotId,
                 marginRepaymentLotId = marginRepaymentLotId,
-                marginRepayment = marginRepayment, shortBorrowPrincipal = shortBorrowPrincipal, shortBorrowAnnualRate = shortBorrowAnnualRate, shortLotId = shortLotId, shortCoverLotId = shortCoverLotId, shortCoverShares = shortCoverShares, shortCompensationLotId = shortCompensationLotId, shortCompensation = shortCompensation
+                marginRepayment = marginRepayment, marginSelfFunded = marginSelfFunded, marginSelfFundedOverridden = marginSelfFundedOverridden, marginActualInterest = marginActualInterest, shortBorrowPrincipal = shortBorrowPrincipal, shortBorrowAnnualRate = shortBorrowAnnualRate, shortLotId = shortLotId, shortCoverLotId = shortCoverLotId, shortCoverShares = shortCoverShares, shortCompensationLotId = shortCompensationLotId, shortCompensation = shortCompensation
             )
+            validateLotBalances(updatedTransaction)?.let { return it }
             stockDao.updateTransaction(updatedTransaction)
             realtimeStockDataService.refreshStock(stockCode)
+            null
+        } ?: "找不到要更新的交易"
+    }
+
+    private suspend fun validateLotBalances(candidate: StockTransaction): String? {
+        val transactions = stockDao.getTransactionsForStock(candidate.stockCode)
+            .firstOrNull()
+            .orEmpty()
+            .filter { it.accountId == candidate.accountId && it.id != candidate.id } + candidate
+
+        if (!com.rsps1008.stockify.data.MarginCalculationSupport.hasValidRepaymentBalances(transactions)) {
+            return "融資還款會超過批次剩餘本金，請調整交易日期或金額"
         }
+        if (!com.rsps1008.stockify.data.ShortSellingCalculationSupport.hasValidCoverBalances(transactions)) {
+            return "買券還券會超過批次剩餘股數，請調整交易日期或股數"
+        }
+        return null
     }
 
     fun resetCalculatedValues() {

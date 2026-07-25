@@ -1,5 +1,10 @@
 package com.rsps1008.stockify.data
 
+data class PositionInvestmentBasis(
+    val remaining: Double,
+    val cumulative: Double
+)
+
 object HoldingCalculationSupport {
     /**
      * Applies a split to the shares that were actually recorded for that event.
@@ -34,6 +39,17 @@ object HoldingCalculationSupport {
         return sharesAfter - sharesBefore
     }
 
+    fun capitalReductionShareFactor(transaction: StockTransaction): Double {
+        val sharesBefore = transaction.sharesBeforeReduction
+        val sharesAfter = transaction.sharesAfterReduction
+        return when {
+            sharesBefore > 0.0 && sharesAfter > 0.0 -> sharesAfter / sharesBefore
+            transaction.capitalReductionRatio in 0.0..100.0 ->
+                1.0 - transaction.capitalReductionRatio / 100.0
+            else -> 1.0
+        }
+    }
+
     fun resolveDividendIncome(transaction: StockTransaction): Double {
         return if (transaction.dividendIncome != 0.0 || transaction.income == 0.0) {
             transaction.dividendIncome
@@ -53,4 +69,34 @@ object HoldingCalculationSupport {
             totalInvestment
         }
     }
+
+    fun positionInvestmentBasis(
+        shares: Double,
+        costBasis: Double,
+        longInvestment: Double,
+        marginDebt: Double,
+        shortOutstandingShares: Double,
+        shortRemainingInvestment: Double,
+        shortCumulativeInvestment: Double
+    ): PositionInvestmentBasis {
+        val cumulative = longInvestment + shortCumulativeInvestment
+        val hasOpenPosition = shares > POSITION_EPSILON ||
+            marginDebt > POSITION_EPSILON ||
+            shortOutstandingShares > POSITION_EPSILON
+        if (!hasOpenPosition) {
+            return PositionInvestmentBasis(remaining = cumulative, cumulative = cumulative)
+        }
+
+        val longRemaining = when {
+            shares > POSITION_EPSILON && costBasis > 0.0 -> costBasis
+            shares > POSITION_EPSILON || marginDebt > POSITION_EPSILON -> longInvestment
+            else -> 0.0
+        }
+        return PositionInvestmentBasis(
+            remaining = longRemaining + shortRemainingInvestment,
+            cumulative = cumulative
+        )
+    }
+
+    private const val POSITION_EPSILON = 1e-6
 }

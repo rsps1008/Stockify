@@ -196,7 +196,8 @@ private fun StockDetailSummary(
     onYahooClick: () -> Unit
 ) {
     val totalPlColor = if (holdingInfo.totalPL >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
-    val dailyPlColor = if (holdingInfo.dailyChange >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
+    val positionDailyPL = holdingInfo.dailyChange * (holdingInfo.shares - holdingInfo.shortOutstandingShares)
+    val dailyPlColor = if (positionDailyPL >= 0) StockifyAppTheme.stockColors.gain else StockifyAppTheme.stockColors.loss
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Box(modifier = Modifier.fillMaxWidth()) {
@@ -245,7 +246,7 @@ private fun StockDetailSummary(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(text = "持股日損益", style = MaterialTheme.typography.bodySmall)
                         AnimatedNumberText(
-                            text = formatMarketAmount(kotlin.math.abs(holdingInfo.dailyChange * holdingInfo.shares), holdingInfo.stock.market),
+                            text = formatMarketAmount(kotlin.math.abs(positionDailyPL), holdingInfo.stock.market),
                             color = dailyPlColor,
                             style = MaterialTheme.typography.bodyLarge
                         )
@@ -276,6 +277,23 @@ private fun StockDetailSummary(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(text = "融資淨值", style = MaterialTheme.typography.bodySmall)
                             Text(text = formatMarketAmount(holdingInfo.marginNetEquity, holdingInfo.stock.market), style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+                if (holdingInfo.shortOutstandingShares > 0.0) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "融券尚欠", style = MaterialTheme.typography.bodySmall)
+                            Text(text = "${formatShareCount(holdingInfo.shortOutstandingShares)}股", style = MaterialTheme.typography.bodyLarge)
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "回補市值", style = MaterialTheme.typography.bodySmall)
+                            Text(text = formatMarketAmount(holdingInfo.shortMarketLiability, holdingInfo.stock.market), style = MaterialTheme.typography.bodyLarge)
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "應計借券費", style = MaterialTheme.typography.bodySmall)
+                            Text(text = formatMarketAmount(holdingInfo.shortAccruedBorrowFee, holdingInfo.stock.market), style = MaterialTheme.typography.bodyLarge)
                         }
                     }
                 }
@@ -447,7 +465,25 @@ fun AnimatedTimeText(text: String, color: Color) {
 private fun TransactionRow(transaction: TransactionUiState, navController: NavController) {
     val amountText = when (transaction.transaction.type) {
         "買進" -> formatMarketAmount(-transaction.transaction.expense, transaction.market)
-        "賣出" -> formatMarketAmount(transaction.transaction.income, transaction.market)
+        "賣出" -> formatMarketAmount(
+            transaction.transaction.income - transaction.transaction.marginRepayment - transaction.transaction.marginActualInterest,
+            transaction.market
+        )
+        "融資買進" -> formatMarketAmount(
+            -(if (transaction.transaction.marginSelfFundedOverridden) {
+                transaction.transaction.marginSelfFunded
+            } else {
+                transaction.transaction.expense - transaction.transaction.marginPrincipal
+            }),
+            transaction.market
+        )
+        "融資還款" -> formatMarketAmount(
+            -(transaction.transaction.marginRepayment + transaction.transaction.marginActualInterest),
+            transaction.market
+        )
+        "融券賣出" -> formatMarketAmount(transaction.transaction.income, transaction.market)
+        "買券還券" -> formatMarketAmount(-transaction.transaction.expense, transaction.market)
+        "融券補償" -> formatMarketAmount(-transaction.transaction.shortCompensation, transaction.market)
         "配息" -> formatMarketAmount(transaction.transaction.income, transaction.market)
         "配股" -> "${formatShareCount(transaction.transaction.dividendShares)}股"
         "減資" -> String.format("%,.1f", transaction.transaction.cashReturned)
@@ -457,7 +493,7 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
 
     val amountColor = when {
         amountText == "-" -> Color.Unspecified
-        transaction.transaction.type == "買進" -> StockifyAppTheme.stockColors.loss
+        transaction.transaction.type in setOf("買進", "融資買進", "融資還款", "買券還券", "融券補償") -> StockifyAppTheme.stockColors.loss
         else -> StockifyAppTheme.stockColors.gain
     }
 
@@ -473,7 +509,16 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
 
         val transactionText = when(transaction.transaction.type) {
             "買進" -> "買${formatShareCount(transaction.transaction.buyShares)}股"
+            "融資買進" -> "融資買${formatShareCount(transaction.transaction.buyShares)}股"
             "賣出" -> "賣${formatShareCount(transaction.transaction.sellShares)}股"
+            "融券賣出" -> "融券賣${formatShareCount(transaction.transaction.sellShares)}股"
+            "融資還款" -> if (transaction.transaction.marginRepayment > 0.0) {
+                "還融資${formatMarketAmount(transaction.transaction.marginRepayment, transaction.market)}"
+            } else {
+                "付融資利息${formatMarketAmount(transaction.transaction.marginActualInterest, transaction.market)}"
+            }
+            "買券還券" -> "買券還${formatShareCount(transaction.transaction.shortCoverShares)}股"
+            "融券補償" -> "融券補償${formatMarketAmount(transaction.transaction.shortCompensation, transaction.market)}"
             "配息" -> "配息"
             "配股" -> "配股"
             "減資" -> "減資${String.format("%.1f", transaction.transaction.capitalReductionRatio)}%"
@@ -483,12 +528,12 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
         Text(text = transactionText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1.5f), textAlign = TextAlign.Center)
 
         val priceText = when (transaction.transaction.type) {
-            "買進" -> String.format("%,.2f", transaction.transaction.buyPrice)
-            "賣出" -> String.format("%,.2f", transaction.transaction.sellPrice)
+            "買進", "融資買進", "買券還券" -> String.format("%,.2f", transaction.transaction.buyPrice)
+            "賣出", "融券賣出" -> String.format("%,.2f", transaction.transaction.sellPrice)
             else -> "-"
         }
         Text(text = priceText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-        
+
         Text(text = amountText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), color = amountColor, textAlign = TextAlign.End)
     }
 

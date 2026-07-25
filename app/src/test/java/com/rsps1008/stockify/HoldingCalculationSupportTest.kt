@@ -64,6 +64,7 @@ class HoldingCalculationSupportTest {
         )
 
         assertEquals(-200.0, HoldingCalculationSupport.capitalReductionShareChange(transaction, 1_000.0), 0.0)
+        assertEquals(0.8, HoldingCalculationSupport.capitalReductionShareFactor(transaction), 0.0)
     }
 
     @Test
@@ -114,5 +115,37 @@ class HoldingCalculationSupportTest {
         )
 
         assertEquals(300.0, denominator, 0.0)
+    }
+
+    @Test
+    fun closedShortPositionFallsBackToCumulativeInvestment() {
+        val basis = HoldingCalculationSupport.positionInvestmentBasis(
+            shares = 0.0,
+            costBasis = 0.0,
+            longInvestment = 0.0,
+            marginDebt = 0.0,
+            shortOutstandingShares = 0.0,
+            shortRemainingInvestment = 0.0,
+            shortCumulativeInvestment = 100_000.0
+        )
+
+        assertEquals(100_000.0, basis.remaining, 0.0)
+        assertEquals(100_000.0, basis.cumulative, 0.0)
+    }
+
+    @Test
+    fun partialShortCoverKeepsSeparateRemainingAndCumulativeInvestment() {
+        val basis = HoldingCalculationSupport.positionInvestmentBasis(
+            shares = 0.0,
+            costBasis = 0.0,
+            longInvestment = 0.0,
+            marginDebt = 0.0,
+            shortOutstandingShares = 600.0,
+            shortRemainingInvestment = 60_000.0,
+            shortCumulativeInvestment = 100_000.0
+        )
+
+        assertEquals(60_000.0, basis.remaining, 0.0)
+        assertEquals(100_000.0, basis.cumulative, 0.0)
     }
 }

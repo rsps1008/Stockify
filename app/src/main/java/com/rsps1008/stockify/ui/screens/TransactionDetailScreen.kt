@@ -88,7 +88,10 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                     IconButton(onClick = { showDeleteDialog = true }, enabled = !hasMarginDependents) {
                         Icon(Icons.Filled.Delete, contentDescription = "Delete")
                     }
-                    IconButton(onClick = { navController.navigate(Screen.AddTransaction.createRoute(transactionId)) }) {
+                    IconButton(
+                        onClick = { navController.navigate(Screen.AddTransaction.createRoute(transactionId)) },
+                        enabled = !hasMarginDependents
+                    ) {
                         Icon(Icons.Filled.Edit, contentDescription = "Edit")
                     }
                 },
@@ -116,7 +119,9 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                         DetailRow(label = "支出", value = formatMarketAmount(transaction.expense, uiState.market), valueColor = StockifyAppTheme.stockColors.loss)
                         if (transaction.type == "融資買進") {
                             DetailRow(label = "融資本金", value = formatMarketAmount(transaction.marginPrincipal, uiState.market))
+                            DetailRow(label = "融資自備款", value = formatMarketAmount(if (transaction.marginSelfFundedOverridden) transaction.marginSelfFunded else transaction.expense - transaction.marginPrincipal, uiState.market))
                             DetailRow(label = "年利率", value = String.format("%.4f%%", transaction.marginAnnualRate))
+                            DetailRow(label = "融資批次", value = formatLotId(transaction.marginLotId))
                         }
                     }
                     "賣出" -> {
@@ -125,6 +130,8 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                         DetailRow(label = "手續費", value = formatMarketAmount(transaction.fee, uiState.market))
                         DetailRow(label = "交易稅", value = formatMarketAmount(transaction.tax, uiState.market))
                         DetailRow(label = "收入", value = formatMarketAmount(transaction.income, uiState.market), valueColor = StockifyAppTheme.stockColors.gain)
+                        if (transaction.marginRepayment > 0.0) DetailRow(label = "還融資本金", value = formatMarketAmount(transaction.marginRepayment, uiState.market), valueColor = StockifyAppTheme.stockColors.loss)
+                        if (transaction.marginActualInterest > 0.0) DetailRow(label = "實際扣款利息", value = formatMarketAmount(transaction.marginActualInterest, uiState.market), valueColor = StockifyAppTheme.stockColors.loss)
                     }
                     "配息" -> {
                         DetailRow(label = "每股股息", value = String.format("%,.4f", transaction.cashDividend))
@@ -150,7 +157,28 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                     }
                     "融資還款" -> {
                         DetailRow(label = "還款本金", value = formatMarketAmount(transaction.marginRepayment, uiState.market), valueColor = StockifyAppTheme.stockColors.loss)
-                        DetailRow(label = "沖抵融資批次", value = transaction.marginRepaymentLotId)
+                        if (transaction.marginActualInterest > 0.0) DetailRow(label = "實際扣款利息", value = formatMarketAmount(transaction.marginActualInterest, uiState.market), valueColor = StockifyAppTheme.stockColors.loss)
+                        DetailRow(label = "沖抵融資批次", value = formatLotId(transaction.marginRepaymentLotId))
+                    }
+                    "融券賣出" -> {
+                        DetailRow(label = "融券賣出價格", value = String.format("%,.2f", transaction.sellPrice))
+                        DetailRow(label = "融券賣出股數", value = formatShareCount(transaction.sellShares))
+                        DetailRow(label = "手續費", value = formatMarketAmount(transaction.fee, uiState.market))
+                        DetailRow(label = "交易稅", value = formatMarketAmount(transaction.tax, uiState.market))
+                        DetailRow(label = "收入", value = formatMarketAmount(transaction.income, uiState.market), valueColor = StockifyAppTheme.stockColors.gain)
+                        DetailRow(label = "借券年費率", value = String.format("%.4f%%", transaction.shortBorrowAnnualRate))
+                        DetailRow(label = "融券批次", value = formatLotId(transaction.shortLotId))
+                    }
+                    "買券還券" -> {
+                        DetailRow(label = "買券價格", value = String.format("%,.2f", transaction.buyPrice))
+                        DetailRow(label = "還券股數", value = formatShareCount(transaction.shortCoverShares))
+                        DetailRow(label = "手續費", value = formatMarketAmount(transaction.fee, uiState.market))
+                        DetailRow(label = "支出", value = formatMarketAmount(transaction.expense, uiState.market), valueColor = StockifyAppTheme.stockColors.loss)
+                        DetailRow(label = "沖抵融券批次", value = formatLotId(transaction.shortCoverLotId))
+                    }
+                    "融券補償" -> {
+                        DetailRow(label = "補償金額", value = formatMarketAmount(transaction.shortCompensation, uiState.market), valueColor = StockifyAppTheme.stockColors.loss)
+                        DetailRow(label = "融券批次", value = formatLotId(transaction.shortCompensationLotId))
                     }
                 }
                 if (transaction.note.isNotBlank()) {
@@ -159,6 +187,12 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
             }
         }
     }
+}
+
+private fun formatLotId(lotId: String): String = when {
+    lotId.isBlank() -> "-"
+    lotId.length <= 8 -> lotId
+    else -> "${lotId.take(8)}…"
 }
 
 @Composable

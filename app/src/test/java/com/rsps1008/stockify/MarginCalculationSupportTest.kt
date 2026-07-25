@@ -3,6 +3,8 @@ package com.rsps1008.stockify
 import com.rsps1008.stockify.data.MarginCalculationSupport
 import com.rsps1008.stockify.data.StockTransaction
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MarginCalculationSupportTest {
@@ -43,5 +45,91 @@ class MarginCalculationSupportTest {
         assertEquals(70_000.0, summary.outstandingPrincipal, 0.0)
         assertEquals(50_000.0, summary.lots.first { it.lotId == "first" }.remainingPrincipal, 0.0)
         assertEquals(20_000.0, summary.lots.first { it.lotId == "second" }.remainingPrincipal, 0.0)
+    }
+
+    @Test
+    fun actualBrokerInterestReplacesAccruedInterestForTheRepaidLot() {
+        val day = 24L * 60 * 60 * 1000
+        val transactions = listOf(
+            loan(0, "lot-1", 80_000.0, 3.65),
+            StockTransaction(
+                stockCode = "2330", accountId = 1, date = day * 30, recordTime = day * 30,
+                type = "融資還款", marginRepaymentLotId = "lot-1", marginRepayment = 80_000.0,
+                marginActualInterest = 340.0
+            )
+        )
+
+        val summary = MarginCalculationSupport.calculate(transactions, day * 30, 365)
+
+        assertEquals(0.0, summary.accruedInterest, 0.0)
+        assertEquals(340.0, summary.actualInterestPaid, 0.0)
+        assertEquals(340.0, summary.totalInterestExpense, 0.0)
+    }
+
+    @Test
+    fun futureMarginLotsAreExcludedFromHistoricalValuation() {
+        val day = 24L * 60 * 60 * 1000
+        val summary = MarginCalculationSupport.calculate(
+            transactions = listOf(loan(day * 2, "future", 80_000.0, 3.65)),
+            valuationDate = day,
+            dayCount = 365
+        )
+
+        assertEquals(0.0, summary.outstandingPrincipal, 0.0)
+        assertEquals(0, summary.lots.size)
+    }
+
+    @Test
+    fun explicitZeroSelfFundedOverrideIsPreserved() {
+        val transaction = loan(0L, "lot-zero", 60_000.0, 3.65).copy(
+            marginSelfFunded = 0.0,
+            marginSelfFundedOverridden = true
+        )
+
+        val summary = MarginCalculationSupport.calculate(listOf(transaction), 0L, 365)
+
+        assertEquals(0.0, summary.selfFundedCapital, 0.0)
+    }
+
+    @Test
+    fun backdatedRepaymentCannotOverpayLotAfterLaterRepaymentExists() {
+        val day = 24L * 60 * 60 * 1000
+        val transactions = listOf(
+            loan(0L, "lot-1", 100_000.0, 3.65),
+            StockTransaction(
+                stockCode = "2330", date = day, recordTime = day,
+                type = "融資還款", marginRepaymentLotId = "lot-1", marginRepayment = 100_000.0
+            ),
+            StockTransaction(
+                stockCode = "2330", date = day * 2, recordTime = day * 2,
+                type = "融資還款", marginRepaymentLotId = "lot-1", marginRepayment = 60_000.0
+            )
+        )
+
+        assertFalse(MarginCalculationSupport.hasValidRepaymentBalances(transactions))
+    }
+
+    @Test
+    fun interestOnlyRepaymentMustReferenceAnExistingLot() {
+        val invalid = StockTransaction(
+            stockCode = "2330", date = 0L, recordTime = 0L,
+            type = "融資還款", marginActualInterest = 100.0
+        )
+
+        assertFalse(MarginCalculationSupport.hasValidRepaymentBalances(listOf(invalid)))
+    }
+
+    @Test
+    fun interestOnlyRepaymentCanReferenceTheSelectedLot() {
+        val interestOnly = StockTransaction(
+            stockCode = "2330", date = 24L * 60 * 60 * 1000, recordTime = 1L,
+            type = "融資還款", marginRepaymentLotId = "lot-1", marginActualInterest = 100.0
+        )
+
+        assertTrue(
+            MarginCalculationSupport.hasValidRepaymentBalances(
+                listOf(loan(0L, "lot-1", 80_000.0, 3.65), interestOnly)
+            )
+        )
     }
 }
