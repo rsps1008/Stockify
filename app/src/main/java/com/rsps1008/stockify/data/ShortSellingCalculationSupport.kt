@@ -25,6 +25,8 @@ data class ShortSellingSummary(
 
 /** Replays short-sale lots. Rates are user-entered estimates, not broker settlement values. */
 object ShortSellingCalculationSupport {
+    private data class LotKey(val stockCode: String, val accountId: Int, val lotId: String)
+
     private data class LotState(
         val id: String, val openedAt: Long, val annualRate: Double,
         var originalShares: Double, val originalPrincipal: Double,
@@ -33,7 +35,7 @@ object ShortSellingCalculationSupport {
 
     fun calculate(transactions: List<StockTransaction>, valuationDate: Long, dayCount: Int = 365): ShortSellingSummary {
         val denominator = if (dayCount == 360) 360 else 365
-        val lots = linkedMapOf<String, LotState>()
+        val lots = linkedMapOf<LotKey, LotState>()
         var compensationExpense = 0.0
         var cumulativeOpenedPrincipal = 0.0
         fun accrue(lot: LotState, date: Long) {
@@ -45,7 +47,7 @@ object ShortSellingCalculationSupport {
         }
         transactions.asSequence()
             .filter { it.date <= valuationDate }
-            .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime })
+            .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime }.thenBy { it.id })
             .forEach { tx ->
             lots.values.forEach { accrue(it, tx.date) }
             when (tx.type) {
@@ -54,20 +56,34 @@ object ShortSellingCalculationSupport {
                     val principal = tx.shortBorrowPrincipal.takeIf { it > 0.0 } ?: tx.sellPrice * shares
                     if (shares > 0.0) {
                         val id = tx.shortLotId.ifBlank { "legacy-short-${tx.id}" }
-                        lots[id] = LotState(id, tx.date, tx.shortBorrowAnnualRate, shares, principal, shares, 0.0, tx.date)
+                        lots[tx.toLotKey(id)] = LotState(
+                            id,
+                            tx.date,
+                            tx.shortBorrowAnnualRate,
+                            shares,
+                            principal,
+                            shares,
+                            0.0,
+                            tx.date
+                        )
                         cumulativeOpenedPrincipal += principal
                     }
                 }
                 "買券還券" -> if (tx.shortCoverLotId.isNotBlank() && tx.shortCoverShares > 0.0) {
-                    lots[tx.shortCoverLotId]?.let { it.remainingShares = (it.remainingShares - tx.shortCoverShares).coerceAtLeast(0.0); it.lastAccrualDate = tx.date }
+                    lots[tx.toLotKey(tx.shortCoverLotId)]?.let {
+                        it.remainingShares = (it.remainingShares - tx.shortCoverShares).coerceAtLeast(0.0)
+                        it.lastAccrualDate = tx.date
+                    }
                 }
                 "融券補償" -> compensationExpense += tx.shortCompensation.coerceAtLeast(0.0)
                 "分割", "減資" -> {
                     val factor = shareAdjustmentFactor(tx)
                     if (factor > 0.0 && factor != 1.0) {
-                        lots.values.forEach { lot ->
-                            lot.originalShares *= factor
-                            lot.remainingShares *= factor
+                        lots.forEach { (key, lot) ->
+                            if (key.matches(tx)) {
+                                lot.originalShares *= factor
+                                lot.remainingShares *= factor
+                            }
                         }
                     }
                 }
@@ -101,11 +117,11 @@ object ShortSellingCalculationSupport {
             val openingIncome: Double
         )
 
-        val lots = linkedMapOf<String, XirrLotState>()
+        val lots = linkedMapOf<LotKey, XirrLotState>()
         val cashFlows = mutableListOf<CashFlow>()
         transactions.asSequence()
             .filter { it.date <= valuationDate }
-            .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime })
+            .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime }.thenBy { it.id })
             .forEach { transaction ->
                 when (transaction.type) {
                     "融券賣出" -> {
@@ -114,7 +130,7 @@ object ShortSellingCalculationSupport {
                             val principal = transaction.shortBorrowPrincipal.takeIf { it > 0.0 }
                                 ?: transaction.sellPrice * shares
                             val lotId = transaction.shortLotId.ifBlank { "legacy-short-${transaction.id}" }
-                            lots[lotId] = XirrLotState(
+                            lots[transaction.toLotKey(lotId)] = XirrLotState(
                                 originalShares = shares,
                                 remainingShares = shares,
                                 originalPrincipal = principal,
@@ -125,7 +141,7 @@ object ShortSellingCalculationSupport {
                     }
                     "買券還券" -> {
                         val requestedShares = transaction.shortCoverShares.coerceAtLeast(0.0)
-                        val lot = lots[transaction.shortCoverLotId]
+                        val lot = lots[transaction.toLotKey(transaction.shortCoverLotId)]
                         if (lot != null && requestedShares > 0.0 && lot.remainingShares > 0.0) {
                             val coveredShares = requestedShares.coerceAtMost(lot.remainingShares)
                             val coveredRatio = coveredShares / lot.originalShares
@@ -146,9 +162,11 @@ object ShortSellingCalculationSupport {
                     "分割", "減資" -> {
                         val factor = shareAdjustmentFactor(transaction)
                         if (factor > 0.0 && factor != 1.0) {
-                            lots.values.forEach { lot ->
-                                lot.originalShares *= factor
-                                lot.remainingShares *= factor
+                            lots.forEach { (key, lot) ->
+                                if (key.matches(transaction)) {
+                                    lot.originalShares *= factor
+                                    lot.remainingShares *= factor
+                                }
                             }
                         }
                     }
@@ -176,38 +194,46 @@ object ShortSellingCalculationSupport {
 
     /** Validates selected-lot covers without silently clamping excess shares. */
     fun hasValidCoverBalances(transactions: List<StockTransaction>): Boolean {
-        val remainingByLot = mutableMapOf<String, Double>()
+        val remainingByLot = mutableMapOf<LotKey, Double>()
 
         transactions
-            .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime })
+            .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime }.thenBy { it.id })
             .forEach { transaction ->
                 if (transaction.type == "融券賣出") {
                     val lotId = transaction.shortLotId.ifBlank { "legacy-short-${transaction.id}" }
-                    remainingByLot[lotId] = transaction.sellShares.coerceAtLeast(0.0)
+                    remainingByLot[transaction.toLotKey(lotId)] = transaction.sellShares.coerceAtLeast(0.0)
                 }
 
                 if (transaction.shortCoverShares > 0.0) {
-                    val lotId = transaction.shortCoverLotId
-                    val remaining = remainingByLot[lotId] ?: return false
+                    val lotKey = transaction.toLotKey(transaction.shortCoverLotId)
+                    val remaining = remainingByLot[lotKey] ?: return false
                     if (transaction.shortCoverShares > remaining + BALANCE_EPSILON) return false
-                    remainingByLot[lotId] = (remaining - transaction.shortCoverShares).coerceAtLeast(0.0)
+                    remainingByLot[lotKey] = (remaining - transaction.shortCoverShares).coerceAtLeast(0.0)
                 }
 
                 if (transaction.type == "融券補償") {
-                    val remaining = remainingByLot[transaction.shortCompensationLotId] ?: return false
+                    val remaining = remainingByLot[transaction.toLotKey(transaction.shortCompensationLotId)] ?: return false
                     if (remaining <= BALANCE_EPSILON) return false
                 }
 
                 if (transaction.type == "分割" || transaction.type == "減資") {
                     val factor = shareAdjustmentFactor(transaction)
                     if (factor > 0.0 && factor != 1.0) {
-                        remainingByLot.replaceAll { _, remaining -> remaining * factor }
+                        remainingByLot.replaceAll { key, remaining ->
+                            if (key.matches(transaction)) remaining * factor else remaining
+                        }
                     }
                 }
             }
 
         return true
     }
+
+    private fun StockTransaction.toLotKey(lotId: String): LotKey =
+        LotKey(stockCode = stockCode, accountId = accountId, lotId = lotId)
+
+    private fun LotKey.matches(transaction: StockTransaction): Boolean =
+        stockCode == transaction.stockCode && accountId == transaction.accountId
 
     private fun daysBetween(start: Long, end: Long): Long = ChronoUnit.DAYS.between(
         Instant.ofEpochMilli(start).atZone(ZoneId.systemDefault()).toLocalDate(),

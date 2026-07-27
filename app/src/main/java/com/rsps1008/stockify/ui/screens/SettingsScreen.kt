@@ -109,6 +109,8 @@ fun SettingsScreen() {
     val taxRateDayTrading by viewModel.taxRateDayTrading.collectAsState()
     val marginFeatureEnabled by viewModel.marginFeatureEnabled.collectAsState()
     val marginDayCount by viewModel.marginDayCount.collectAsState()
+    val defaultMarginAnnualRate by viewModel.defaultMarginAnnualRate.collectAsState()
+    val defaultShortBorrowAnnualRate by viewModel.defaultShortBorrowAnnualRate.collectAsState()
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val focusManager = LocalFocusManager.current
@@ -421,7 +423,7 @@ fun SettingsScreen() {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("融資／融券功能（實驗階段）", style = MaterialTheme.typography.titleLarge)
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text("啟用後可記錄台股融資買進、還款、融券賣出與買券還券，並估算利息或借券費；此功能不會連線券商。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("啟用後可記錄台股融資買進、還款、融券賣出、買券還券與融券補償，並估算利息或借券費；此功能不會連線券商。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("啟用融資／融券功能")
                             Switch(checked = marginFeatureEnabled, onCheckedChange = viewModel::setMarginFeatureEnabled)
@@ -434,6 +436,36 @@ fun SettingsScreen() {
                                     listOf(365, 360).forEach { dayCount -> DropdownMenuItem(text = { Text("$dayCount 天") }, onClick = { viewModel.setMarginDayCount(dayCount); expandedMarginDayCount = false }) }
                                 }
                             }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            var defaultMarginAnnualRateText by remember(defaultMarginAnnualRate) { mutableStateOf(annualRateInputText(defaultMarginAnnualRate)) }
+                            OutlinedTextField(
+                                value = defaultMarginAnnualRateText,
+                                onValueChange = {
+                                    defaultMarginAnnualRateText = it
+                                    it.toDoubleOrNull()
+                                        ?.takeIf { rate -> rate.isFinite() && rate >= 0.0 }
+                                        ?.let(viewModel::setDefaultMarginAnnualRate)
+                                },
+                                label = { Text("預設融資年利率 (%)") },
+                                supportingText = { Text("只會自動帶入新建或改為融資買進的交易；既有交易利率不會變更") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            var defaultShortBorrowAnnualRateText by remember(defaultShortBorrowAnnualRate) { mutableStateOf(annualRateInputText(defaultShortBorrowAnnualRate)) }
+                            OutlinedTextField(
+                                value = defaultShortBorrowAnnualRateText,
+                                onValueChange = {
+                                    defaultShortBorrowAnnualRateText = it
+                                    it.toDoubleOrNull()
+                                        ?.takeIf { rate -> rate.isFinite() && rate >= 0.0 }
+                                        ?.let(viewModel::setDefaultShortBorrowAnnualRate)
+                                },
+                                label = { Text("預設融券借券年費率 (%)") },
+                                supportingText = { Text("只會自動帶入新建或改為融券賣出的交易；請依券商實際費率調整") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                     }
                 }

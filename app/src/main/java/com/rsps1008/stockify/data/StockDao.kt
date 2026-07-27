@@ -45,24 +45,24 @@ interface StockDao {
     @Query("SELECT DISTINCT s.* FROM stocks s JOIN stock_transactions st ON s.code = st.股號")
     fun getHeldStocks(): Flow<List<Stock>>
 
-    @Query("SELECT * FROM stock_transactions WHERE 股號 = :stockCode ORDER BY 日期 DESC")
+    @Query("SELECT * FROM stock_transactions WHERE 股號 = :stockCode ORDER BY 日期 DESC, 紀錄時間 DESC, id DESC")
     fun getTransactionsForStock(stockCode: String): Flow<List<StockTransaction>>
 
-    @Query("SELECT * FROM stock_transactions ORDER BY 日期 DESC")
+    @Query("SELECT * FROM stock_transactions ORDER BY 日期 DESC, 紀錄時間 DESC, id DESC")
     fun getAllTransactions(): Flow<List<StockTransaction>>
 
     @Transaction
-    @Query("SELECT * FROM stock_transactions")
+    @Query("SELECT * FROM stock_transactions ORDER BY 日期 ASC, 紀錄時間 ASC, id ASC")
     fun getTransactionsWithStock(): Flow<List<TransactionWithStock>>
 
     @Query("SELECT * FROM stock_transactions WHERE id = :transactionId")
     fun getTransactionById(transactionId: Int): Flow<StockTransaction?>
 
-    @Query("SELECT * FROM stock_transactions WHERE 沖抵融資批次ID = :lotId")
-    fun getMarginRepaymentsForLot(lotId: String): Flow<List<StockTransaction>>
+    @Query("SELECT * FROM stock_transactions WHERE 沖抵融資批次ID = :lotId AND 股號 = :stockCode AND 帳戶ID = :accountId")
+    fun getMarginRepaymentsForLot(lotId: String, stockCode: String, accountId: Int): Flow<List<StockTransaction>>
 
-    @Query("SELECT * FROM stock_transactions WHERE 沖抵融券批次ID = :lotId OR 融券補償批次ID = :lotId")
-    fun getShortDependentsForLot(lotId: String): Flow<List<StockTransaction>>
+    @Query("SELECT * FROM stock_transactions WHERE (沖抵融券批次ID = :lotId OR 融券補償批次ID = :lotId) AND 股號 = :stockCode AND 帳戶ID = :accountId")
+    fun getShortDependentsForLot(lotId: String, stockCode: String, accountId: Int): Flow<List<StockTransaction>>
 
     @Query("SELECT * FROM stocks WHERE id = :stockId")
     fun getStockById(stockId: Int): Flow<Stock?>

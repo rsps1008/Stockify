@@ -2,6 +2,7 @@ package com.rsps1008.stockify.data
 
 import java.io.InputStream
 import java.io.OutputStream
+import java.text.ParsePosition
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -13,6 +14,18 @@ data class CsvTransaction(
     val market: String = StockMarket.TW,
     val transaction: StockTransaction
 )
+
+internal fun assignProvisionalImportIds(
+    existingTransactions: List<StockTransaction>,
+    importedTransactions: List<StockTransaction>
+): List<StockTransaction> {
+    val maxExistingId = existingTransactions.maxOfOrNull { it.id }?.coerceAtLeast(0) ?: 0
+    return importedTransactions.mapIndexed { index, transaction ->
+        val provisionalId = maxExistingId.toLong() + index + 1L
+        require(provisionalId <= Int.MAX_VALUE) { "交易筆數過多，無法建立穩定匯入順序" }
+        transaction.copy(id = provisionalId.toInt())
+    }
+}
 
 class CsvService {
 
@@ -46,17 +59,18 @@ class CsvService {
 
     private fun createCsvRecord(transaction: StockTransaction, stock: Stock): List<String> {
         val record = mutableMapOf<String, Any>()
+        val market = StockMarket.inferFromCode(stock.code)
 
         val dateFormat = SimpleDateFormat("yyyyMMdd", Locale.getDefault())
-        val dateTimeFormat = SimpleDateFormat("yyyyMMdd HH:mm:ss", Locale.getDefault())
+        val dateTimeFormat = SimpleDateFormat("yyyyMMdd HH:mm:ss.SSS", Locale.getDefault())
 
         record["id"] = transaction.id
         record["交易"] = transaction.type
-        record["交易稅"] = formatMarketPlainAmount(transaction.tax, stock.market)
+        record["交易稅"] = formatMarketPlainAmount(transaction.tax, market)
         record["帳戶ID"] = transaction.accountId
-        record["手續費"] = formatMarketPlainAmount(transaction.fee, stock.market)
-        record["支出"] = formatMarketPlainAmount(transaction.expense, stock.market)
-        record["收入"] = formatMarketPlainAmount(transaction.income, stock.market)
+        record["手續費"] = formatMarketPlainAmount(transaction.fee, market)
+        record["支出"] = formatMarketPlainAmount(transaction.expense, market)
+        record["收入"] = formatMarketPlainAmount(transaction.income, market)
         record["日期"] = dateFormat.format(Date(transaction.date))
         record["現金股利"] = transaction.cashDividend
         record["筆記"] = transaction.note.ifEmpty { "" }
@@ -64,7 +78,7 @@ class CsvService {
         record["股名"] = stock.name
         record["股票股利"] = transaction.stockDividend
         record["股號"] = stock.code
-        record["市場"] = stock.market
+        record["市場"] = market
         record["買進價格"] = transaction.buyPrice
         record["買進股數"] = formatShareInputValue(transaction.buyShares)
         record["賣出價格"] = transaction.sellPrice
@@ -72,7 +86,7 @@ class CsvService {
         record["配發股數"] = formatShareInputValue(transaction.dividendShares)
         record["除息股數"] = formatShareInputValue(transaction.exDividendShares)
         record["除權股數"] = formatShareInputValue(transaction.exRightsShares)
-        record["股息收入"] = formatMarketPlainAmount(transaction.dividendIncome, stock.market)
+        record["股息收入"] = formatMarketPlainAmount(transaction.dividendIncome, market)
         record["減資比例"] = transaction.capitalReductionRatio
         record["減資前股數"] = formatShareInputValue(transaction.sharesBeforeReduction)
         record["減資後股數"] = formatShareInputValue(transaction.sharesAfterReduction)
@@ -80,21 +94,21 @@ class CsvService {
         record["拆分比例"] = transaction.stockSplitRatio
         record["拆分前股數"] = formatShareInputValue(transaction.sharesBeforeSplit)
         record["拆分後股數"] = formatShareInputValue(transaction.sharesAfterSplit)
-        record["融資本金"] = formatMarketPlainAmount(transaction.marginPrincipal, stock.market)
+        record["融資本金"] = formatMarketPlainAmount(transaction.marginPrincipal, market)
         record["融資年利率"] = transaction.marginAnnualRate
         record["融資批次ID"] = transaction.marginLotId
         record["沖抵融資批次ID"] = transaction.marginRepaymentLotId
-        record["融資還款本金"] = formatMarketPlainAmount(transaction.marginRepayment, stock.market)
-        record["融資自備款"] = if (transaction.marginSelfFundedOverridden) formatMarketPlainAmount(transaction.marginSelfFunded, stock.market) else ""
+        record["融資還款本金"] = formatMarketPlainAmount(transaction.marginRepayment, market)
+        record["融資自備款"] = if (transaction.marginSelfFundedOverridden) formatMarketPlainAmount(transaction.marginSelfFunded, market) else ""
         record["融資自備款是否覆寫"] = transaction.marginSelfFundedOverridden
-        record["融資實際利息"] = formatMarketPlainAmount(transaction.marginActualInterest, stock.market)
-        record["融券本金"] = formatMarketPlainAmount(transaction.shortBorrowPrincipal, stock.market)
+        record["融資實際利息"] = formatMarketPlainAmount(transaction.marginActualInterest, market)
+        record["融券本金"] = formatMarketPlainAmount(transaction.shortBorrowPrincipal, market)
         record["融券年費率"] = transaction.shortBorrowAnnualRate
         record["融券批次ID"] = transaction.shortLotId
         record["沖抵融券批次ID"] = transaction.shortCoverLotId
         record["買券還券股數"] = formatShareInputValue(transaction.shortCoverShares)
         record["融券補償批次ID"] = transaction.shortCompensationLotId
-        record["融券補償金"] = formatMarketPlainAmount(transaction.shortCompensation, stock.market)
+        record["融券補償金"] = formatMarketPlainAmount(transaction.shortCompensation, market)
 
         // Ensure the order matches the header
         return csvHeader.map { header ->
@@ -122,80 +136,157 @@ class CsvService {
 
         val headerValues = parseCsvLine(lines.first())
         val headerMap = headerValues.mapIndexed { index, s -> s to index }.toMap()
+        val requiredHeaders = listOf(
+            "交易", "交易稅", "帳戶ID", "手續費", "支出", "收入", "日期",
+            "現金股利", "紀錄時間", "股名", "股票股利", "股號",
+            "買進價格", "買進股數", "賣出價格", "賣出股數",
+            "配發股數", "除息股數", "除權股數", "股息收入",
+            "減資比例", "減資前股數", "減資後股數", "減資返還現金",
+            "拆分比例", "拆分前股數", "拆分後股數"
+        )
+        val missingHeaders = requiredHeaders.filterNot(headerMap::containsKey)
+        require(missingHeaders.isEmpty()) {
+            "CSV 缺少必要欄位：${missingHeaders.joinToString("、")}"
+        }
 
-        return lines.drop(1).mapNotNull { line ->
-            if (line.isBlank()) return@mapNotNull null
+        return lines.drop(1).mapIndexedNotNull { index, line ->
+            if (line.isBlank()) return@mapIndexedNotNull null
             try {
                 val values = parseCsvLine(line)
+                val transaction = parseTransaction(values, headerMap)
                 CsvTransaction(
-                    stockName = values[headerMap["股名"]!!],
-                    stockCode = values[headerMap["股號"]!!],
-                    market = values.getOrNull(headerMap["市場"] ?: -1)?.takeIf { it.isNotBlank() } ?: StockMarket.TW,
-                    transaction = parseTransaction(values, headerMap)
+                    stockName = values[headerMap["股名"]!!].trim(),
+                    stockCode = transaction.stockCode,
+                    market = parseMarket(values, headerMap, transaction.stockCode),
+                    transaction = transaction
                 )
             } catch (e: Exception) {
-                // Log error or handle malformed lines
-                null
+                val reason = e.message?.takeIf { it.isNotBlank() }?.let { "：$it" }.orEmpty()
+                throw IllegalArgumentException("CSV 第 ${index + 2} 列格式錯誤$reason", e)
             }
         }
     }
 
     private fun parseTransaction(values: List<String>, headerMap: Map<String, Int>): StockTransaction {
-        val dateFormat = SimpleDateFormat("yyyyMMdd", Locale.getDefault())
-        val dateTimeFormat = SimpleDateFormat("yyyyMMdd HH:mm:ss", Locale.getDefault())
-
         val type = values[headerMap["交易"]!!]
-
-        val buyPrice = values[headerMap["買進價格"]!!].toDoubleOrNull() ?: 0.0
-        val buyShares = values[headerMap["買進股數"]!!].toDoubleOrNull() ?: 0.0
-        val sellPrice = values[headerMap["賣出價格"]!!].toDoubleOrNull() ?: 0.0
-        val sellShares = values[headerMap["賣出股數"]!!].toDoubleOrNull() ?: 0.0
+        val stockCode = values[headerMap["股號"]!!].trim()
+        require(stockCode.isNotBlank()) { "股號不可空白" }
+        val accountId = parseOptionalInt(values, headerMap, "帳戶ID", 1)
+        require(accountId > 0) { "帳戶ID 必須大於 0" }
 
         return StockTransaction(
             id = 0, // Let Room auto-generate
-            stockCode = values[headerMap["股號"]!!],
-            accountId = values[headerMap["帳戶ID"]!!].toIntOrNull() ?: 1,
-            date = dateFormat.parse(values[headerMap["日期"]!!])?.time ?: 0L,
-            recordTime = try { dateTimeFormat.parse(values[headerMap["紀錄時間"]!!])?.time ?: System.currentTimeMillis() } catch (e: Exception) { System.currentTimeMillis() },
+            stockCode = stockCode,
+            accountId = accountId,
+            date = parseDate(values[headerMap["日期"]!!]),
+            recordTime = parseRecordTime(values[headerMap["紀錄時間"]!!]),
             type = type,
-            buyPrice = buyPrice,
-            buyShares = buyShares,
-            sellPrice = sellPrice,
-            sellShares = sellShares,
-            fee = values[headerMap["手續費"]!!].toDoubleOrNull() ?: 0.0,
-            tax = values[headerMap["交易稅"]!!].toDoubleOrNull() ?: 0.0,
-            income = values[headerMap["收入"]!!].toDoubleOrNull() ?: 0.0,
-            expense = values[headerMap["支出"]!!].toDoubleOrNull() ?: 0.0,
-            cashDividend = values[headerMap["現金股利"]!!].toDoubleOrNull() ?: 0.0,
-            exDividendShares = values[headerMap["除息股數"]!!].toDoubleOrNull() ?: 0.0,
-            stockDividend = values[headerMap["股票股利"]!!].toDoubleOrNull() ?: 0.0,
-            dividendShares = values[headerMap["配發股數"]!!].toDoubleOrNull() ?: 0.0,
-            exRightsShares = values[headerMap["除權股數"]!!].toDoubleOrNull() ?: 0.0,
-            note = values.getOrNull(headerMap["筆記"]!!) ?: "",
-            dividendIncome = values[headerMap["股息收入"]!!].toDoubleOrNull() ?: 0.0,
-            capitalReductionRatio = values.getOrNull(headerMap["減資比例"]!!)?.toDoubleOrNull() ?: 0.0,
-            sharesBeforeReduction = values.getOrNull(headerMap["減資前股數"]!!)?.toDoubleOrNull() ?: 0.0,
-            sharesAfterReduction = values.getOrNull(headerMap["減資後股數"]!!)?.toDoubleOrNull() ?: 0.0,
-            cashReturned = values.getOrNull(headerMap["減資返還現金"]!!)?.toDoubleOrNull() ?: 0.0,
-            stockSplitRatio = values.getOrNull(headerMap["拆分比例"]!!)?.toDoubleOrNull() ?: 0.0,
-            sharesBeforeSplit = values.getOrNull(headerMap["拆分前股數"]!!)?.toDoubleOrNull() ?: 0.0,
-            sharesAfterSplit = values.getOrNull(headerMap["拆分後股數"]!!)?.toDoubleOrNull() ?: 0.0
-            ,marginPrincipal = values.getOrNull(headerMap["融資本金"] ?: -1)?.toDoubleOrNull() ?: 0.0
-            ,marginAnnualRate = values.getOrNull(headerMap["融資年利率"] ?: -1)?.toDoubleOrNull() ?: 0.0
-            ,marginLotId = values.getOrNull(headerMap["融資批次ID"] ?: -1).orEmpty()
-            ,marginRepaymentLotId = values.getOrNull(headerMap["沖抵融資批次ID"] ?: -1).orEmpty()
-            ,marginRepayment = values.getOrNull(headerMap["融資還款本金"] ?: -1)?.toDoubleOrNull() ?: 0.0
-            ,marginSelfFunded = values.getOrNull(headerMap["融資自備款"] ?: -1)?.toDoubleOrNull() ?: 0.0
-            ,marginSelfFundedOverridden = values.getOrNull(headerMap["融資自備款是否覆寫"] ?: -1)?.let { it.equals("true", ignoreCase = true) || it == "1" }
-                ?: false
-            ,marginActualInterest = values.getOrNull(headerMap["融資實際利息"] ?: -1)?.toDoubleOrNull() ?: 0.0
-            ,shortBorrowPrincipal = values.getOrNull(headerMap["融券本金"] ?: -1)?.toDoubleOrNull() ?: 0.0
-            ,shortBorrowAnnualRate = values.getOrNull(headerMap["融券年費率"] ?: -1)?.toDoubleOrNull() ?: 0.0
-            ,shortLotId = values.getOrNull(headerMap["融券批次ID"] ?: -1).orEmpty()
-            ,shortCoverLotId = values.getOrNull(headerMap["沖抵融券批次ID"] ?: -1).orEmpty()
-            ,shortCoverShares = values.getOrNull(headerMap["買券還券股數"] ?: -1)?.toDoubleOrNull() ?: 0.0
-            ,shortCompensationLotId = values.getOrNull(headerMap["融券補償批次ID"] ?: -1).orEmpty()
-            ,shortCompensation = values.getOrNull(headerMap["融券補償金"] ?: -1)?.toDoubleOrNull() ?: 0.0
+            buyPrice = parseOptionalDouble(values, headerMap, "買進價格"),
+            buyShares = parseOptionalDouble(values, headerMap, "買進股數"),
+            sellPrice = parseOptionalDouble(values, headerMap, "賣出價格"),
+            sellShares = parseOptionalDouble(values, headerMap, "賣出股數"),
+            fee = parseOptionalDouble(values, headerMap, "手續費"),
+            tax = parseOptionalDouble(values, headerMap, "交易稅"),
+            income = parseOptionalDouble(values, headerMap, "收入"),
+            expense = parseOptionalDouble(values, headerMap, "支出"),
+            cashDividend = parseOptionalDouble(values, headerMap, "現金股利"),
+            exDividendShares = parseOptionalDouble(values, headerMap, "除息股數"),
+            stockDividend = parseOptionalDouble(values, headerMap, "股票股利"),
+            dividendShares = parseOptionalDouble(values, headerMap, "配發股數"),
+            exRightsShares = parseOptionalDouble(values, headerMap, "除權股數"),
+            note = getOptionalValue(values, headerMap, "筆記"),
+            dividendIncome = parseOptionalDouble(values, headerMap, "股息收入"),
+            capitalReductionRatio = parseOptionalDouble(values, headerMap, "減資比例"),
+            sharesBeforeReduction = parseOptionalDouble(values, headerMap, "減資前股數"),
+            sharesAfterReduction = parseOptionalDouble(values, headerMap, "減資後股數"),
+            cashReturned = parseOptionalDouble(values, headerMap, "減資返還現金"),
+            stockSplitRatio = parseOptionalDouble(values, headerMap, "拆分比例"),
+            sharesBeforeSplit = parseOptionalDouble(values, headerMap, "拆分前股數"),
+            sharesAfterSplit = parseOptionalDouble(values, headerMap, "拆分後股數"),
+            marginPrincipal = parseOptionalDouble(values, headerMap, "融資本金"),
+            marginAnnualRate = parseOptionalDouble(values, headerMap, "融資年利率"),
+            marginLotId = getOptionalValue(values, headerMap, "融資批次ID"),
+            marginRepaymentLotId = getOptionalValue(values, headerMap, "沖抵融資批次ID"),
+            marginRepayment = parseOptionalDouble(values, headerMap, "融資還款本金"),
+            marginSelfFunded = parseOptionalDouble(values, headerMap, "融資自備款"),
+            marginSelfFundedOverridden = getOptionalValue(values, headerMap, "融資自備款是否覆寫")
+                .let { it.equals("true", ignoreCase = true) || it == "1" },
+            marginActualInterest = parseOptionalDouble(values, headerMap, "融資實際利息"),
+            shortBorrowPrincipal = parseOptionalDouble(values, headerMap, "融券本金"),
+            shortBorrowAnnualRate = parseOptionalDouble(values, headerMap, "融券年費率"),
+            shortLotId = getOptionalValue(values, headerMap, "融券批次ID"),
+            shortCoverLotId = getOptionalValue(values, headerMap, "沖抵融券批次ID"),
+            shortCoverShares = parseOptionalDouble(values, headerMap, "買券還券股數"),
+            shortCompensationLotId = getOptionalValue(values, headerMap, "融券補償批次ID"),
+            shortCompensation = parseOptionalDouble(values, headerMap, "融券補償金")
         )
+    }
+
+    private fun getOptionalValue(
+        values: List<String>,
+        headerMap: Map<String, Int>,
+        header: String
+    ): String = headerMap[header]?.let(values::getOrNull).orEmpty()
+
+    private fun parseOptionalDouble(
+        values: List<String>,
+        headerMap: Map<String, Int>,
+        header: String
+    ): Double {
+        val rawValue = getOptionalValue(values, headerMap, header)
+        if (rawValue.isBlank()) return 0.0
+        val parsed = rawValue.toDoubleOrNull()
+        if (parsed == null || !parsed.isFinite()) {
+            throw IllegalArgumentException("$header 不是有效數字")
+        }
+        return parsed
+    }
+
+    private fun parseOptionalInt(
+        values: List<String>,
+        headerMap: Map<String, Int>,
+        header: String,
+        defaultValue: Int
+    ): Int {
+        val rawValue = getOptionalValue(values, headerMap, header)
+        if (rawValue.isBlank()) return defaultValue
+        return rawValue.toIntOrNull()
+            ?: throw IllegalArgumentException("$header 不是有效整數")
+    }
+
+    private fun parseMarket(
+        values: List<String>,
+        headerMap: Map<String, Int>,
+        stockCode: String
+    ): String {
+        val rawValue = getOptionalValue(values, headerMap, "市場")
+        val inferredMarket = StockMarket.inferFromCode(stockCode)
+        if (rawValue.isBlank()) return inferredMarket
+        val parsedMarket = rawValue.trim().uppercase()
+            .takeIf { it == StockMarket.TW || it == StockMarket.US }
+            ?: throw IllegalArgumentException("市場必須是 TW 或 US")
+        require(parsedMarket == inferredMarket) {
+            "市場 $parsedMarket 與股號 $stockCode 推斷的 $inferredMarket 不一致"
+        }
+        return parsedMarket
+    }
+
+    private fun parseDate(value: String): Long {
+        return parseExactDateTime(value, "yyyyMMdd")
+            ?: throw IllegalArgumentException("日期格式錯誤")
+    }
+
+    private fun parseRecordTime(value: String): Long {
+        val formats = listOf("yyyyMMdd HH:mm:ss.SSS", "yyyyMMdd HH:mm:ss")
+        return formats.firstNotNullOfOrNull { pattern -> parseExactDateTime(value, pattern) }
+            ?: throw IllegalArgumentException("紀錄時間格式錯誤")
+    }
+
+    private fun parseExactDateTime(value: String, pattern: String): Long? {
+        val position = ParsePosition(0)
+        val parsed = SimpleDateFormat(pattern, Locale.getDefault()).apply {
+            isLenient = false
+        }.parse(value, position)
+        return parsed?.time?.takeIf { position.index == value.length }
     }
 }

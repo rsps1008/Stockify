@@ -26,6 +26,8 @@ data class MarginSummary(
 
 /** Pure replay of financing lots. It never changes share counts. */
 object MarginCalculationSupport {
+    private data class LotKey(val stockCode: String, val accountId: Int, val lotId: String)
+
     private data class LotState(
         val id: String,
         val openedAt: Long,
@@ -43,7 +45,7 @@ object MarginCalculationSupport {
         dayCount: Int = 365
     ): MarginSummary {
         val denominator = if (dayCount == 360) 360 else 365
-        val lots = linkedMapOf<String, LotState>()
+        val lots = linkedMapOf<LotKey, LotState>()
         var selfFundedCapital = 0.0
         var cashBalance = 0.0
 
@@ -56,7 +58,7 @@ object MarginCalculationSupport {
 
         transactions.asSequence()
             .filter { it.date <= valuationDate }
-            .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime })
+            .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime }.thenBy { it.id })
             .forEach { tx ->
             lots.values.forEach { accrueUntil(it, tx.date) }
             when (tx.type) {
@@ -64,7 +66,14 @@ object MarginCalculationSupport {
                     val id = tx.marginLotId.ifBlank { "legacy-${tx.id}" }
                     val principal = tx.marginPrincipal.coerceAtLeast(0.0)
                     if (principal > 0.0) {
-                        lots[id] = LotState(id, tx.date, tx.marginAnnualRate, principal, principal, lastAccrualDate = tx.date)
+                        lots[tx.toLotKey(id)] = LotState(
+                            id,
+                            tx.date,
+                            tx.marginAnnualRate,
+                            principal,
+                            principal,
+                            lastAccrualDate = tx.date
+                        )
                     }
                     val selfFunded = if (tx.marginSelfFundedOverridden) {
                         tx.marginSelfFunded
@@ -84,11 +93,23 @@ object MarginCalculationSupport {
             }
             val isMarginRepayment = tx.marginRepaymentLotId.isNotBlank() && (tx.marginRepayment > 0.0 || tx.marginActualInterest > 0.0)
             if (isMarginRepayment) {
-                lots[tx.marginRepaymentLotId]?.let { lot ->
+                lots[tx.toLotKey(tx.marginRepaymentLotId)]?.let { lot ->
                     accrueUntil(lot, tx.date)
+                    val principalBeforeRepayment = lot.remainingPrincipal
                     if (tx.marginActualInterest > 0.0) {
                         lot.actualInterestPaid += tx.marginActualInterest
-                        lot.accruedInterest = 0.0
+                        lot.accruedInterest = when {
+                            // Interest-only payments settle all interest accrued to this date.
+                            tx.marginRepayment <= 0.0 -> 0.0
+                            principalBeforeRepayment <= 0.0 -> lot.accruedInterest
+                            else -> {
+                                // A partial repayment settles only the proportional interest
+                                // attached to the repaid principal.
+                                val repaidRatio = (tx.marginRepayment / principalBeforeRepayment)
+                                    .coerceIn(0.0, 1.0)
+                                lot.accruedInterest * (1.0 - repaidRatio)
+                            }
+                        }
                     }
                     if (tx.marginRepayment > 0.0) {
                         lot.remainingPrincipal = (lot.remainingPrincipal - tx.marginRepayment).coerceAtLeast(0.0)
@@ -121,29 +142,32 @@ object MarginCalculationSupport {
      * tolerant replay is kept for legacy/imported records.
      */
     fun hasValidRepaymentBalances(transactions: List<StockTransaction>): Boolean {
-        val remainingByLot = mutableMapOf<String, Double>()
+        val remainingByLot = mutableMapOf<LotKey, Double>()
 
         transactions
-            .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime })
+            .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime }.thenBy { it.id })
             .forEach { transaction ->
                 if (transaction.type == "融資買進") {
                     val lotId = transaction.marginLotId.ifBlank { "legacy-${transaction.id}" }
-                    remainingByLot[lotId] = transaction.marginPrincipal.coerceAtLeast(0.0)
+                    remainingByLot[transaction.toLotKey(lotId)] = transaction.marginPrincipal.coerceAtLeast(0.0)
                 }
 
                 val hasMarginPayment = transaction.marginRepayment > 0.0 || transaction.marginActualInterest > 0.0
                 if (hasMarginPayment) {
-                    val lotId = transaction.marginRepaymentLotId
-                    val remaining = remainingByLot[lotId] ?: return false
+                    val lotKey = transaction.toLotKey(transaction.marginRepaymentLotId)
+                    val remaining = remainingByLot[lotKey] ?: return false
                     if (transaction.marginRepayment > remaining + BALANCE_EPSILON) return false
                     if (transaction.marginRepayment > 0.0) {
-                        remainingByLot[lotId] = (remaining - transaction.marginRepayment).coerceAtLeast(0.0)
+                        remainingByLot[lotKey] = (remaining - transaction.marginRepayment).coerceAtLeast(0.0)
                     }
                 }
             }
 
         return true
     }
+
+    private fun StockTransaction.toLotKey(lotId: String): LotKey =
+        LotKey(stockCode = stockCode, accountId = accountId, lotId = lotId)
 
     private fun daysBetween(start: Long, end: Long): Long {
         val zone = ZoneId.systemDefault()

@@ -138,6 +138,7 @@ class ShortSellingCalculationSupportTest {
 
         assertEquals(10_000.0, afterSplit.outstandingShares, 0.0)
         assertTrue(ShortSellingCalculationSupport.hasValidCoverBalances(listOf(open, split, cover)))
+        assertFalse(ShortSellingCalculationSupport.hasValidCoverBalances(listOf(open, cover)))
         assertEquals(
             0.0,
             ShortSellingCalculationSupport.calculate(listOf(open, split, cover), day * 2, 365).outstandingShares,
@@ -228,5 +229,78 @@ class ShortSellingCalculationSupportTest {
 
         assertEquals(-3_650.0, cashFlows.filter { it.dateMillis == year }.sumOf { it.amount } - 110_000.0, 0.01)
         assertEquals(6.35, result!!, 0.05)
+    }
+
+    @Test
+    fun `identical short lot ids in separate accounts do not cross-cover`() {
+        val day = 24L * 60 * 60 * 1000
+        val firstAccountOpen = StockTransaction(
+            stockCode = "2330", accountId = 1, date = 0L, recordTime = 0L,
+            type = "融券賣出", sellPrice = 100.0, sellShares = 1_000.0,
+            shortBorrowPrincipal = 100_000.0, shortLotId = "shared"
+        )
+        val secondAccountOpen = firstAccountOpen.copy(
+            accountId = 2,
+            date = day,
+            recordTime = day,
+            sellShares = 2_000.0,
+            shortBorrowPrincipal = 200_000.0
+        )
+        val firstAccountCover = StockTransaction(
+            stockCode = "2330", accountId = 1, date = day * 2, recordTime = day * 2,
+            type = "買券還券", shortCoverLotId = "shared", shortCoverShares = 1_000.0
+        )
+
+        val transactions = listOf(firstAccountOpen, secondAccountOpen, firstAccountCover)
+        val summary = ShortSellingCalculationSupport.calculate(transactions, day * 2, 365)
+
+        assertTrue(ShortSellingCalculationSupport.hasValidCoverBalances(transactions))
+        assertEquals(2_000.0, summary.outstandingShares, 0.0)
+    }
+
+    @Test
+    fun `company action only adjusts short lots in the matching account`() {
+        val day = 24L * 60 * 60 * 1000
+        val firstAccountOpen = StockTransaction(
+            stockCode = "2330", accountId = 1, date = 0L, recordTime = 0L,
+            type = "融券賣出", sellPrice = 100.0, sellShares = 1_000.0,
+            income = 100_000.0, shortBorrowPrincipal = 100_000.0,
+            shortLotId = "account-1"
+        )
+        val secondAccountOpen = firstAccountOpen.copy(
+            accountId = 2,
+            recordTime = 1L,
+            shortLotId = "account-2"
+        )
+        val firstAccountSplit = StockTransaction(
+            stockCode = "2330", accountId = 1, date = day, recordTime = day,
+            type = "分割", stockSplitRatio = 2.0,
+            sharesBeforeSplit = 1_000.0, sharesAfterSplit = 2_000.0
+        )
+        val validSecondAccountCover = StockTransaction(
+            stockCode = "2330", accountId = 2, date = day * 2, recordTime = day * 2,
+            type = "買券還券", shortCoverLotId = "account-2", shortCoverShares = 1_000.0
+        )
+        val excessiveSecondAccountCover = validSecondAccountCover.copy(shortCoverShares = 1_500.0)
+        val transactions = listOf(firstAccountOpen, secondAccountOpen, firstAccountSplit)
+
+        val summary = ShortSellingCalculationSupport.calculate(transactions, day, 365)
+        val terminalCashFlow = ShortSellingCalculationSupport
+            .buildXirrCashFlows(transactions, day, currentPrice = 100.0, dayCount = 365)
+            .filter { it.dateMillis == day }
+            .sumOf { it.amount }
+
+        assertEquals(3_000.0, summary.outstandingShares, 0.0)
+        assertEquals(100_000.0, terminalCashFlow, 0.0)
+        assertTrue(
+            ShortSellingCalculationSupport.hasValidCoverBalances(
+                transactions + validSecondAccountCover
+            )
+        )
+        assertFalse(
+            ShortSellingCalculationSupport.hasValidCoverBalances(
+                transactions + excessiveSecondAccountCover
+            )
+        )
     }
 }

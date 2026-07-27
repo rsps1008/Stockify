@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -48,7 +49,7 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
         factory = ViewModelFactory(application.database.stockDao(), transactionId = transactionId)
     )
     val transactionUiState by viewModel.transactionUiState.collectAsState()
-    val hasMarginDependents by viewModel.hasMarginDependents.collectAsState()
+    val canModifyTransaction by viewModel.canModifyTransaction.collectAsState()
     var showDeleteDialog by remember { mutableStateOf(false) }
 
     if (showDeleteDialog) {
@@ -59,9 +60,14 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
             confirmButton = {
                 TextButton(
                     onClick = {
-                        viewModel.deleteTransaction()
+                        viewModel.deleteTransaction { error ->
+                            if (error != null) {
+                                Toast.makeText(application, error, Toast.LENGTH_LONG).show()
+                            } else {
+                                navController.popBackStack()
+                            }
+                        }
                         showDeleteDialog = false
-                        navController.popBackStack()
                     }
                 ) {
                     Text("確定")
@@ -85,12 +91,12 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showDeleteDialog = true }, enabled = !hasMarginDependents) {
+                    IconButton(onClick = { showDeleteDialog = true }, enabled = canModifyTransaction) {
                         Icon(Icons.Filled.Delete, contentDescription = "Delete")
                     }
                     IconButton(
                         onClick = { navController.navigate(Screen.AddTransaction.createRoute(transactionId)) },
-                        enabled = !hasMarginDependents
+                        enabled = canModifyTransaction
                     ) {
                         Icon(Icons.Filled.Edit, contentDescription = "Edit")
                     }
@@ -132,6 +138,9 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                         DetailRow(label = "收入", value = formatMarketAmount(transaction.income, uiState.market), valueColor = StockifyAppTheme.stockColors.gain)
                         if (transaction.marginRepayment > 0.0) DetailRow(label = "還融資本金", value = formatMarketAmount(transaction.marginRepayment, uiState.market), valueColor = StockifyAppTheme.stockColors.loss)
                         if (transaction.marginActualInterest > 0.0) DetailRow(label = "實際扣款利息", value = formatMarketAmount(transaction.marginActualInterest, uiState.market), valueColor = StockifyAppTheme.stockColors.loss)
+                        if (transaction.marginRepaymentLotId.isNotBlank()) {
+                            DetailRow(label = "沖抵融資批次", value = formatLotId(transaction.marginRepaymentLotId))
+                        }
                     }
                     "配息" -> {
                         DetailRow(label = "每股股息", value = String.format("%,.4f", transaction.cashDividend))
@@ -166,6 +175,7 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                         DetailRow(label = "手續費", value = formatMarketAmount(transaction.fee, uiState.market))
                         DetailRow(label = "交易稅", value = formatMarketAmount(transaction.tax, uiState.market))
                         DetailRow(label = "收入", value = formatMarketAmount(transaction.income, uiState.market), valueColor = StockifyAppTheme.stockColors.gain)
+                        DetailRow(label = "融券本金", value = formatMarketAmount(transaction.shortBorrowPrincipal, uiState.market))
                         DetailRow(label = "借券年費率", value = String.format("%.4f%%", transaction.shortBorrowAnnualRate))
                         DetailRow(label = "融券批次", value = formatLotId(transaction.shortLotId))
                     }

@@ -148,9 +148,11 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
         else -> ""
     }
 
+    val cashFlowAmount = transactionCashFlowAmount(transaction.transaction)
     val amountColor = when {
-        amountText == "-" || amountText == "0" -> Color.Unspecified
-        transaction.transaction.type in setOf("買進", "融資買進", "融資還款", "買券還券", "融券補償") -> StockifyAppTheme.stockColors.loss
+        cashFlowAmount == null || kotlin.math.abs(cashFlowAmount) < 1e-6 ->
+            Color.Unspecified
+        cashFlowAmount < 0.0 -> StockifyAppTheme.stockColors.loss
         else -> StockifyAppTheme.stockColors.gain
     }
 
@@ -176,7 +178,11 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
         val transactionText = when (transaction.transaction.type) {
             "買進" -> "買${formatShareCount(transaction.transaction.buyShares)}股"
             "融資買進" -> "融資買${formatShareCount(transaction.transaction.buyShares)}股"
-            "賣出" -> "賣${formatShareCount(transaction.transaction.sellShares)}股"
+            "賣出" -> if (transaction.transaction.marginRepaymentLotId.isNotBlank()) {
+                "賣${formatShareCount(transaction.transaction.sellShares)}股／還融資"
+            } else {
+                "賣${formatShareCount(transaction.transaction.sellShares)}股"
+            }
             "配息" -> "配息${formatMarketAmount(transaction.transaction.income, transaction.market)}元"
             "配股" -> "配股${formatShareCount(transaction.transaction.dividendShares)}股"
             "減資" -> "減資${String.format("%.1f", transaction.transaction.capitalReductionRatio)}%"

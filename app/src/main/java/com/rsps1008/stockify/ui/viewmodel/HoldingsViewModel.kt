@@ -242,7 +242,11 @@ class HoldingsViewModel(
             }
 
             val historicalTxsByStock = twTxs.groupBy { it.stockCode }.mapValues { (_, txList) ->
-                txList.sortedBy { it.date }
+                txList.sortedWith(
+                    compareBy<StockTransaction> { it.date }
+                        .thenBy { it.recordTime }
+                        .thenBy { it.id }
+                )
             }
 
             val firstTxTime = twTxs.minOfOrNull { it.date }
@@ -496,50 +500,14 @@ class HoldingsViewModel(
         marginDayCount: Int
     ): HistoricalHoldingStats {
         val txs = transactions.filter { it.date <= dayEnd }
-            .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime })
-
-        var shares = 0.0
-        var totalBuyExpense = 0.0
-        var totalSellIncome = 0.0
-        var totalSellNetIncome = 0.0
-        var sellSharesTotal = 0.0
-        var sellAmountBeforeFee = 0.0
-        var totalDividendIncome = 0.0
-        var buySharesTotal = 0.0
-        var buyCostTotal = 0.0
-
-        for (it in txs) {
-            when (it.type) {
-                "買進", "融資買進" -> {
-                    shares += it.buyShares
-                    totalBuyExpense += it.expense
-                    buySharesTotal += it.buyShares
-                    buyCostTotal += it.expense
-                }
-                "賣出" -> {
-                    shares -= it.sellShares
-                    sellSharesTotal += it.sellShares
-                    sellAmountBeforeFee += it.sellPrice * it.sellShares
-                    totalSellIncome += it.income
-                    totalSellNetIncome += it.income
-                }
-                "配股" -> {
-                    shares += it.dividendShares
-                }
-                "配息" -> {
-                    totalDividendIncome += HoldingCalculationSupport.resolveDividendIncome(it)
-                }
-                "減資" -> {
-                    shares += HoldingCalculationSupport.capitalReductionShareChange(it, shares)
-                    totalSellIncome += it.cashReturned
-                }
-                "分割" -> {
-                    shares += HoldingCalculationSupport.splitShareChange(it, shares)
-                }
-            }
-        }
-
-        if (shares < 0) shares = 0.0
+            .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime }.thenBy { it.id })
+        val replay = HoldingCalculationSupport.replayLongPosition(txs, dayEnd)
+        val shares = replay.shares
+        val totalBuyExpense = replay.totalBuyExpense
+        val totalSellIncome = replay.totalSellIncome
+        val totalSellNetIncome = replay.totalSellNetIncome
+        val sellAmountBeforeFee = replay.sellAmountBeforeFee
+        val totalDividendIncome = replay.totalDividendIncome
         val costBasis = totalBuyExpense - totalSellIncome - totalDividendIncome
         val totalSellFeeAndTax = (sellAmountBeforeFee - totalSellNetIncome).coerceAtLeast(0.0)
         val marginSummary = MarginCalculationSupport.calculate(txs, dayEnd, marginDayCount)
@@ -554,6 +522,11 @@ class HoldingsViewModel(
             shares = shares,
             costBasis = costBasis,
             longInvestment = longInvestment,
+            financedRemainingInvestment = if (hasMarginPurchase) {
+                (-marginSummary.cashBalance).coerceAtLeast(0.0)
+            } else {
+                null
+            },
             marginDebt = marginSummary.outstandingPrincipal + marginSummary.accruedInterest,
             shortOutstandingShares = shortSummary.outstandingShares,
             shortRemainingInvestment = shortSummary.openedPrincipal,

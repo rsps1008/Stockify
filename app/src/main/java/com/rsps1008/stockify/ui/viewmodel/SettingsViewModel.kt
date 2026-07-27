@@ -37,6 +37,7 @@ import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.StockListRepository
 import com.rsps1008.stockify.data.TwseStockHistoryService
+import com.rsps1008.stockify.data.assignProvisionalImportIds
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -212,12 +213,26 @@ class SettingsViewModel(
     val marginDayCount: StateFlow<Int> = settingsDataStore.marginDayCountFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 365)
 
+    val defaultMarginAnnualRate: StateFlow<Double> = settingsDataStore.defaultMarginAnnualRateFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 6.45)
+
+    val defaultShortBorrowAnnualRate: StateFlow<Double> = settingsDataStore.defaultShortBorrowAnnualRateFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 3.5)
+
     fun setMarginFeatureEnabled(enabled: Boolean) = viewModelScope.launch {
         settingsDataStore.setMarginFeatureEnabled(enabled)
     }
 
     fun setMarginDayCount(dayCount: Int) = viewModelScope.launch {
         settingsDataStore.setMarginDayCount(dayCount)
+    }
+
+    fun setDefaultMarginAnnualRate(rate: Double) = viewModelScope.launch {
+        settingsDataStore.setDefaultMarginAnnualRate(rate)
+    }
+
+    fun setDefaultShortBorrowAnnualRate(rate: Double) = viewModelScope.launch {
+        settingsDataStore.setDefaultShortBorrowAnnualRate(rate)
     }
 
     init {
@@ -893,6 +908,7 @@ class SettingsViewModel(
                         csvService.import(it)
                     }
                 } ?: emptyList()
+                require(csvTransactions.isNotEmpty()) { "CSV 不含可還原的交易資料" }
 
                 validateImportedTransactions(
                     csvTransactions,
@@ -948,6 +964,7 @@ class SettingsViewModel(
                         csvService.import(it)
                     }
                 }
+                require(csvTransactions.isNotEmpty()) { "CSV 不含可還原的交易資料" }
 
                 validateImportedTransactions(
                     csvTransactions,
@@ -973,30 +990,45 @@ class SettingsViewModel(
         transactions: List<CsvTransaction>,
         includeExistingTransactions: Boolean
     ) {
-        val allStockCodes = transactions.map { it.stockCode }.distinct()
-        val financingTypes = setOf("融資買進", "融資還款", "融券賣出", "買券還券", "融券補償")
+        val existingTransactions = if (includeExistingTransactions) {
+            stockDao.getAllTransactions().first()
+        } else {
+            emptyList()
+        }
+        val validationTransactions = assignProvisionalImportIds(
+            existingTransactions = existingTransactions,
+            importedTransactions = transactions.map { it.transaction }
+        )
+        val validationRows = transactions.zip(validationTransactions) { csvTransaction, transaction ->
+            csvTransaction.copy(transaction = transaction)
+        }
+        com.rsps1008.stockify.data.FinancingTransactionValidationSupport
+            .validate(existingTransactions + validationTransactions)
+            ?.let { error -> throw Exception("$error，匯入被拒絕。") }
+
+        val allStockCodes = validationRows.map { it.stockCode }.distinct()
         for (code in allStockCodes) {
-            val importedForCode = transactions.filter { it.stockCode == code }
-            val existingStock = stockDao.getStockByCode(code)
-            val effectiveMarket = existingStock?.market
-                ?: importedForCode.firstOrNull()?.market?.takeIf { it.isNotBlank() }
-                    ?.let(StockMarket::normalize)
-                ?: StockMarket.inferFromCode(code)
-            if (importedForCode.any { it.transaction.type in financingTypes } && !StockMarket.isTw(effectiveMarket)) {
-                throw Exception("股票 $code 的融資融券僅支援台股，匯入被拒絕。")
+            val importedForCode = validationRows.filter { it.stockCode == code }
+            // Keep CSV restore consistent with transaction entry: the ticker is the
+            // source of truth, so an old master record or a stale CSV market value
+            // cannot turn a Taiwan security into US (or vice versa).
+            val effectiveMarket = StockMarket.inferFromCode(code)
+            importedForCode.forEach { csvTransaction ->
+                com.rsps1008.stockify.data.FinancingTransactionValidationSupport
+                    .validateFinancingMarket(csvTransaction.transaction, effectiveMarket)
+                    ?.let { error -> throw Exception("股票 $code 的$error，匯入被拒絕。") }
             }
 
-            val existingTxs = if (includeExistingTransactions) {
-                stockDao.getTransactionsForStock(code).first()
-            } else {
-                emptyList()
-            }
+            val existingTxs = existingTransactions.filter { it.stockCode == code }
             val newTxs = importedForCode.map { it.transaction }
             val mergedTxs = existingTxs + newTxs
             val accountIds = mergedTxs.map { it.accountId }.distinct()
 
             for (accountId in accountIds) {
                 val accountTxs = mergedTxs.filter { it.accountId == accountId }
+                com.rsps1008.stockify.data.FinancingTransactionValidationSupport.validate(accountTxs)?.let { error ->
+                    throw Exception("股票 $code 的$error，匯入被拒絕。")
+                }
                 if (!com.rsps1008.stockify.data.MarginCalculationSupport.hasValidRepaymentBalances(accountTxs)) {
                     throw Exception("股票 $code 包含超過剩餘本金的融資還款，匯入被拒絕。")
                 }
@@ -1012,14 +1044,17 @@ class SettingsViewModel(
         val refreshedStockCodes = linkedSetOf<String>()
 
         transactions.forEach { csvTransaction ->
-            var stock = stockDao.getStockByCode(csvTransaction.stockCode)
+            val stock = stockDao.getStockByCode(csvTransaction.stockCode)
+            val inferredMarket = StockMarket.inferFromCode(csvTransaction.stockCode)
             if (stock == null) {
                 val newStock = Stock(
                     name = csvTransaction.stockName,
                     code = csvTransaction.stockCode,
-                    market = StockMarket.normalize(csvTransaction.market.ifBlank { StockMarket.inferFromCode(csvTransaction.stockCode) })
+                    market = inferredMarket
                 )
                 stockDao.insertStock(newStock)
+            } else if (StockMarket.normalize(stock.market) != inferredMarket) {
+                stockDao.updateStock(stock.copy(market = inferredMarket))
             }
 
             val accountId = csvTransaction.transaction.accountId

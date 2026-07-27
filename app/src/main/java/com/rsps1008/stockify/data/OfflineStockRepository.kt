@@ -45,15 +45,17 @@ class OfflineStockRepository(
                 allTransactions.filter { it.accountId == activeAccountId }
             }
 
+            val currentDateMillis = System.currentTimeMillis()
             val mode = HomeDisplayMode.normalize(homeDisplayMode)
             val filteredStocks = when (mode) {
                 HomeDisplayMode.TW -> stocks.filter { StockMarket.isTw(it.market) }
                 HomeDisplayMode.US -> stocks.filter { StockMarket.isUs(it.market) }
                 else -> stocks
             }.filter { stock ->
-                transactions.any { it.stockCode == stock.code }
+                transactions.any {
+                    it.stockCode == stock.code && it.date <= currentDateMillis
+                }
             }
-            val currentDateMillis = System.currentTimeMillis()
 
             val holdingInfos = filteredStocks.map { stock ->
                 val realtime = realTimeData[stock.code]
@@ -203,51 +205,23 @@ class OfflineStockRepository(
         currentDateMillis: Long,
         marginDayCount: Int
     ): HoldingInfo {
-        var shares = 0.0
-        var totalBuyExpense = 0.0
-        var totalSellIncome = 0.0
-        var totalSellNetIncome = 0.0
-        var sellSharesTotal = 0.0
-        var sellAmountBeforeFee = 0.0   // 成交金額（未扣費）
-        var totalDividendIncome = 0.0
-        var buySharesTotal = 0.0
-        var buyCostTotal = 0.0
-
-        for (it in transactions.sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime })) {
-            when (it.type) {
-                "買進", "融資買進" -> {
-                    shares += it.buyShares
-                    totalBuyExpense += it.expense
-                    buySharesTotal += it.buyShares
-                    buyCostTotal += it.expense
-                }
-                "賣出" -> {
-                    shares -= it.sellShares
-                    sellSharesTotal += it.sellShares
-                    sellAmountBeforeFee += it.sellPrice * it.sellShares
-                    totalSellIncome += it.income
-                    totalSellNetIncome += it.income
-                }
-                "配股" -> {
-                    shares += it.dividendShares
-                }
-                "配息" -> {
-                    totalDividendIncome += HoldingCalculationSupport.resolveDividendIncome(it)
-                }
-                "減資" -> {
-                    shares += HoldingCalculationSupport.capitalReductionShareChange(it, shares)
-                    totalSellIncome += it.cashReturned
-                }
-                "分割" -> {
-                    shares += HoldingCalculationSupport.splitShareChange(it, shares)
-                    val splitFactor = HoldingCalculationSupport.splitShareFactor(it)
-                    buySharesTotal *= splitFactor
-                    sellSharesTotal *= splitFactor
-                }
-            }
-        }
-
-        if (shares < 0) shares = 0.0
+        val effectiveTransactions = HoldingCalculationSupport.transactionsAtOrBefore(
+            transactions,
+            currentDateMillis
+        )
+        val replay = HoldingCalculationSupport.replayLongPosition(
+            effectiveTransactions,
+            currentDateMillis
+        )
+        val shares = replay.shares
+        val totalBuyExpense = replay.totalBuyExpense
+        val totalSellIncome = replay.totalSellIncome
+        val totalSellNetIncome = replay.totalSellNetIncome
+        val sellSharesTotal = replay.sellSharesTotal
+        val sellAmountBeforeFee = replay.sellAmountBeforeFee
+        val totalDividendIncome = replay.totalDividendIncome
+        val buySharesTotal = replay.buySharesTotal
+        val buyCostTotal = replay.buyCostTotal
         val sellAverage = if (sellSharesTotal > 0) sellAmountBeforeFee / sellSharesTotal else 0.0
         val costBasis = totalBuyExpense - totalSellIncome - totalDividendIncome
         val totalSellFeeAndTax = (sellAmountBeforeFee - totalSellNetIncome).coerceAtLeast(0.0)
@@ -255,10 +229,10 @@ class OfflineStockRepository(
         val averageCost = if (shares > 0) costBasis / shares else 0.0
         val buyAverage = if (buySharesTotal > 0) buyCostTotal / buySharesTotal else 0.0
         val marketValue = shares * currentPrice
-        val marginSummary = MarginCalculationSupport.calculate(transactions, currentDateMillis, marginDayCount)
-        val shortSummary = ShortSellingCalculationSupport.calculate(transactions, currentDateMillis, marginDayCount)
+        val marginSummary = MarginCalculationSupport.calculate(effectiveTransactions, currentDateMillis, marginDayCount)
+        val shortSummary = ShortSellingCalculationSupport.calculate(effectiveTransactions, currentDateMillis, marginDayCount)
         val shortMarketLiability = shortSummary.outstandingShares * currentPrice
-        val hasMarginPurchase = transactions.any { it.type == "融資買進" }
+        val hasMarginPurchase = effectiveTransactions.any { it.type == "融資買進" }
         val longInvestment = if (hasMarginPurchase) {
             marginSummary.selfFundedCapital + totalSellFeeAndTax
         } else {
@@ -268,6 +242,11 @@ class OfflineStockRepository(
             shares = shares,
             costBasis = costBasis,
             longInvestment = longInvestment,
+            financedRemainingInvestment = if (hasMarginPurchase) {
+                (-marginSummary.cashBalance).coerceAtLeast(0.0)
+            } else {
+                null
+            },
             marginDebt = marginSummary.outstandingPrincipal + marginSummary.accruedInterest,
             shortOutstandingShares = shortSummary.outstandingShares,
             shortRemainingInvestment = shortSummary.openedPrincipal,
@@ -285,8 +264,8 @@ class OfflineStockRepository(
             totalPL -= (sellFee + sellTax)
         }
 
-        val shortIncome = transactions.filter { it.type == "融券賣出" }.sumOf { it.income }
-        val shortCoverExpense = transactions.filter { it.type == "買券還券" }.sumOf { it.expense }
+        val shortIncome = effectiveTransactions.filter { it.type == "融券賣出" }.sumOf { it.income }
+        val shortCoverExpense = effectiveTransactions.filter { it.type == "買券還券" }.sumOf { it.expense }
         totalPL += shortIncome - shortCoverExpense - shortMarketLiability - shortSummary.accruedBorrowFee - shortSummary.compensationExpense
         totalPL -= marginSummary.totalInterestExpense
 
@@ -300,7 +279,13 @@ class OfflineStockRepository(
                 if (denominator > 0) (totalPL / denominator) * 100 else 0.0
             }
             ReturnRateMode.XIRR -> {
-                val cashFlows = buildCashFlowsForStock(transactions, currentPrice, shares, currentDateMillis, marginDayCount = marginDayCount)
+                val cashFlows = buildCashFlowsForStock(
+                    effectiveTransactions,
+                    currentPrice,
+                    shares,
+                    currentDateMillis,
+                    marginDayCount = marginDayCount
+                )
                 ReturnRateCalculator.calculateXirrPercentage(cashFlows) ?: 0.0
             }
         }
@@ -339,7 +324,11 @@ class OfflineStockRepository(
         currencyRate: Double = 1.0,
         marginDayCount: Int = 365
     ): List<CashFlow> {
-        val cashFlows = transactions.mapNotNull { transaction ->
+        val effectiveTransactions = HoldingCalculationSupport.transactionsAtOrBefore(
+            transactions,
+            currentDateMillis
+        )
+        val cashFlows = effectiveTransactions.mapNotNull { transaction ->
             when (transaction.type) {
                 "買進" -> CashFlow(transaction.date, -transaction.expense * currencyRate)
                 "融資買進" -> CashFlow(transaction.date, -(if (transaction.marginSelfFundedOverridden) transaction.marginSelfFunded else transaction.expense - transaction.marginPrincipal) * currencyRate)
@@ -354,9 +343,13 @@ class OfflineStockRepository(
             }
         }.toMutableList()
 
-        val margin = MarginCalculationSupport.calculate(transactions, currentDateMillis, marginDayCount)
+        val margin = MarginCalculationSupport.calculate(
+            effectiveTransactions,
+            currentDateMillis,
+            marginDayCount
+        )
         cashFlows += ShortSellingCalculationSupport.buildXirrCashFlows(
-            transactions = transactions,
+            transactions = effectiveTransactions,
             valuationDate = currentDateMillis,
             currentPrice = currentPrice,
             dayCount = marginDayCount

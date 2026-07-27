@@ -62,6 +62,8 @@ class SettingsDataStore(val context: Context) {
     private val cloudDataBackupUpdatedAtKey = longPreferencesKey("cloud_data_backup_updated_at")
     private val marginFeatureEnabledKey = booleanPreferencesKey("margin_feature_enabled")
     private val marginDayCountKey = intPreferencesKey("margin_day_count")
+    private val defaultMarginAnnualRateKey = doublePreferencesKey("default_margin_annual_rate")
+    private val defaultShortBorrowAnnualRateKey = doublePreferencesKey("default_short_borrow_annual_rate")
 
     val fetchIntervalFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
@@ -282,6 +284,20 @@ class SettingsDataStore(val context: Context) {
 
     val marginDayCountFlow: Flow<Int> = context.dataStore.data
         .map { preferences -> if (preferences[marginDayCountKey] == 360) 360 else 365 }
+
+    val defaultMarginAnnualRateFlow: Flow<Double> = context.dataStore.data
+        .map { preferences ->
+            preferences[defaultMarginAnnualRateKey]
+                ?.takeIf { it.isFinite() && it >= 0.0 }
+                ?: DEFAULT_MARGIN_ANNUAL_RATE
+        }
+
+    val defaultShortBorrowAnnualRateFlow: Flow<Double> = context.dataStore.data
+        .map { preferences ->
+            preferences[defaultShortBorrowAnnualRateKey]
+                ?.takeIf { it.isFinite() && it >= 0.0 }
+                ?: DEFAULT_SHORT_BORROW_ANNUAL_RATE
+        }
 
 
     suspend fun setFetchInterval(interval: Int) {
@@ -532,4 +548,17 @@ class SettingsDataStore(val context: Context) {
         context.dataStore.edit { it[marginDayCountKey] = if (dayCount == 360) 360 else 365 }
     }
 
+    suspend fun setDefaultMarginAnnualRate(rate: Double) {
+        if (!rate.isFinite() || rate < 0.0) return
+        context.dataStore.edit { it[defaultMarginAnnualRateKey] = rate }
+    }
+
+    suspend fun setDefaultShortBorrowAnnualRate(rate: Double) {
+        if (!rate.isFinite() || rate < 0.0) return
+        context.dataStore.edit { it[defaultShortBorrowAnnualRateKey] = rate }
+    }
+
 }
+
+internal const val DEFAULT_MARGIN_ANNUAL_RATE = 6.45
+internal const val DEFAULT_SHORT_BORROW_ANNUAL_RATE = 3.5

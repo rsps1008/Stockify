@@ -67,6 +67,45 @@ class MarginCalculationSupportTest {
     }
 
     @Test
+    fun partialRepaymentActualInterestOnlyReplacesTheRepaidPrincipalShare() {
+        val day = 24L * 60 * 60 * 1000
+        val transactions = listOf(
+            loan(0, "lot-1", 100_000.0, 36.5),
+            StockTransaction(
+                stockCode = "2330", accountId = 1, date = day * 10, recordTime = day * 10,
+                type = "融資還款", marginRepaymentLotId = "lot-1", marginRepayment = 40_000.0,
+                marginActualInterest = 450.0
+            )
+        )
+
+        val summary = MarginCalculationSupport.calculate(transactions, day * 10, 365)
+
+        assertEquals(60_000.0, summary.outstandingPrincipal, 0.0)
+        assertEquals(600.0, summary.accruedInterest, 0.01)
+        assertEquals(450.0, summary.actualInterestPaid, 0.0)
+        assertEquals(1_050.0, summary.totalInterestExpense, 0.01)
+    }
+
+    @Test
+    fun interestOnlyPaymentReplacesAllAccruedInterestAtThePaymentDate() {
+        val day = 24L * 60 * 60 * 1000
+        val transactions = listOf(
+            loan(0, "lot-1", 100_000.0, 36.5),
+            StockTransaction(
+                stockCode = "2330", accountId = 1, date = day * 10, recordTime = day * 10,
+                type = "融資還款", marginRepaymentLotId = "lot-1",
+                marginActualInterest = 1_050.0
+            )
+        )
+
+        val summary = MarginCalculationSupport.calculate(transactions, day * 10, 365)
+
+        assertEquals(100_000.0, summary.outstandingPrincipal, 0.0)
+        assertEquals(0.0, summary.accruedInterest, 0.0)
+        assertEquals(1_050.0, summary.actualInterestPaid, 0.0)
+    }
+
+    @Test
     fun futureMarginLotsAreExcludedFromHistoricalValuation() {
         val day = 24L * 60 * 60 * 1000
         val summary = MarginCalculationSupport.calculate(
@@ -131,5 +170,43 @@ class MarginCalculationSupportTest {
                 listOf(loan(0L, "lot-1", 80_000.0, 3.65), interestOnly)
             )
         )
+    }
+
+    @Test
+    fun databaseIdBreaksTiesWhenLegacyRecordTimesAreEqual() {
+        val opening = loan(0L, "lot-1", 80_000.0, 3.65).copy(id = 1, recordTime = 0L)
+        val repayment = StockTransaction(
+            id = 2,
+            stockCode = "2330",
+            date = 0L,
+            recordTime = 0L,
+            type = "融資還款",
+            marginRepaymentLotId = "lot-1",
+            marginRepayment = 80_000.0
+        )
+
+        assertTrue(MarginCalculationSupport.hasValidRepaymentBalances(listOf(repayment, opening)))
+    }
+
+    @Test
+    fun identicalLotIdsInSeparateAccountsDoNotOverwriteEachOtherDuringReplay() {
+        val day = 24L * 60 * 60 * 1000
+        val firstAccountLoan = loan(0L, "shared", 50_000.0, 3.65)
+        val secondAccountLoan = loan(day, "shared", 70_000.0, 3.65).copy(accountId = 2)
+        val firstAccountRepayment = StockTransaction(
+            stockCode = "2330",
+            accountId = 1,
+            date = day * 2,
+            recordTime = day * 2,
+            type = "融資還款",
+            marginRepaymentLotId = "shared",
+            marginRepayment = 50_000.0
+        )
+
+        val transactions = listOf(firstAccountLoan, secondAccountLoan, firstAccountRepayment)
+        val summary = MarginCalculationSupport.calculate(transactions, day * 2, 365)
+
+        assertTrue(MarginCalculationSupport.hasValidRepaymentBalances(transactions))
+        assertEquals(70_000.0, summary.outstandingPrincipal, 0.0)
     }
 }
