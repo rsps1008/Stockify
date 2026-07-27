@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
 
-@Database(entities = [Stock::class, StockTransaction::class, StockHistoryPrice::class, Account::class], version = 11, exportSchema = false)
+@Database(entities = [Stock::class, StockTransaction::class, StockHistoryPrice::class, Account::class], version = 15, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun stockDao(): StockDao
@@ -29,7 +29,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "stock_database"
                 )
                 .addCallback(AppDatabaseCallback(context))
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
                 .build()
                 INSTANCE = instance
                 instance
@@ -158,7 +158,7 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        private val MIGRATION_5_6 = object : Migration(7, 8) {
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE stocks ADD COLUMN `stockType` TEXT NOT NULL DEFAULT ''")
             }
@@ -180,6 +180,41 @@ abstract class AppDatabase : RoomDatabase() {
         private val MIGRATION_10_11 = object : Migration(10, 11) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE stocks ADD COLUMN `exchange` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        private val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE stock_transactions ADD COLUMN `融資本金` REAL NOT NULL DEFAULT 0.0")
+                db.execSQL("ALTER TABLE stock_transactions ADD COLUMN `融資年利率` REAL NOT NULL DEFAULT 0.0")
+                db.execSQL("ALTER TABLE stock_transactions ADD COLUMN `融資批次ID` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE stock_transactions ADD COLUMN `沖抵融資批次ID` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE stock_transactions ADD COLUMN `融資還款本金` REAL NOT NULL DEFAULT 0.0")
+            }
+        }
+
+        private val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE stock_transactions ADD COLUMN `融券本金` REAL NOT NULL DEFAULT 0.0")
+                db.execSQL("ALTER TABLE stock_transactions ADD COLUMN `融券年費率` REAL NOT NULL DEFAULT 0.0")
+                db.execSQL("ALTER TABLE stock_transactions ADD COLUMN `融券批次ID` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE stock_transactions ADD COLUMN `沖抵融券批次ID` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE stock_transactions ADD COLUMN `買券還券股數` REAL NOT NULL DEFAULT 0.0")
+                db.execSQL("ALTER TABLE stock_transactions ADD COLUMN `融券補償批次ID` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE stock_transactions ADD COLUMN `融券補償金` REAL NOT NULL DEFAULT 0.0")
+            }
+        }
+
+        private val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE stock_transactions ADD COLUMN `融資自備款` REAL NOT NULL DEFAULT 0.0")
+                db.execSQL("ALTER TABLE stock_transactions ADD COLUMN `融資實際利息` REAL NOT NULL DEFAULT 0.0")
+            }
+        }
+
+        private val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE stock_transactions ADD COLUMN `融資自備款是否覆寫` INTEGER NOT NULL DEFAULT 0")
             }
         }
     }

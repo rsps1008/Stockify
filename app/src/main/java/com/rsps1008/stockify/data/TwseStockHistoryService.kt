@@ -164,7 +164,7 @@ class TwseStockHistoryService(
                         stockDao.insertHistoryPrices(dbEntities)
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error parsing ${if (isEmerging) "TPEx" else "TWSE"} response for $stockCode in $monthStr", e)
+                    safeLogE("Error parsing ${if (isEmerging) "TPEx" else "TWSE"} response for $stockCode in $monthStr", e)
                 }
             }
 
@@ -234,28 +234,28 @@ class TwseStockHistoryService(
             calendar.add(Calendar.MONTH, -rangeMonths)
             val fromDate = sdf.format(calendar.time)
 
-            Log.d(TAG, "fetchUsHistory starting for $stockCode, rangeMonths=$rangeMonths, stockType=$stockType, assetClass=$assetClass, fromDate=$fromDate, toDate=$toDate")
+            safeLogD("fetchUsHistory starting for $stockCode, rangeMonths=$rangeMonths, stockType=$stockType, assetClass=$assetClass, fromDate=$fromDate, toDate=$toDate")
 
             var body = fetchNasdaqBody(stockCode, assetClass, fromDate, toDate)
             var points = body?.let { parseNasdaqResponse(it).filterForChart(latestChartDateStr) } ?: emptyList()
 
-            Log.d(TAG, "fetchUsHistory parsed ${points.size} points for $stockCode under assetClass $assetClass")
+            safeLogD("fetchUsHistory parsed ${points.size} points for $stockCode under assetClass $assetClass")
 
             // Double-sided asset class fallback
             if (points.isEmpty()) {
                 val fallbackAssetClass = if (assetClass == "stocks") "etf" else "stocks"
-                Log.d(TAG, "Nasdaq history empty for $stockCode with $assetClass, trying fallback with $fallbackAssetClass")
+                safeLogD("Nasdaq history empty for $stockCode with $assetClass, trying fallback with $fallbackAssetClass")
                 body = fetchNasdaqBody(stockCode, fallbackAssetClass, fromDate, toDate)
                 points = body?.let { parseNasdaqResponse(it).filterForChart(latestChartDateStr) } ?: emptyList()
-                Log.d(TAG, "Nasdaq fallback parsed ${points.size} points for $stockCode under fallbackAssetClass $fallbackAssetClass")
+                safeLogD("Nasdaq fallback parsed ${points.size} points for $stockCode under fallbackAssetClass $fallbackAssetClass")
                 if (points.isNotEmpty()) {
                     val updatedStockType = if (fallbackAssetClass == "etf") "ETF" else "STOCK"
                     stock?.let {
                         try {
                             stockDao.insertStock(it.copy(stockType = updatedStockType))
-                            Log.d(TAG, "Self-healed stockType for $stockCode to $updatedStockType in database")
+                            safeLogD("Self-healed stockType for $stockCode to $updatedStockType in database")
                         } catch (e: Exception) {
-                            Log.e(TAG, "Failed to update stockType for $stockCode", e)
+                            safeLogE("Failed to update stockType for $stockCode", e)
                         }
                     }
                 }
@@ -265,7 +265,7 @@ class TwseStockHistoryService(
                 // Save to database
                 val dbEntities = points.map { StockHistoryPrice(stockCode, it.date, it.price) }
                 stockDao.insertHistoryPrices(dbEntities)
-                Log.d(TAG, "Saved ${dbEntities.size} US history price points to SQLite database for $stockCode")
+                safeLogD("Saved ${dbEntities.size} US history price points to SQLite database for $stockCode")
 
                 // Update memory cache
                 val groupedByMonth = points.groupBy { it.date.replace("-", "").substring(0, 6) }
@@ -294,7 +294,7 @@ class TwseStockHistoryService(
         toDate: String
     ): String? {
         val url = "https://api.nasdaq.com/api/quote/$stockCode/historical?assetclass=$assetClass&fromdate=$fromDate&todate=$toDate&limit=400"
-        Log.d(TAG, "Requesting Nasdaq historical API: $url")
+        safeLogD("Requesting Nasdaq historical API: $url")
         return retryOnTransientNetworkFailure(TAG, stockCode) {
             val res = client.get(url) {
                 header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
@@ -303,7 +303,7 @@ class TwseStockHistoryService(
                 header("Accept", "application/json, text/plain, */*")
                 header("Accept-Language", "en-US,en;q=0.9")
             }.bodyAsText()
-            Log.d(TAG, "Nasdaq response received for $stockCode ($assetClass), length=${res.length}")
+            safeLogD("Nasdaq response received for $stockCode ($assetClass), length=${res.length}")
             res
         }
     }
@@ -456,5 +456,25 @@ class TwseStockHistoryService(
         val day = parts[2].toIntOrNull() ?: return null
         val gregorianYear = rocYear + 1911
         return String.format("%04d-%02d-%02d", gregorianYear, month, day)
+    }
+
+    private fun safeLogD(message: String) {
+        try {
+            Log.d(TAG, message)
+        } catch (_: RuntimeException) {
+            // Android's JVM test stub throws for Log calls; logging must not affect data fetching.
+        }
+    }
+
+    private fun safeLogE(message: String, throwable: Throwable? = null) {
+        try {
+            if (throwable == null) {
+                Log.e(TAG, message)
+            } else {
+                Log.e(TAG, message, throwable)
+            }
+        } catch (_: RuntimeException) {
+            // Android's JVM test stub throws for Log calls; logging must not affect data fetching.
+        }
     }
 }

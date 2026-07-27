@@ -18,6 +18,8 @@ import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.UsdTwdExchangeRateService
 import com.rsps1008.stockify.data.CashFlow
 import com.rsps1008.stockify.data.ReturnRateCalculator
+import com.rsps1008.stockify.data.MarginCalculationSupport
+import com.rsps1008.stockify.data.ShortSellingCalculationSupport
 import com.rsps1008.stockify.data.Account
 import com.rsps1008.stockify.ui.screens.HoldingsUiState
 import kotlinx.coroutines.Dispatchers
@@ -48,7 +50,8 @@ private data class HomeSettingsBundle(
     val preDeductSellFees: Boolean,
     val feeDiscount: Double,
     val minFeeRegular: Int,
-    val returnRateMode: ReturnRateMode
+    val returnRateMode: ReturnRateMode,
+    val marginDayCount: Int
 )
 
 private data class HomeHistoryCalculationBundle(
@@ -59,8 +62,8 @@ private data class HomeHistoryCalculationBundle(
 
 private data class HistoricalHoldingStats(
     val shares: Double,
-    val costBasis: Double,
     val totalInvestment: Double,
+    val remainingPositionInvestment: Double,
     val marketValue: Double,
     val totalPL: Double
 )
@@ -186,9 +189,10 @@ class HoldingsViewModel(
         settingsDataStore.preDeductSellFeesFlow,
         settingsDataStore.feeDiscountFlow,
         settingsDataStore.minFeeRegularFlow,
-        settingsDataStore.returnRateModeFlow
-    ) { preDeduct, discount, minFee, mode ->
-        HomeSettingsBundle(preDeduct, discount, minFee, mode)
+        settingsDataStore.returnRateModeFlow,
+        settingsDataStore.marginDayCountFlow
+    ) { preDeduct, discount, minFee, mode, marginDayCount ->
+        HomeSettingsBundle(preDeduct, discount, minFee, mode, marginDayCount)
     }
 
     private val historyCalculationBundle = combine(
@@ -238,7 +242,11 @@ class HoldingsViewModel(
             }
 
             val historicalTxsByStock = twTxs.groupBy { it.stockCode }.mapValues { (_, txList) ->
-                txList.sortedBy { it.date }
+                txList.sortedWith(
+                    compareBy<StockTransaction> { it.date }
+                        .thenBy { it.recordTime }
+                        .thenBy { it.id }
+                )
             }
 
             val firstTxTime = twTxs.minOfOrNull { it.date }
@@ -253,8 +261,8 @@ class HoldingsViewModel(
                 }
 
                 var totalMarketValue = 0.0
-                var totalCostBasis = 0.0
                 var totalInvestment = 0.0
+                var totalRemainingPositionInvestment = 0.0
                 var totalPL = 0.0
                 var totalShares = 0.0
                 val portfolioCashFlows = mutableListOf<CashFlow>()
@@ -275,7 +283,8 @@ class HoldingsViewModel(
                         minFeeRegular = minFee,
                         market = selectedStocksByCode[stockCode]?.stock?.market ?: StockMarket.inferFromCode(stockCode),
                         stockType = stockType,
-                        dayEnd = dayEnd
+                        dayEnd = dayEnd,
+                        marginDayCount = settings.marginDayCount
                     )
                     val currencyRate = if (
                         normalizedMode == HomeDisplayMode.COMBINED &&
@@ -286,8 +295,8 @@ class HoldingsViewModel(
                         1.0
                     }
                     totalMarketValue += stats.marketValue * currencyRate
-                    totalCostBasis += stats.costBasis * currencyRate
                     totalInvestment += stats.totalInvestment * currencyRate
+                    totalRemainingPositionInvestment += stats.remainingPositionInvestment * currencyRate
                     totalPL += stats.totalPL * currencyRate
                     totalShares += stats.shares
                     if (settings.returnRateMode == ReturnRateMode.XIRR) {
@@ -297,17 +306,14 @@ class HoldingsViewModel(
                             price = dailyPrice,
                             terminalDateMillis = dayEnd,
                             currencyRate = currencyRate
+                            ,marginDayCount = settings.marginDayCount
                         )
                     }
                 }
 
                 val totalPLPercentage = when (settings.returnRateMode) {
                     ReturnRateMode.REMAINING_POSITION -> {
-                        val denominator = HoldingCalculationSupport.remainingPositionDenominator(
-                            shares = totalShares,
-                            costBasis = totalCostBasis,
-                            totalInvestment = totalInvestment
-                        )
+                        val denominator = totalRemainingPositionInvestment
                         if (denominator > 0) (totalPL / denominator) * 100 else 0.0
                     }
                     ReturnRateMode.CUMULATIVE_INVESTMENT -> if (totalInvestment > 0) (totalPL / totalInvestment) * 100 else 0.0
@@ -490,58 +496,48 @@ class HoldingsViewModel(
         minFeeRegular: Double,
         market: String,
         stockType: String,
-        dayEnd: Long
+        dayEnd: Long,
+        marginDayCount: Int
     ): HistoricalHoldingStats {
         val txs = transactions.filter { it.date <= dayEnd }
-            .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime })
-
-        var shares = 0.0
-        var totalBuyExpense = 0.0
-        var totalSellIncome = 0.0
-        var totalSellNetIncome = 0.0
-        var sellSharesTotal = 0.0
-        var sellAmountBeforeFee = 0.0
-        var totalDividendIncome = 0.0
-        var buySharesTotal = 0.0
-        var buyCostTotal = 0.0
-
-        for (it in txs) {
-            when (it.type) {
-                "買進" -> {
-                    shares += it.buyShares
-                    totalBuyExpense += it.expense
-                    buySharesTotal += it.buyShares
-                    buyCostTotal += it.expense
-                }
-                "賣出" -> {
-                    shares -= it.sellShares
-                    sellSharesTotal += it.sellShares
-                    sellAmountBeforeFee += it.sellPrice * it.sellShares
-                    totalSellIncome += it.income
-                    totalSellNetIncome += it.income
-                }
-                "配股" -> {
-                    shares += it.dividendShares
-                }
-                "配息" -> {
-                    totalDividendIncome += HoldingCalculationSupport.resolveDividendIncome(it)
-                }
-                "減資" -> {
-                    shares += HoldingCalculationSupport.capitalReductionShareChange(it, shares)
-                    totalSellIncome += it.cashReturned
-                }
-                "分割" -> {
-                    shares += HoldingCalculationSupport.splitShareChange(it, shares)
-                }
-            }
-        }
-
-        if (shares < 0) shares = 0.0
+            .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime }.thenBy { it.id })
+        val replay = HoldingCalculationSupport.replayLongPosition(txs, dayEnd)
+        val shares = replay.shares
+        val totalBuyExpense = replay.totalBuyExpense
+        val totalSellIncome = replay.totalSellIncome
+        val totalSellNetIncome = replay.totalSellNetIncome
+        val sellAmountBeforeFee = replay.sellAmountBeforeFee
+        val totalDividendIncome = replay.totalDividendIncome
         val costBasis = totalBuyExpense - totalSellIncome - totalDividendIncome
         val totalSellFeeAndTax = (sellAmountBeforeFee - totalSellNetIncome).coerceAtLeast(0.0)
-        val totalInvestment = totalBuyExpense + totalSellFeeAndTax
+        val marginSummary = MarginCalculationSupport.calculate(txs, dayEnd, marginDayCount)
+        val shortSummary = ShortSellingCalculationSupport.calculate(txs, dayEnd, marginDayCount)
+        val hasMarginPurchase = txs.any { it.type == "融資買進" }
+        val longInvestment = if (hasMarginPurchase) {
+            marginSummary.selfFundedCapital + totalSellFeeAndTax
+        } else {
+            totalBuyExpense + totalSellFeeAndTax
+        }
+        val investmentBasis = HoldingCalculationSupport.positionInvestmentBasis(
+            shares = shares,
+            costBasis = costBasis,
+            longInvestment = longInvestment,
+            financedRemainingInvestment = if (hasMarginPurchase) {
+                (-marginSummary.cashBalance).coerceAtLeast(0.0)
+            } else {
+                null
+            },
+            marginDebt = marginSummary.outstandingPrincipal + marginSummary.accruedInterest,
+            shortOutstandingShares = shortSummary.outstandingShares,
+            shortRemainingInvestment = shortSummary.openedPrincipal,
+            shortCumulativeInvestment = shortSummary.cumulativeOpenedPrincipal
+        )
         val marketValue = shares * ptPrice
         var totalPL = marketValue - costBasis
+        totalPL -= marginSummary.totalInterestExpense
+        val shortIncome = txs.filter { it.type == "融券賣出" }.sumOf { it.income }
+        val shortCoverExpense = txs.filter { it.type == "買券還券" }.sumOf { it.expense }
+        totalPL += shortIncome - shortCoverExpense - shortSummary.outstandingShares * ptPrice - shortSummary.accruedBorrowFee - shortSummary.compensationExpense
 
         if (preDeductSellFees && marketValue > 0.0 && StockMarket.isTw(market)) {
             val sellFee = (marketValue * 0.001425 * feeDiscount).coerceAtLeast(minFeeRegular)
@@ -552,8 +548,8 @@ class HoldingsViewModel(
 
         return HistoricalHoldingStats(
             shares = shares,
-            costBasis = costBasis,
-            totalInvestment = totalInvestment,
+            totalInvestment = investmentBasis.cumulative,
+            remainingPositionInvestment = investmentBasis.remaining,
             marketValue = marketValue,
             totalPL = totalPL
         )
@@ -564,12 +560,15 @@ class HoldingsViewModel(
         shares: Double,
         price: Double,
         terminalDateMillis: Long,
-        currencyRate: Double
+        currencyRate: Double,
+        marginDayCount: Int
     ): List<CashFlow> {
         val cashFlows = transactions.mapNotNull { transaction ->
             when (transaction.type) {
                 "買進" -> CashFlow(transaction.date, -transaction.expense * currencyRate)
-                "賣出" -> CashFlow(transaction.date, transaction.income * currencyRate)
+                "融資買進" -> CashFlow(transaction.date, -(if (transaction.marginSelfFundedOverridden) transaction.marginSelfFunded else transaction.expense - transaction.marginPrincipal) * currencyRate)
+                "賣出" -> CashFlow(transaction.date, (transaction.income - transaction.marginRepayment - transaction.marginActualInterest) * currencyRate)
+                "融資還款" -> CashFlow(transaction.date, -(transaction.marginRepayment + transaction.marginActualInterest) * currencyRate)
                 "配息" -> CashFlow(
                     transaction.date,
                     HoldingCalculationSupport.resolveDividendIncome(transaction) * currencyRate
@@ -579,8 +578,18 @@ class HoldingsViewModel(
             }
         }.toMutableList()
 
-        if (shares > 0.0 && price > 0.0) {
-            cashFlows.add(CashFlow(terminalDateMillis, shares * price * currencyRate))
+        val margin = MarginCalculationSupport.calculate(transactions, terminalDateMillis, marginDayCount)
+        cashFlows += ShortSellingCalculationSupport.buildXirrCashFlows(
+            transactions = transactions,
+            valuationDate = terminalDateMillis,
+            currentPrice = price,
+            dayCount = marginDayCount
+        ).map { it.copy(amount = it.amount * currencyRate) }
+
+        val hasValuedPosition = shares > 0.0 && price > 0.0
+        val hasMarginDebt = margin.outstandingPrincipal > 0.0 || margin.accruedInterest > 0.0
+        if (hasValuedPosition || hasMarginDebt) {
+            cashFlows.add(CashFlow(terminalDateMillis, (shares * price - margin.outstandingPrincipal - margin.accruedInterest) * currencyRate))
         }
 
         return cashFlows

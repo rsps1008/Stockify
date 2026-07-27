@@ -102,11 +102,15 @@ fun SettingsScreen() {
     val showTaiwanPortfolioChart by viewModel.showTaiwanPortfolioChart.collectAsState()
     val stockDataSource by viewModel.stockDataSource.collectAsState()
     val usStockDataSource by viewModel.usStockDataSource.collectAsState()
-    val notifyFallbackRepeatedly by viewModel.notifyFallbackRepeatedly.collectAsState()
+    val fallbackNoticeEnabled by viewModel.fallbackNoticeEnabled.collectAsState()
     val taxRateNormalListedStock by viewModel.taxRateNormalListedStock.collectAsState()
     val taxRateDomesticStockEtf by viewModel.taxRateDomesticStockEtf.collectAsState()
     val taxRateBondEtf by viewModel.taxRateBondEtf.collectAsState()
     val taxRateDayTrading by viewModel.taxRateDayTrading.collectAsState()
+    val marginFeatureEnabled by viewModel.marginFeatureEnabled.collectAsState()
+    val marginDayCount by viewModel.marginDayCount.collectAsState()
+    val defaultMarginAnnualRate by viewModel.defaultMarginAnnualRate.collectAsState()
+    val defaultShortBorrowAnnualRate by viewModel.defaultShortBorrowAnnualRate.collectAsState()
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val focusManager = LocalFocusManager.current
@@ -417,6 +421,59 @@ fun SettingsScreen() {
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
+                        Text("融資／融券功能（實驗階段）", style = MaterialTheme.typography.titleLarge)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("啟用後可記錄台股融資買進、還款、融券賣出、買券還券與融券補償，並估算利息或借券費；此功能不會連線券商。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("啟用融資／融券功能")
+                            Switch(checked = marginFeatureEnabled, onCheckedChange = viewModel::setMarginFeatureEnabled)
+                        }
+                        if (marginFeatureEnabled) {
+                            var expandedMarginDayCount by remember { mutableStateOf(false) }
+                            ExposedDropdownMenuBox(expanded = expandedMarginDayCount, onExpandedChange = { expandedMarginDayCount = !expandedMarginDayCount }, modifier = Modifier.fillMaxWidth()) {
+                                OutlinedTextField(value = if (marginDayCount == 360) "360 天" else "365 天", onValueChange = {}, readOnly = true, label = { Text("融資／融券計息基準") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedMarginDayCount) }, modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(), colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors())
+                                ExposedDropdownMenu(expanded = expandedMarginDayCount, onDismissRequest = { expandedMarginDayCount = false }) {
+                                    listOf(365, 360).forEach { dayCount -> DropdownMenuItem(text = { Text("$dayCount 天") }, onClick = { viewModel.setMarginDayCount(dayCount); expandedMarginDayCount = false }) }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            var defaultMarginAnnualRateText by remember(defaultMarginAnnualRate) { mutableStateOf(annualRateInputText(defaultMarginAnnualRate)) }
+                            OutlinedTextField(
+                                value = defaultMarginAnnualRateText,
+                                onValueChange = {
+                                    defaultMarginAnnualRateText = it
+                                    it.toDoubleOrNull()
+                                        ?.takeIf { rate -> rate.isFinite() && rate >= 0.0 }
+                                        ?.let(viewModel::setDefaultMarginAnnualRate)
+                                },
+                                label = { Text("預設融資年利率 (%)") },
+                                supportingText = { Text("只會自動帶入新建或改為融資買進的交易；既有交易利率不會變更") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            var defaultShortBorrowAnnualRateText by remember(defaultShortBorrowAnnualRate) { mutableStateOf(annualRateInputText(defaultShortBorrowAnnualRate)) }
+                            OutlinedTextField(
+                                value = defaultShortBorrowAnnualRateText,
+                                onValueChange = {
+                                    defaultShortBorrowAnnualRateText = it
+                                    it.toDoubleOrNull()
+                                        ?.takeIf { rate -> rate.isFinite() && rate >= 0.0 }
+                                        ?.let(viewModel::setDefaultShortBorrowAnnualRate)
+                                },
+                                label = { Text("預設融券借券年費率 (%)") },
+                                supportingText = { Text("只會自動帶入新建或改為融券賣出的交易；請依券商實際費率調整") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         Text("股票資料來源", style = MaterialTheme.typography.titleLarge)
                         Spacer(modifier = Modifier.height(16.dp))
 
@@ -461,6 +518,12 @@ fun SettingsScreen() {
                                 }
                             }
                         }
+                        Text(
+                            text = "興櫃股票僅能透過 Yahoo 取得即時報價。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
                         Spacer(modifier = Modifier.height(16.dp))
 
                         ExposedDropdownMenuBox(
@@ -510,16 +573,16 @@ fun SettingsScreen() {
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column(modifier = Modifier.weight(1f, fill = false)) {
-                                Text("重複提示備援來源", style = MaterialTheme.typography.bodyLarge)
+                                Text("提示備援來源", style = MaterialTheme.typography.bodyLarge)
                                 Text(
-                                    "當主要資料來源失效時，持續顯示通知",
+                                    "當主要資料來源失效並改用備援來源時，提示通知",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Switch(
-                                checked = notifyFallbackRepeatedly,
-                                onCheckedChange = viewModel::setNotifyFallbackRepeatedly
+                                checked = fallbackNoticeEnabled,
+                                onCheckedChange = viewModel::setFallbackNoticeEnabled
                             )
                         }
 

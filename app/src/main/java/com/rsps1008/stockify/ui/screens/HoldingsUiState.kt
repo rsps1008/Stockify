@@ -21,6 +21,7 @@ data class HoldingInfo(
     val averageCost: Double = 0.0,
     val buyAverage: Double = 0.0,
     val totalInvestment: Double = 0.0,
+    val remainingPositionInvestment: Double = 0.0,
     val sellAverage: Double = 0.0,
     val totalPL: Double = 0.0,
     val totalPLPercentage: Double = 0.0,
@@ -28,5 +29,12 @@ data class HoldingInfo(
     val dailyChangePercentage: Double = 0.0,
     val dividendIncome: Double = 0.0,
     val marketValue: Double = 0.0,
-    val limitState: LimitState = LimitState.NONE
+    val limitState: LimitState = LimitState.NONE,
+    val marginOutstandingPrincipal: Double = 0.0,
+    val marginAccruedInterest: Double = 0.0,
+    val marginNetEquity: Double = 0.0,
+    val shortOutstandingShares: Double = 0.0,
+    val shortMarketLiability: Double = 0.0,
+    val shortAccruedBorrowFee: Double = 0.0,
+    val shortCompensationExpense: Double = 0.0
 )

@@ -64,6 +64,7 @@ class HoldingCalculationSupportTest {
         )
 
         assertEquals(-200.0, HoldingCalculationSupport.capitalReductionShareChange(transaction, 1_000.0), 0.0)
+        assertEquals(0.8, HoldingCalculationSupport.capitalReductionShareFactor(transaction), 0.0)
     }
 
     @Test
@@ -114,5 +115,206 @@ class HoldingCalculationSupportTest {
         )
 
         assertEquals(300.0, denominator, 0.0)
+    }
+
+    @Test
+    fun closedShortPositionFallsBackToCumulativeInvestment() {
+        val basis = HoldingCalculationSupport.positionInvestmentBasis(
+            shares = 0.0,
+            costBasis = 0.0,
+            longInvestment = 0.0,
+            marginDebt = 0.0,
+            shortOutstandingShares = 0.0,
+            shortRemainingInvestment = 0.0,
+            shortCumulativeInvestment = 100_000.0
+        )
+
+        assertEquals(100_000.0, basis.remaining, 0.0)
+        assertEquals(100_000.0, basis.cumulative, 0.0)
+    }
+
+    @Test
+    fun partialShortCoverKeepsSeparateRemainingAndCumulativeInvestment() {
+        val basis = HoldingCalculationSupport.positionInvestmentBasis(
+            shares = 0.0,
+            costBasis = 0.0,
+            longInvestment = 0.0,
+            marginDebt = 0.0,
+            shortOutstandingShares = 600.0,
+            shortRemainingInvestment = 60_000.0,
+            shortCumulativeInvestment = 100_000.0
+        )
+
+        assertEquals(60_000.0, basis.remaining, 0.0)
+        assertEquals(100_000.0, basis.cumulative, 0.0)
+    }
+
+    @Test
+    fun financedOpenPositionUsesRemainingCashInvestmentInsteadOfFullCostBasis() {
+        val basis = HoldingCalculationSupport.positionInvestmentBasis(
+            shares = 1_000.0,
+            costBasis = 100_000.0,
+            longInvestment = 40_000.0,
+            financedRemainingInvestment = 40_000.0,
+            marginDebt = 60_000.0,
+            shortOutstandingShares = 0.0,
+            shortRemainingInvestment = 0.0,
+            shortCumulativeInvestment = 0.0
+        )
+
+        assertEquals(40_000.0, basis.remaining, 0.0)
+        assertEquals(40_000.0, basis.cumulative, 0.0)
+    }
+
+    @Test
+    fun ordinaryOpenPositionStillUsesCostBasis() {
+        val basis = HoldingCalculationSupport.positionInvestmentBasis(
+            shares = 1_000.0,
+            costBasis = 90_000.0,
+            longInvestment = 100_000.0,
+            marginDebt = 0.0,
+            shortOutstandingShares = 0.0,
+            shortRemainingInvestment = 0.0,
+            shortCumulativeInvestment = 0.0
+        )
+
+        assertEquals(90_000.0, basis.remaining, 0.0)
+        assertEquals(100_000.0, basis.cumulative, 0.0)
+    }
+
+    @Test
+    fun financedPositionFallsBackToFinancedCumulativeBasisAfterCashIsRecovered() {
+        val basis = HoldingCalculationSupport.positionInvestmentBasis(
+            shares = 500.0,
+            costBasis = 45_000.0,
+            longInvestment = 40_000.0,
+            financedRemainingInvestment = 0.0,
+            marginDebt = 60_000.0,
+            shortOutstandingShares = 0.0,
+            shortRemainingInvestment = 0.0,
+            shortCumulativeInvestment = 0.0
+        )
+
+        assertEquals(40_000.0, basis.remaining, 0.0)
+        assertEquals(40_000.0, basis.cumulative, 0.0)
+    }
+
+    @Test
+    fun companyActionOnlyAdjustsTheMatchingAccountLongPosition() {
+        val day = 24L * 60 * 60 * 1000
+        val firstAccountBuy = StockTransaction(
+            stockCode = "2330",
+            accountId = 1,
+            date = 0L,
+            recordTime = 0L,
+            type = "融資買進",
+            buyPrice = 100.0,
+            buyShares = 1_000.0,
+            expense = 100_000.0
+        )
+        val secondAccountBuy = firstAccountBuy.copy(accountId = 2, recordTime = 1L)
+        val firstAccountSplit = StockTransaction(
+            stockCode = "2330",
+            accountId = 1,
+            date = day,
+            recordTime = day,
+            type = "分割",
+            stockSplitRatio = 2.0,
+            sharesBeforeSplit = 1_000.0,
+            sharesAfterSplit = 2_000.0
+        )
+
+        val summary = HoldingCalculationSupport.replayLongPosition(
+            listOf(firstAccountBuy, secondAccountBuy, firstAccountSplit),
+            day
+        )
+
+        assertEquals(3_000.0, summary.shares, 0.0)
+        assertEquals(3_000.0, summary.buySharesTotal, 0.0)
+        assertEquals(200_000.0, summary.totalBuyExpense, 0.0)
+    }
+
+    @Test
+    fun futureFinancingTransactionsDoNotEnterCurrentLongReplay() {
+        val day = 24L * 60 * 60 * 1000
+        val currentBuy = StockTransaction(
+            stockCode = "2330",
+            accountId = 1,
+            date = 0L,
+            recordTime = 0L,
+            type = "買進",
+            buyPrice = 100.0,
+            buyShares = 1_000.0,
+            expense = 100_000.0
+        )
+        val futureMarginBuy = currentBuy.copy(
+            date = day * 2,
+            recordTime = day * 2,
+            type = "融資買進",
+            buyShares = 2_000.0,
+            expense = 200_000.0
+        )
+
+        val summary = HoldingCalculationSupport.replayLongPosition(
+            listOf(currentBuy, futureMarginBuy),
+            day
+        )
+        val effectiveTransactions = HoldingCalculationSupport.transactionsAtOrBefore(
+            listOf(
+                currentBuy,
+                futureMarginBuy,
+                futureMarginBuy.copy(type = "融券賣出", sellShares = 500.0)
+            ),
+            day
+        )
+
+        assertEquals(1_000.0, summary.shares, 0.0)
+        assertEquals(100_000.0, summary.totalBuyExpense, 0.0)
+        assertEquals(listOf(currentBuy), effectiveTransactions)
+    }
+
+    @Test
+    fun ordinaryTradesKeepTheirExistingReplayTotals() {
+        val transactions = listOf(
+            StockTransaction(
+                stockCode = "2330",
+                accountId = 1,
+                date = 1L,
+                recordTime = 1L,
+                type = "買進",
+                buyPrice = 100.0,
+                buyShares = 1_000.0,
+                expense = 100_100.0
+            ),
+            StockTransaction(
+                stockCode = "2330",
+                accountId = 1,
+                date = 2L,
+                recordTime = 2L,
+                type = "賣出",
+                sellPrice = 120.0,
+                sellShares = 400.0,
+                income = 47_700.0
+            ),
+            StockTransaction(
+                stockCode = "2330",
+                accountId = 1,
+                date = 3L,
+                recordTime = 3L,
+                type = "配息",
+                dividendIncome = 1_000.0
+            )
+        )
+
+        val summary = HoldingCalculationSupport.replayLongPosition(
+            transactions,
+            valuationDate = 3L
+        )
+
+        assertEquals(600.0, summary.shares, 0.0)
+        assertEquals(100_100.0, summary.totalBuyExpense, 0.0)
+        assertEquals(47_700.0, summary.totalSellIncome, 0.0)
+        assertEquals(48_000.0, summary.sellAmountBeforeFee, 0.0)
+        assertEquals(1_000.0, summary.totalDividendIncome, 0.0)
     }
 }

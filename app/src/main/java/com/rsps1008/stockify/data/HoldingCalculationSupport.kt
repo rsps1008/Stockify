@@ -1,6 +1,100 @@
 package com.rsps1008.stockify.data
 
+data class PositionInvestmentBasis(
+    val remaining: Double,
+    val cumulative: Double
+)
+
+data class LongPositionReplaySummary(
+    val shares: Double = 0.0,
+    val totalBuyExpense: Double = 0.0,
+    val totalSellIncome: Double = 0.0,
+    val totalSellNetIncome: Double = 0.0,
+    val sellSharesTotal: Double = 0.0,
+    val sellAmountBeforeFee: Double = 0.0,
+    val totalDividendIncome: Double = 0.0,
+    val buySharesTotal: Double = 0.0,
+    val buyCostTotal: Double = 0.0
+)
+
 object HoldingCalculationSupport {
+    private data class PositionKey(val stockCode: String, val accountId: Int)
+    private data class AccountPositionState(
+        var shares: Double = 0.0,
+        var buySharesTotal: Double = 0.0,
+        var sellSharesTotal: Double = 0.0
+    )
+
+    fun transactionsAtOrBefore(
+        transactions: List<StockTransaction>,
+        valuationDate: Long
+    ): List<StockTransaction> {
+        return transactions
+            .filter { it.date <= valuationDate }
+            .sortedWith(
+                compareBy<StockTransaction> { it.date }
+                    .thenBy { it.recordTime }
+                    .thenBy { it.id }
+            )
+    }
+
+    fun replayLongPosition(
+        transactions: List<StockTransaction>,
+        valuationDate: Long
+    ): LongPositionReplaySummary {
+        val positions = mutableMapOf<PositionKey, AccountPositionState>()
+        var totalBuyExpense = 0.0
+        var totalSellIncome = 0.0
+        var totalSellNetIncome = 0.0
+        var sellAmountBeforeFee = 0.0
+        var totalDividendIncome = 0.0
+        var buyCostTotal = 0.0
+
+        transactionsAtOrBefore(transactions, valuationDate).forEach { transaction ->
+            val key = PositionKey(transaction.stockCode, transaction.accountId)
+            val position = positions.getOrPut(key) { AccountPositionState() }
+            when (transaction.type) {
+                "買進", "融資買進" -> {
+                    position.shares += transaction.buyShares
+                    position.buySharesTotal += transaction.buyShares
+                    totalBuyExpense += transaction.expense
+                    buyCostTotal += transaction.expense
+                }
+                "賣出" -> {
+                    position.shares -= transaction.sellShares
+                    position.sellSharesTotal += transaction.sellShares
+                    sellAmountBeforeFee += transaction.sellPrice * transaction.sellShares
+                    totalSellIncome += transaction.income
+                    totalSellNetIncome += transaction.income
+                }
+                "配股" -> position.shares += transaction.dividendShares
+                "配息" -> totalDividendIncome += resolveDividendIncome(transaction)
+                "減資" -> {
+                    position.shares += capitalReductionShareChange(transaction, position.shares)
+                    totalSellIncome += transaction.cashReturned
+                }
+                "分割" -> {
+                    position.shares += splitShareChange(transaction, position.shares)
+                    val splitFactor = splitShareFactor(transaction)
+                    position.buySharesTotal *= splitFactor
+                    position.sellSharesTotal *= splitFactor
+                }
+            }
+        }
+
+        return LongPositionReplaySummary(
+            shares = positions.values.sumOf { it.shares }.coerceAtLeast(0.0),
+            totalBuyExpense = totalBuyExpense,
+            totalSellIncome = totalSellIncome,
+            totalSellNetIncome = totalSellNetIncome,
+            sellSharesTotal = positions.values.sumOf { it.sellSharesTotal },
+            sellAmountBeforeFee = sellAmountBeforeFee,
+            totalDividendIncome = totalDividendIncome,
+            buySharesTotal = positions.values.sumOf { it.buySharesTotal },
+            buyCostTotal = buyCostTotal
+        )
+    }
+
     /**
      * Applies a split to the shares that were actually recorded for that event.
      * Older CSV backups may only contain the ratio, so they fall back to the
@@ -34,6 +128,17 @@ object HoldingCalculationSupport {
         return sharesAfter - sharesBefore
     }
 
+    fun capitalReductionShareFactor(transaction: StockTransaction): Double {
+        val sharesBefore = transaction.sharesBeforeReduction
+        val sharesAfter = transaction.sharesAfterReduction
+        return when {
+            sharesBefore > 0.0 && sharesAfter > 0.0 -> sharesAfter / sharesBefore
+            transaction.capitalReductionRatio in 0.0..100.0 ->
+                1.0 - transaction.capitalReductionRatio / 100.0
+            else -> 1.0
+        }
+    }
+
     fun resolveDividendIncome(transaction: StockTransaction): Double {
         return if (transaction.dividendIncome != 0.0 || transaction.income == 0.0) {
             transaction.dividendIncome
@@ -53,4 +158,38 @@ object HoldingCalculationSupport {
             totalInvestment
         }
     }
+
+    fun positionInvestmentBasis(
+        shares: Double,
+        costBasis: Double,
+        longInvestment: Double,
+        financedRemainingInvestment: Double? = null,
+        marginDebt: Double,
+        shortOutstandingShares: Double,
+        shortRemainingInvestment: Double,
+        shortCumulativeInvestment: Double
+    ): PositionInvestmentBasis {
+        val cumulative = longInvestment + shortCumulativeInvestment
+        val hasOpenPosition = shares > POSITION_EPSILON ||
+            marginDebt > POSITION_EPSILON ||
+            shortOutstandingShares > POSITION_EPSILON
+        if (!hasOpenPosition) {
+            return PositionInvestmentBasis(remaining = cumulative, cumulative = cumulative)
+        }
+
+        val longRemaining = when {
+            financedRemainingInvestment != null &&
+                (shares > POSITION_EPSILON || marginDebt > POSITION_EPSILON) ->
+                financedRemainingInvestment.takeIf { it > POSITION_EPSILON } ?: longInvestment
+            shares > POSITION_EPSILON && costBasis > 0.0 -> costBasis
+            shares > POSITION_EPSILON || marginDebt > POSITION_EPSILON -> longInvestment
+            else -> 0.0
+        }
+        return PositionInvestmentBasis(
+            remaining = longRemaining + shortRemainingInvestment,
+            cumulative = cumulative
+        )
+    }
+
+    private const val POSITION_EPSILON = 1e-6
 }

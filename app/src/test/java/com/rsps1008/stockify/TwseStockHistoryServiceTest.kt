@@ -36,6 +36,8 @@ class TwseStockHistoryServiceTest {
         override fun getAllTransactions(): Flow<List<StockTransaction>> = flowOf(emptyList())
         override fun getTransactionsWithStock(): Flow<List<TransactionWithStock>> = flowOf(emptyList())
         override fun getTransactionById(transactionId: Int): Flow<StockTransaction?> = flowOf(null)
+        override fun getMarginRepaymentsForLot(lotId: String, stockCode: String, accountId: Int): Flow<List<StockTransaction>> = flowOf(emptyList())
+        override fun getShortDependentsForLot(lotId: String, stockCode: String, accountId: Int): Flow<List<StockTransaction>> = flowOf(emptyList())
         override fun getStockById(stockId: Int): Flow<Stock?> = flowOf(null)
         override suspend fun getStockByCode(code: String): Stock? {
             println("DAO getStockByCode: $code")

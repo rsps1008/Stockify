@@ -34,7 +34,8 @@ class SettingsDataStore(val context: Context) {
     private val textSizeModeKey = stringPreferencesKey("text_size_mode")
     private val stockDataSourceKey = stringPreferencesKey("stock_data_source")
     private val usStockDataSourceKey = stringPreferencesKey("us_stock_data_source")
-    private val notifyFallbackRepeatedlyKey = booleanPreferencesKey("notify_fallback_repeatedly")
+    // 保留原 key，以便既有設定升級後可直接採用新的提示語意。
+    private val fallbackNoticeEnabledKey = booleanPreferencesKey("notify_fallback_repeatedly")
     private val taxRateNormalListedStockKey = doublePreferencesKey("tax_rate_normal_listed_stock")
     private val taxRateDomesticStockEtfKey = doublePreferencesKey("tax_rate_domestic_stock_etf")
     private val taxRateBondEtfKey = doublePreferencesKey("tax_rate_bond_etf")
@@ -59,6 +60,10 @@ class SettingsDataStore(val context: Context) {
     private val homeHistoryChartExpandedKey = booleanPreferencesKey("home_history_chart_expanded")
     private val detailHistoryChartExpandedKey = booleanPreferencesKey("detail_history_chart_expanded")
     private val cloudDataBackupUpdatedAtKey = longPreferencesKey("cloud_data_backup_updated_at")
+    private val marginFeatureEnabledKey = booleanPreferencesKey("margin_feature_enabled")
+    private val marginDayCountKey = intPreferencesKey("margin_day_count")
+    private val defaultMarginAnnualRateKey = doublePreferencesKey("default_margin_annual_rate")
+    private val defaultShortBorrowAnnualRateKey = doublePreferencesKey("default_short_borrow_annual_rate")
 
     val fetchIntervalFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
@@ -146,9 +151,9 @@ class SettingsDataStore(val context: Context) {
             preferences[usStockDataSourceKey] ?: "Nasdaq"
         }
 
-    val notifyFallbackRepeatedlyFlow: Flow<Boolean> = context.dataStore.data
+    val fallbackNoticeEnabledFlow: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
-            preferences[notifyFallbackRepeatedlyKey] ?: false
+            preferences[fallbackNoticeEnabledKey] ?: false
         }
 
     val taxRateNormalListedStockFlow: Flow<Double> = context.dataStore.data
@@ -274,6 +279,27 @@ class SettingsDataStore(val context: Context) {
             preferences[cloudDataBackupUpdatedAtKey]
         }
 
+    val marginFeatureEnabledFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences -> preferences[marginFeatureEnabledKey] ?: false }
+
+    val marginDayCountFlow: Flow<Int> = context.dataStore.data
+        .map { preferences -> if (preferences[marginDayCountKey] == 360) 360 else 365 }
+
+    val defaultMarginAnnualRateFlow: Flow<Double> = context.dataStore.data
+        .map { preferences ->
+            preferences[defaultMarginAnnualRateKey]
+                ?.takeIf { it.isFinite() && it >= 0.0 }
+                ?: DEFAULT_MARGIN_ANNUAL_RATE
+        }
+
+    val defaultShortBorrowAnnualRateFlow: Flow<Double> = context.dataStore.data
+        .map { preferences ->
+            preferences[defaultShortBorrowAnnualRateKey]
+                ?.takeIf { it.isFinite() && it >= 0.0 }
+                ?: DEFAULT_SHORT_BORROW_ANNUAL_RATE
+        }
+
+
     suspend fun setFetchInterval(interval: Int) {
         context.dataStore.edit {
             it[fetchIntervalKey] = interval
@@ -375,9 +401,9 @@ class SettingsDataStore(val context: Context) {
         }
     }
 
-    suspend fun setNotifyFallbackRepeatedly(shouldNotifyRepeatedly: Boolean) {
+    suspend fun setFallbackNoticeEnabled(enabled: Boolean) {
         context.dataStore.edit {
-            it[notifyFallbackRepeatedlyKey] = shouldNotifyRepeatedly
+            it[fallbackNoticeEnabledKey] = enabled
         }
     }
 
@@ -513,4 +539,26 @@ class SettingsDataStore(val context: Context) {
             it[activeAccountIdKey] = accountId
         }
     }
+
+    suspend fun setMarginFeatureEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[marginFeatureEnabledKey] = enabled }
+    }
+
+    suspend fun setMarginDayCount(dayCount: Int) {
+        context.dataStore.edit { it[marginDayCountKey] = if (dayCount == 360) 360 else 365 }
+    }
+
+    suspend fun setDefaultMarginAnnualRate(rate: Double) {
+        if (!rate.isFinite() || rate < 0.0) return
+        context.dataStore.edit { it[defaultMarginAnnualRateKey] = rate }
+    }
+
+    suspend fun setDefaultShortBorrowAnnualRate(rate: Double) {
+        if (!rate.isFinite() || rate < 0.0) return
+        context.dataStore.edit { it[defaultShortBorrowAnnualRateKey] = rate }
+    }
+
 }
+
+internal const val DEFAULT_MARGIN_ANNUAL_RATE = 6.45
+internal const val DEFAULT_SHORT_BORROW_ANNUAL_RATE = 3.5

@@ -134,11 +134,16 @@ fun HoldingsScreen(navController: NavController) {
     val usdToTwdRate by application.exchangeRateService.usdToTwdRate.collectAsState()
     val activeAccountId by viewModel.activeAccountId.collectAsState()
     val accounts by viewModel.accounts.collectAsState()
-    val activeHoldings = uiState.holdings.filter { it.shares > 1e-6 }
+    val activeHoldings = uiState.holdings.filter {
+        it.shares > 1e-6 ||
+            it.shortOutstandingShares > 1e-6 ||
+            it.marginOutstandingPrincipal > 1e-6 ||
+            it.marginAccruedInterest > 1e-6
+    }
     var orderedActiveHoldings by remember { mutableStateOf(emptyList<HoldingInfo>()) }
     val unrealizedCount = activeHoldings.size
     val unrealizedPL = sumDisplayPL(activeHoldings, homeDisplayMode, usdToTwdRate)
-    val zeroHoldings = uiState.holdings.filter { kotlin.math.abs(it.shares) < 1e-6 }
+    val zeroHoldings = uiState.holdings - activeHoldings.toSet()
     var orderedZeroHoldings by remember { mutableStateOf(emptyList<HoldingInfo>()) }
     val clearedCount = zeroHoldings.size
     val realizedPL = sumDisplayPL(zeroHoldings, homeDisplayMode, usdToTwdRate)
@@ -1179,7 +1184,14 @@ fun HoldingCard(
                         minTextSize = 11f
                     )
 
-                    Text(text = "${formatShareCount(holding.shares)}股", style = MaterialTheme.typography.bodySmall)
+                    Text(text = "持股 ${formatShareCount(holding.shares)}股", style = MaterialTheme.typography.bodySmall)
+                    if (holding.shortOutstandingShares > 1e-6) {
+                        Text(
+                            text = "融券尚欠 ${formatShareCount(holding.shortOutstandingShares)}股",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = StockifyAppTheme.stockColors.loss
+                        )
+                    }
                 }
             }
 
