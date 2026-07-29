@@ -12,10 +12,11 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import java.time.DayOfWeek
 import java.time.LocalTime
 import java.time.ZoneId
@@ -69,18 +70,45 @@ class UsYahooStockInfoFetcher : StockInfoFetcher {
                 }.bodyAsText()
             }
 
-            val root = Json.parseToJsonElement(responseText).jsonObject
-            val chart = root["chart"]?.jsonObject ?: return@retryOnTransientNetworkFailure null
-            val results = chart["result"]?.jsonArray ?: return@retryOnTransientNetworkFailure null
-            val result = results.firstOrNull()?.jsonObject ?: return@retryOnTransientNetworkFailure null
-            val meta = result["meta"]?.jsonObject ?: return@retryOnTransientNetworkFailure null
+            val root = try {
+                Json.parseToJsonElement(responseText) as? JsonObject
+            } catch (e: Exception) {
+                Log.e(
+                    "UsYahooStockInfoFetcher",
+                    "Invalid Yahoo JSON for $stockCode from $url: ${responseText.take(200)}",
+                    e
+                )
+                null
+            } ?: run {
+                Log.e(
+                    "UsYahooStockInfoFetcher",
+                    "Unexpected Yahoo root JSON for $stockCode from $url: ${responseText.take(200)}"
+                )
+                return@retryOnTransientNetworkFailure null
+            }
+            val chart = root["chart"] as? JsonObject ?: run {
+                Log.e("UsYahooStockInfoFetcher", "Missing Yahoo chart object for $stockCode from $url")
+                return@retryOnTransientNetworkFailure null
+            }
+            val results = chart["result"] as? JsonArray ?: run {
+                Log.e("UsYahooStockInfoFetcher", "Missing Yahoo result array for $stockCode from $url")
+                return@retryOnTransientNetworkFailure null
+            }
+            val result = results.firstOrNull() as? JsonObject ?: run {
+                Log.e("UsYahooStockInfoFetcher", "Missing Yahoo result item for $stockCode from $url")
+                return@retryOnTransientNetworkFailure null
+            }
+            val meta = result["meta"] as? JsonObject ?: run {
+                Log.e("UsYahooStockInfoFetcher", "Missing Yahoo meta object for $stockCode from $url")
+                return@retryOnTransientNetworkFailure null
+            }
 
-            val price = meta["regularMarketPrice"]?.jsonPrimitive?.doubleOrNull
-            val previousClose = meta["chartPreviousClose"]?.jsonPrimitive?.doubleOrNull
-                ?: meta["previousClose"]?.jsonPrimitive?.doubleOrNull
-            val change = meta["regularMarketChange"]?.jsonPrimitive?.doubleOrNull
+            val price = meta["regularMarketPrice"].asDoubleOrNull()
+            val previousClose = meta["chartPreviousClose"].asDoubleOrNull()
+                ?: meta["previousClose"].asDoubleOrNull()
+            val change = meta["regularMarketChange"].asDoubleOrNull()
                 ?: (price?.let { current -> previousClose?.let { current - it } })
-            val changePercent = meta["regularMarketChangePercent"]?.jsonPrimitive?.doubleOrNull
+            val changePercent = meta["regularMarketChangePercent"].asDoubleOrNull()
                 ?: (price?.let { current -> previousClose?.let { if (it != 0.0) ((current - it) / it) * 100 else 0.0 } })
 
             if (price != null && previousClose != null) {
@@ -98,4 +126,7 @@ class UsYahooStockInfoFetcher : StockInfoFetcher {
             }
         }
     }
+
+    private fun JsonElement?.asDoubleOrNull(): Double? =
+        (this as? JsonPrimitive)?.doubleOrNull
 }

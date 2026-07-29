@@ -11,6 +11,7 @@ import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.request.get
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -520,11 +521,20 @@ class RealtimeStockDataService(
         var primaryCertificateFailure = false
         val primaryInfo = try {
             primaryFetcher.fetchStockInfo(stockCode, stockType)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: CertificateValidationException) {
             primaryCertificateFailure = true
             Log.e(
                 "RealtimeStockDataService",
                 "Primary source certificate validation failed for $stockCode",
+                e
+            )
+            null
+        } catch (e: Exception) {
+            Log.e(
+                "RealtimeStockDataService",
+                "Primary source failed unexpectedly for $stockCode",
                 e
             )
             null
@@ -541,11 +551,20 @@ class RealtimeStockDataService(
         var secondaryCertificateFailure = false
         val secondaryInfo = try {
             secondaryFetcher.fetchStockInfo(stockCode, stockType)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: CertificateValidationException) {
             secondaryCertificateFailure = true
             Log.e(
                 "RealtimeStockDataService",
                 "Fallback source certificate validation failed for $stockCode",
+                e
+            )
+            null
+        } catch (e: Exception) {
+            Log.e(
+                "RealtimeStockDataService",
+                "Fallback source failed unexpectedly for $stockCode",
                 e
             )
             null
@@ -576,9 +595,14 @@ class RealtimeStockDataService(
     ): FetchOutcome {
         return try {
             FetchOutcome(fetcher.fetchStockInfo(stockCode, stockType), fallbackUsed = false)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: CertificateValidationException) {
             Log.e("RealtimeStockDataService", "Source certificate validation failed for $stockCode", e)
             FetchOutcome(info = null, fallbackUsed = false, certificateFailure = true)
+        } catch (e: Exception) {
+            Log.e("RealtimeStockDataService", "Source failed unexpectedly for $stockCode", e)
+            FetchOutcome(info = null, fallbackUsed = false)
         }
     }
 

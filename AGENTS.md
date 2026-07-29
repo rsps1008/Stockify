@@ -215,6 +215,9 @@ Windows 指令範例：
 - 設定頁外觀區塊新增文字大小選項，會透過 `SettingsDataStore.textSizeModeFlow` 與 `StockifyTheme(textScale = ...)` 影響整個 App 的文字縮放，避免逐頁手動調整；目前選項包含 `特小 / 小 / 標準 / 大 / 特大`。
 - 設定頁的股票資料來源與股票列表更新已拆成兩個獨立區塊，方便把爬蟲來源設定和更新動作分開。
 - `NasdaqStockInfoFetcher` 解析 Nasdaq API 時會先確認 `data` 和 `primaryData` 都真的是 `JsonObject`，避免 API 回傳 `null`、錯誤訊息或其他非物件結構時直接拋出 `JsonNull is not a JsonObject`。
+- `UsYahooStockInfoFetcher` 解析 Yahoo chart API 時也必須安全檢查根節點、`chart`、`result` 陣列、結果項目與 `meta`；Yahoo 回傳 `null`、非預期 JSON 結構或無效 JSON 時只記錄錯誤並回傳 `null`，讓既有報價備援接手，不可讓前景 coroutine 因強制 JSON cast 閃退。
+- 即時報價來源與備援呼叫端都必須保留 `CancellationException`，但要把其他來源端未預期例外轉成該來源失敗；TWSE 批次回應與 Finnhub 股票清單項目也要做安全 JSON 型別檢查，避免單筆格式異常中斷整個刷新或更新流程。
+- 即時報價的數值欄位也不可直接強制轉成 `JsonPrimitive`；美股 Nasdaq 歷史圖表解析若收到錯誤格式或無效 JSON，要記錄後回傳空資料，不能使個股詳情頁的歷史資料 coroutine 失敗。
 - 美股走 Nasdaq API 時會依 `stockType` 切換 `assetclass`，`ETF` 使用 `assetclass=etf`，一般股票使用 `assetclass=stocks`。
 - `StockListRepository.readStocks()` 在本機 `stocks.json` decode 失敗時會先刪掉壞檔，再從 asset 重建一次，避免舊快取格式不一致直接讓 App crash。
 - `retryOnTransientNetworkFailure()` 目前會把 `IOException`、`UnknownHostException`、`UnresolvedAddressException`、`ConnectException`、`SocketTimeoutException` 都視為可重試的暫時性網路錯誤，避免 Ktor 連線階段直接把背景抓價打崩。

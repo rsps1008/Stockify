@@ -9,6 +9,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -312,31 +316,32 @@ class TwseStockHistoryService(
         val points = mutableListOf<StockHistoryPoint>()
         if (jsonText.isBlank()) return points
 
-        val root = Json.parseToJsonElement(jsonText).jsonObject
-        val dataElement = root["data"]
-        if (dataElement == null || dataElement is kotlinx.serialization.json.JsonNull) {
-            return points
+        return try {
+            val root = (Json.parseToJsonElement(jsonText) as? JsonObject) ?: return points
+            val dataObj = root["data"] as? JsonObject ?: return points
+            val tradesTable = dataObj["tradesTable"] as? JsonObject ?: return points
+            val rowsArray = tradesTable["rows"] as? JsonArray ?: return points
+
+            for (rowElement in rowsArray) {
+                val rowObj = rowElement as? JsonObject ?: continue
+                val dateStr = (rowObj["date"] as? JsonPrimitive)?.contentOrNull ?: continue // "07/01/2026"
+                val closeStr = (rowObj["close"] as? JsonPrimitive)?.contentOrNull ?: continue // "$294.38"
+
+                val dateParts = dateStr.split("/")
+                if (dateParts.size != 3) continue
+                val year = dateParts[2].trim()
+                val month = dateParts[0].trim().toIntOrNull()?.let { String.format("%02d", it) } ?: dateParts[0].trim()
+                val day = dateParts[1].trim().toIntOrNull()?.let { String.format("%02d", it) } ?: dateParts[1].trim()
+                val formattedDate = "$year-$month-$day"
+
+                val price = closeStr.replace("$", "").replace(",", "").trim().toDoubleOrNull() ?: continue
+                points.add(StockHistoryPoint(formattedDate, price))
+            }
+            points
+        } catch (e: Exception) {
+            safeLogE("Error parsing Nasdaq history response", e)
+            emptyList()
         }
-        val dataObj = dataElement.jsonObject
-        val tradesTable = dataObj["tradesTable"]?.jsonObject ?: return points
-        val rowsArray = tradesTable["rows"]?.jsonArray ?: return points
-
-        for (rowElement in rowsArray) {
-            val rowObj = rowElement.jsonObject
-            val dateStr = rowObj["date"]?.jsonPrimitive?.content ?: continue // "07/01/2026"
-            val closeStr = rowObj["close"]?.jsonPrimitive?.content ?: continue // "$294.38"
-
-            val dateParts = dateStr.split("/")
-            if (dateParts.size != 3) continue
-            val year = dateParts[2].trim()
-            val month = dateParts[0].trim().toIntOrNull()?.let { String.format("%02d", it) } ?: dateParts[0].trim()
-            val day = dateParts[1].trim().toIntOrNull()?.let { String.format("%02d", it) } ?: dateParts[1].trim()
-            val formattedDate = "$year-$month-$day"
-
-            val price = closeStr.replace("$", "").replace(",", "").trim().toDoubleOrNull() ?: continue
-            points.add(StockHistoryPoint(formattedDate, price))
-        }
-        return points
     }
 
     private fun getTargetMonths(rangeMonths: Int): List<String> {

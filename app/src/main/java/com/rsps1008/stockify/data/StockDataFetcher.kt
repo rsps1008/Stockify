@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -103,7 +104,7 @@ class StockDataFetcher {
         }
 
         symbols.mapNotNull { item ->
-            val stockJson = item.jsonObject
+            val stockJson = item as? JsonObject ?: return@mapNotNull null
             val symbol = stockJson["symbol"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
             if (symbol.isBlank()) return@mapNotNull null
 

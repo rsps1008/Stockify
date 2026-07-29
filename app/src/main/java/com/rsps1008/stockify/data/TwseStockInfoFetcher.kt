@@ -13,9 +13,11 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import java.time.DayOfWeek
 import java.time.LocalTime
 import java.time.ZoneId
@@ -108,28 +110,38 @@ class TwseStockInfoFetcher : StockInfoFetcher {
                 !responseText.trim().endsWith("}")
             ) return@retryOnTransientNetworkFailure emptyMap()
 
-            val msgArray = Json.parseToJsonElement(responseText).jsonObject["msgArray"]?.jsonArray
+            val root = try {
+                Json.parseToJsonElement(responseText) as? JsonObject
+            } catch (e: Exception) {
+                Log.e(
+                    "TwseStockInfoFetcher",
+                    "Invalid TWSE JSON for ${stockCodes.joinToString(",")}: ${responseText.take(200)}",
+                    e
+                )
+                null
+            } ?: return@retryOnTransientNetworkFailure emptyMap()
+            val msgArray = root["msgArray"] as? JsonArray
                 ?: return@retryOnTransientNetworkFailure emptyMap()
             msgArray.mapNotNull { element ->
-                val obj = element.jsonObject
-                val code = obj["c"]?.jsonPrimitive?.content?.trim().orEmpty()
+                val obj = element as? JsonObject ?: return@mapNotNull null
+                val code = obj["c"].stringOrNull()?.trim().orEmpty()
                 if (code !in stockCodes) return@mapNotNull null
                 parseRealtimeInfo(obj)?.let { code to it }
             }.toMap()
         } ?: emptyMap()
     }
 
-    private fun parseRealtimeInfo(obj: kotlinx.serialization.json.JsonObject): RealtimeStockInfo? {
-        val zRaw = obj["z"]?.jsonPrimitive?.content
+    private fun parseRealtimeInfo(obj: JsonObject): RealtimeStockInfo? {
+        val zRaw = obj["z"].stringOrNull()
         val price = zRaw?.takeIf { it != "-" }?.toDoubleOrNull()
-            ?: firstValidPrice(obj["a"]?.jsonPrimitive?.content)
-            ?: firstValidPrice(obj["b"]?.jsonPrimitive?.content)
-        val yesterday = obj["y"]?.jsonPrimitive?.content?.toDoubleOrNull()
+            ?: firstValidPrice(obj["a"].stringOrNull())
+            ?: firstValidPrice(obj["b"].stringOrNull())
+        val yesterday = obj["y"].stringOrNull()?.toDoubleOrNull()
         if (price == null || yesterday == null || yesterday == 0.0) return null
 
         val change = price - yesterday
-        val up = obj["u"]?.jsonPrimitive?.content?.toDoubleOrNull()
-        val down = obj["w"]?.jsonPrimitive?.content?.toDoubleOrNull()
+        val up = obj["u"].stringOrNull()?.toDoubleOrNull()
+        val down = obj["w"].stringOrNull()?.toDoubleOrNull()
         return RealtimeStockInfo(
             currentPrice = price,
             change = change,
@@ -146,4 +158,7 @@ class TwseStockInfoFetcher : StockInfoFetcher {
         raw?.split("_")
             ?.mapNotNull { it.toDoubleOrNull() }
             ?.firstOrNull { it > 0.0 }
+
+    private fun JsonElement?.stringOrNull(): String? =
+        (this as? JsonPrimitive)?.contentOrNull
 }

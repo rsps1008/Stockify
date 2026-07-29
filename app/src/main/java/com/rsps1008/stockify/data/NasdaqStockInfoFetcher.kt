@@ -16,8 +16,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.JsonPrimitive
 import java.time.DayOfWeek
 import java.time.LocalTime
 import java.time.ZoneId
@@ -86,7 +85,16 @@ class NasdaqStockInfoFetcher : StockInfoFetcher {
                 "Raw response for $stockCode ($assetClass) from $url: ${responseText.take(2000)}"
             )
 
-            val root = Json.parseToJsonElement(responseText) as? JsonObject
+            val root = try {
+                Json.parseToJsonElement(responseText) as? JsonObject
+            } catch (e: Exception) {
+                Log.e(
+                    "NasdaqStockInfoFetcher",
+                    "Invalid Nasdaq JSON for $stockCode from $url: ${responseText.take(200)}",
+                    e
+                )
+                null
+            }
                 ?: run {
                     Log.e("NasdaqStockInfoFetcher", "Unexpected Nasdaq root JSON for $stockCode from $url: ${responseText.take(200)}")
                     return@retryOnTransientNetworkFailure null
@@ -102,9 +110,9 @@ class NasdaqStockInfoFetcher : StockInfoFetcher {
                     return@retryOnTransientNetworkFailure null
                 }
 
-            val lastSalePrice = primaryData["lastSalePrice"]?.jsonPrimitive?.contentOrNull
-            val netChange = primaryData["netChange"]?.jsonPrimitive?.contentOrNull
-            val percentageChange = primaryData["percentageChange"]?.jsonPrimitive?.contentOrNull
+            val lastSalePrice = primaryData["lastSalePrice"].stringOrNull()
+            val netChange = primaryData["netChange"].stringOrNull()
+            val percentageChange = primaryData["percentageChange"].stringOrNull()
 
             val price = lastSalePrice
                 ?.removePrefix("$")
@@ -140,4 +148,7 @@ class NasdaqStockInfoFetcher : StockInfoFetcher {
     }
 
     private fun JsonElement?.asJsonObjectOrNull(): JsonObject? = this as? JsonObject
+
+    private fun JsonElement?.stringOrNull(): String? =
+        (this as? JsonPrimitive)?.contentOrNull
 }
