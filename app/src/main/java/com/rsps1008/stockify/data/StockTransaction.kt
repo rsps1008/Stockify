@@ -60,6 +60,9 @@ data class StockTransaction(
     @ColumnInfo(name = "股息收入")
     val dividendIncome: Double = 0.0,
 
+    @ColumnInfo(name = "補充保費")
+    val supplementaryHealthInsurancePremium: Double = 0.0,
+
     @ColumnInfo(name = "股票股利")
     val stockDividend: Double = 0.0,
 

@@ -51,6 +51,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontWeight
 import com.rsps1008.stockify.ui.viewmodel.AddTransactionViewModel
+import com.rsps1008.stockify.ui.viewmodel.calculateSupplementaryHealthInsurancePremium
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.OutlinedButton
@@ -103,6 +104,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     val shortLots by viewModel.shortLots.collectAsState()
     val defaultShortBorrowAnnualRate by viewModel.defaultShortBorrowAnnualRate.collectAsState()
     var dividendFee by remember { mutableStateOf("") }
+    var supplementaryHealthInsurancePremium by remember { mutableStateOf("") }
     var dividendIncome by remember { mutableStateOf("") }
     val coroutineScope = rememberCoroutineScope()
 
@@ -134,6 +136,9 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     // Optional fields for dividend calculation
     var cashDividend by remember { mutableStateOf("") }
     var exDividendShares by remember { mutableStateOf("") }
+    var shouldAutoCalculateSupplementaryHealthInsurancePremium by remember(transactionId) {
+        mutableStateOf(transactionId == null)
+    }
 
     val defaultDividendFeeForStock = remember(stockCode, defaultDividendFee) {
         if (StockMarket.isUs(StockMarket.inferFromCode(stockCode))) {
@@ -342,9 +347,11 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                 "配息" -> {
                     cashDividend = if (it.cashDividend != 0.0) it.cashDividend.toString() else ""
                     exDividendShares = if (it.exDividendShares != 0.0) formatShareInputValue(it.exDividendShares) else ""
-                    price = formatDividendAmountInput(it.income + it.fee, stock?.market)
+                    price = formatDividendAmountInput(it.income + it.fee + it.supplementaryHealthInsurancePremium, stock?.market)
                     dividendIncome = formatDividendAmountInput(it.income, stock?.market)
                     dividendFee = it.fee.toString()
+                    supplementaryHealthInsurancePremium = formatDividendAmountInput(it.supplementaryHealthInsurancePremium, stock?.market)
+                    shouldAutoCalculateSupplementaryHealthInsurancePremium = false
                 }
                 "配股" -> {
                     stockDividendRate = if (it.stockDividend != 0.0) it.stockDividend.toString() else ""
@@ -382,6 +389,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             stockDividendRate = ""
             exRightsShares = ""
             dividendFee = defaultDividendFeeForStock.toString()
+            supplementaryHealthInsurancePremium = ""
             dividendIncome = ""
             capitalReductionRatio = ""
             sharesBeforeReduction = ""
@@ -418,8 +426,35 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         }
     }
 
-    // Auto-calculate total dividend amount
-    LaunchedEffect(cashDividend, exDividendShares, dividendFee, transactionMarket, calculationRoundingMode) {
+    LaunchedEffect(
+        cashDividend,
+        exDividendShares,
+        transactionMarket,
+        calculationRoundingMode,
+        shouldAutoCalculateSupplementaryHealthInsurancePremium
+    ) {
+        if (transactionType == "配息" && shouldAutoCalculateSupplementaryHealthInsurancePremium) {
+            val pps = cashDividend.toDoubleOrNull()
+            val sharesForDividend = exDividendShares.toDoubleOrNull()
+            if (pps != null && sharesForDividend != null) {
+                val grossAmount = viewModel.roundCalculatedCurrency(pps * sharesForDividend, transactionMarket)
+                supplementaryHealthInsurancePremium = formatDividendAmountInput(
+                    calculateSupplementaryHealthInsurancePremium(grossAmount, transactionMarket),
+                    transactionMarket
+                )
+            }
+        }
+    }
+
+    // Auto-calculate total dividend amount.
+    LaunchedEffect(
+        cashDividend,
+        exDividendShares,
+        dividendFee,
+        supplementaryHealthInsurancePremium,
+        transactionMarket,
+        calculationRoundingMode
+    ) {
         if (transactionType == "配息") {
             val pps = cashDividend.toDoubleOrNull()
             val s = exDividendShares.toDoubleOrNull()
@@ -427,8 +462,9 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                 val grossAmount = viewModel.roundCalculatedCurrency(pps * s, transactionMarket)
                 price = formatDividendAmountInput(grossAmount, transactionMarket)
                 val feeAmount = dividendFee.toDoubleOrNull() ?: 0.0
+                val premiumAmount = supplementaryHealthInsurancePremium.toDoubleOrNull() ?: 0.0
                 val netAmount = viewModel.roundCalculatedCurrency(
-                    (grossAmount - feeAmount).coerceAtLeast(0.0),
+                    (grossAmount - feeAmount - premiumAmount).coerceAtLeast(0.0),
                     transactionMarket
                 )
                 dividendIncome = formatDividendAmountInput(netAmount, transactionMarket)
@@ -489,7 +525,9 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             stockName.isNotBlank() &&
             stockCode.isNotBlank() &&
             ((price.toDoubleOrNull() ?: -1.0) >= 0.0 ||
-                (dividendIncome.toDoubleOrNull() ?: -1.0) >= 0.0)
+                (dividendIncome.toDoubleOrNull() ?: -1.0) >= 0.0) &&
+            (supplementaryHealthInsurancePremium.isBlank() ||
+                (supplementaryHealthInsurancePremium.toDoubleOrNull() ?: -1.0) >= 0.0)
         "配股" ->
             stockName.isNotBlank() &&
             stockCode.isNotBlank() &&
@@ -1035,6 +1073,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             viewModel.autoFillDividendCashFromYahooUsingHolding(
                                 stockCode,
                                 onResult = { perShare, holdingShares, dateStr ->
+                                    shouldAutoCalculateSupplementaryHealthInsurancePremium = true
                                     cashDividend = perShare.toString()
                                     exDividendShares = formatShareInputValue(holdingShares)
 
@@ -1071,14 +1110,20 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         LabeledOutlinedTextField(
                             label = "每股股息(可省略)",
                             value = cashDividend,
-                            onValueChange = { cashDividend = it },
+                            onValueChange = {
+                                shouldAutoCalculateSupplementaryHealthInsurancePremium = true
+                                cashDividend = it
+                            },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         ShareInputWithStepper(
                             label = "除息股數(可省略)",
                             value = exDividendShares,
-                            onValueChange = { exDividendShares = it },
+                            onValueChange = {
+                                shouldAutoCalculateSupplementaryHealthInsurancePremium = true
+                                exDividendShares = it
+                            },
                             step = shareStep,
                             allowDecimal = isUsStock
                         )
@@ -1099,6 +1144,16 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             value = formatFeeDisplayValue(dividendFee.toDoubleOrNull() ?: 0.0, transactionMarket),
                             editValue = dividendFee,
                             onValueChange = { dividendFee = it },
+                            style = MaterialTheme.typography.bodyLarge,
+                            keyboardType = KeyboardType.Decimal
+                        )
+                        androidx.compose.material3.HorizontalDivider()
+                        Spacer(modifier = Modifier.height(8.dp))
+                        EditableTextStyled(
+                            label = "補充保費 (點擊數字修改)",
+                            value = formatFeeDisplayValue(supplementaryHealthInsurancePremium.toDoubleOrNull() ?: 0.0, transactionMarket),
+                            editValue = supplementaryHealthInsurancePremium,
+                            onValueChange = { supplementaryHealthInsurancePremium = it },
                             style = MaterialTheme.typography.bodyLarge,
                             keyboardType = KeyboardType.Decimal
                         )
@@ -1302,6 +1357,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                         sharesBeforeSplit = sharesBeforeSplit.toDoubleOrNull() ?: 0.0,
                         sharesAfterSplit = sharesAfterSplit.toDoubleOrNull() ?: 0.0,
                         dividendIncome = dividendIncome.toDoubleOrNull(),
+                        supplementaryHealthInsurancePremium = supplementaryHealthInsurancePremium.toDoubleOrNull() ?: 0.0,
                         marginPrincipal = if (transactionType == "融資買進") marginPrincipal.toDoubleOrNull() ?: 0.0 else 0.0,
                         marginAnnualRate = if (transactionType == "融資買進") marginAnnualRate.toDoubleOrNull() ?: 0.0 else 0.0,
                         marginLotId = if (transactionType == "融資買進") transactionToEdit?.marginLotId.orEmpty() else "",

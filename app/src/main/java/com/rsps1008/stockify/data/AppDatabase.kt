@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
 
-@Database(entities = [Stock::class, StockTransaction::class, StockHistoryPrice::class, Account::class], version = 15, exportSchema = false)
+@Database(entities = [Stock::class, StockTransaction::class, StockHistoryPrice::class, Account::class], version = 16, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun stockDao(): StockDao
@@ -29,7 +29,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "stock_database"
                 )
                 .addCallback(AppDatabaseCallback(context))
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
                 .build()
                 INSTANCE = instance
                 instance
@@ -215,6 +215,12 @@ abstract class AppDatabase : RoomDatabase() {
         private val MIGRATION_14_15 = object : Migration(14, 15) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE stock_transactions ADD COLUMN `融資自備款是否覆寫` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        private val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE stock_transactions ADD COLUMN `補充保費` REAL NOT NULL DEFAULT 0.0")
             }
         }
     }

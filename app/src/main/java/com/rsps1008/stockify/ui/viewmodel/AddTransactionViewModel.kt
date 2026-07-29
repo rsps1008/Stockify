@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import kotlin.math.max
+import kotlin.math.roundToInt
 import java.util.UUID
 
 data class MarginLotOption(
@@ -49,6 +50,16 @@ internal fun transactionFeeForType(
         "配息" -> dividendFee
         else -> 0.0
     }
+}
+
+internal fun calculateSupplementaryHealthInsurancePremium(
+    grossDividend: Double,
+    market: String
+): Double {
+    if (!grossDividend.isFinite() || !StockMarket.isTw(market) || grossDividend <= 20_000.0) {
+        return 0.0
+    }
+    return (grossDividend * 0.0211).roundToInt().toDouble()
 }
 
 internal fun transactionsWithCandidateForValidation(
@@ -389,6 +400,7 @@ class AddTransactionViewModel(
         sharesBeforeSplit: Double = 0.0,
         sharesAfterSplit: Double = 0.0,
         dividendIncome: Double? = null,
+        supplementaryHealthInsurancePremium: Double = 0.0,
         marginPrincipal: Double = 0.0,
         marginAnnualRate: Double = 0.0,
         marginLotId: String = "",
@@ -406,10 +418,15 @@ class AddTransactionViewModel(
         shortCompensation: Double = 0.0
     ): String? {
         val finalFee = transactionFeeForType(type, _fee.value, dividendFee)
+        val finalSupplementaryHealthInsurancePremium = if (type == "配息") {
+            supplementaryHealthInsurancePremium.coerceAtLeast(0.0)
+        } else {
+            0.0
+        }
 
         val finalIncome = when (type) {
             "賣出", "融券賣出" -> _income.value
-            "配息" -> dividendIncome ?: (price - finalFee).coerceAtLeast(0.0)
+            "配息" -> dividendIncome ?: (price - finalFee - finalSupplementaryHealthInsurancePremium).coerceAtLeast(0.0)
             "減資" -> cashReturned
             else -> 0.0
         }
@@ -432,7 +449,7 @@ class AddTransactionViewModel(
                 finalFee, finalTax, finalIncome, finalExpense,
                 cashDividend, exDividendShares, stockDividend,
                 finalDividendShares, exRightsShares,
-                note, finalDividendIncome, capitalReductionRatio,
+                note, finalDividendIncome, finalSupplementaryHealthInsurancePremium, capitalReductionRatio,
                 sharesBeforeReduction, sharesAfterReduction, cashReturned,
                 stockSplitRatio, sharesBeforeSplit, sharesAfterSplit,
                 marginPrincipal, marginAnnualRate, marginLotId, marginRepaymentLotId, marginRepayment, marginSelfFunded, marginSelfFundedOverridden, marginActualInterest, shortBorrowPrincipal, shortBorrowAnnualRate, shortLotId, shortCoverLotId, shortCoverShares, shortCompensationLotId, shortCompensation
@@ -444,7 +461,7 @@ class AddTransactionViewModel(
                 finalFee, finalTax, finalIncome, finalExpense,
                 cashDividend, exDividendShares, stockDividend,
                 finalDividendShares, exRightsShares,
-                note, finalDividendIncome, capitalReductionRatio,
+                note, finalDividendIncome, finalSupplementaryHealthInsurancePremium, capitalReductionRatio,
                 sharesBeforeReduction, sharesAfterReduction, cashReturned,
                 stockSplitRatio, sharesBeforeSplit, sharesAfterSplit,
                 marginPrincipal, marginAnnualRate, marginLotId, marginRepaymentLotId, marginRepayment, marginSelfFunded, marginSelfFundedOverridden, marginActualInterest, shortBorrowPrincipal, shortBorrowAnnualRate, shortLotId, shortCoverLotId, shortCoverShares, shortCompensationLotId, shortCompensation
@@ -470,6 +487,7 @@ class AddTransactionViewModel(
         exRightsShares: Double,
         note: String,
         dividendIncome: Double,
+        supplementaryHealthInsurancePremium: Double,
         capitalReductionRatio: Double,
         sharesBeforeReduction: Double,
         sharesAfterReduction: Double,
@@ -519,6 +537,7 @@ class AddTransactionViewModel(
                 exRightsShares = exRightsShares,
                 note = note,
                 dividendIncome = dividendIncome,
+                supplementaryHealthInsurancePremium = supplementaryHealthInsurancePremium,
                 capitalReductionRatio = capitalReductionRatio,
                 sharesBeforeReduction = sharesBeforeReduction,
                 sharesAfterReduction = sharesAfterReduction,
@@ -561,6 +580,7 @@ class AddTransactionViewModel(
         exRightsShares: Double,
         note: String,
         dividendIncome: Double,
+        supplementaryHealthInsurancePremium: Double,
         capitalReductionRatio: Double,
         sharesBeforeReduction: Double,
         sharesAfterReduction: Double,
@@ -600,6 +620,7 @@ class AddTransactionViewModel(
                 exRightsShares = exRightsShares,
                 note = note,
                 dividendIncome = dividendIncome,
+                supplementaryHealthInsurancePremium = supplementaryHealthInsurancePremium,
                 capitalReductionRatio = capitalReductionRatio,
                 sharesBeforeReduction = sharesBeforeReduction,
                 sharesAfterReduction = sharesAfterReduction,

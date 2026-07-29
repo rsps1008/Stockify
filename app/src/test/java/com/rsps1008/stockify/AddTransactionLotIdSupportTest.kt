@@ -5,6 +5,7 @@ import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.ui.viewmodel.resolveMarginOpeningLotId
 import com.rsps1008.stockify.ui.viewmodel.resolveShortOpeningLotId
 import com.rsps1008.stockify.ui.viewmodel.transactionFeeForType
+import com.rsps1008.stockify.ui.viewmodel.calculateSupplementaryHealthInsurancePremium
 import com.rsps1008.stockify.ui.viewmodel.transactionsBeforeCandidateForLotSelection
 import com.rsps1008.stockify.ui.viewmodel.transactionsWithCandidateForValidation
 import org.junit.Assert.assertEquals
@@ -12,6 +13,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AddTransactionLotIdSupportTest {
+    @Test
+    fun supplementaryHealthInsurancePremium_appliesOnlyToTaiwanDividendsAboveThreshold() {
+        assertEquals(0.0, calculateSupplementaryHealthInsurancePremium(20_000.0, "TW"), 0.0)
+        assertEquals(422.0, calculateSupplementaryHealthInsurancePremium(20_001.0, "TW"), 0.0)
+        assertEquals(0.0, calculateSupplementaryHealthInsurancePremium(100_000.0, "US"), 0.0)
+        assertEquals(2_110.0, calculateSupplementaryHealthInsurancePremium(100_000.0, "TW"), 0.0)
+    }
+
     @Test
     fun openingTransactionsPreserveExistingLotIdsOrCreateMissingIds() {
         assertEquals("margin-existing", resolveMarginOpeningLotId("融資買進", "margin-existing"))

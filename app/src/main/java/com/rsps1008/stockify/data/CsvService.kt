@@ -34,7 +34,7 @@ class CsvService {
         "現金股利", "筆記", "紀錄時間", "股名", "股票股利", "股號",
         "買進價格", "買進股數", "賣出價格", "賣出股數",
         "配發股數",
-        "除息股數", "除權股數", "股息收入",
+        "除息股數", "除權股數", "股息收入", "補充保費",
         "減資比例", "減資前股數", "減資後股數", "減資返還現金",
         "拆分比例", "拆分前股數", "拆分後股數",
         "融資本金", "融資年利率", "融資批次ID", "沖抵融資批次ID", "融資還款本金", "融資自備款", "融資自備款是否覆寫", "融資實際利息",
@@ -87,6 +87,7 @@ class CsvService {
         record["除息股數"] = formatShareInputValue(transaction.exDividendShares)
         record["除權股數"] = formatShareInputValue(transaction.exRightsShares)
         record["股息收入"] = formatMarketPlainAmount(transaction.dividendIncome, market)
+        record["補充保費"] = formatMarketPlainAmount(transaction.supplementaryHealthInsurancePremium, market)
         record["減資比例"] = transaction.capitalReductionRatio
         record["減資前股數"] = formatShareInputValue(transaction.sharesBeforeReduction)
         record["減資後股數"] = formatShareInputValue(transaction.sharesAfterReduction)
@@ -196,6 +197,7 @@ class CsvService {
             exRightsShares = parseOptionalDouble(values, headerMap, "除權股數"),
             note = getOptionalValue(values, headerMap, "筆記"),
             dividendIncome = parseOptionalDouble(values, headerMap, "股息收入"),
+            supplementaryHealthInsurancePremium = parseOptionalDouble(values, headerMap, "補充保費"),
             capitalReductionRatio = parseOptionalDouble(values, headerMap, "減資比例"),
             sharesBeforeReduction = parseOptionalDouble(values, headerMap, "減資前股數"),
             sharesAfterReduction = parseOptionalDouble(values, headerMap, "減資後股數"),

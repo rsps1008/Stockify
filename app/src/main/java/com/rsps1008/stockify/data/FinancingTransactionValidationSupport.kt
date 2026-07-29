@@ -23,6 +23,14 @@ object FinancingTransactionValidationSupport {
 
         transactions.forEach { transaction ->
             validateCompanyAction(transaction)?.let { return it }
+            if (!transaction.supplementaryHealthInsurancePremium.isFinite() ||
+                transaction.supplementaryHealthInsurancePremium < 0.0
+            ) {
+                return "補充保費必須是非負的有效數字"
+            }
+            if (transaction.type != "配息" && transaction.supplementaryHealthInsurancePremium != 0.0) {
+                return "只有配息交易可以包含補充保費"
+            }
             if (!usesFinancing(transaction)) {
                 return@forEach
             }
@@ -314,6 +322,7 @@ object FinancingTransactionValidationSupport {
             dividendShares != 0.0 ||
             exRightsShares != 0.0 ||
             dividendIncome != 0.0 ||
+            supplementaryHealthInsurancePremium != 0.0 ||
             capitalReductionRatio != 0.0 ||
             sharesBeforeReduction != 0.0 ||
             sharesAfterReduction != 0.0 ||
@@ -333,6 +342,7 @@ object FinancingTransactionValidationSupport {
             tax,
             income,
             expense,
+            supplementaryHealthInsurancePremium,
             marginPrincipal,
             marginAnnualRate,
             marginRepayment,
@@ -355,6 +365,7 @@ object FinancingTransactionValidationSupport {
             tax,
             income,
             expense,
+            supplementaryHealthInsurancePremium,
             marginPrincipal,
             marginAnnualRate,
             marginRepayment,

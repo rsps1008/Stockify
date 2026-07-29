@@ -17,6 +17,36 @@ import java.io.ByteArrayOutputStream
 
 class CsvServiceTest {
     @Test
+    fun `csv round trip preserves dividend supplementary health insurance premium`() {
+        val output = ByteArrayOutputStream()
+        CsvService().export(
+            listOf(
+                TransactionWithStock(
+                    transaction = StockTransaction(
+                        stockCode = "2330",
+                        date = 1_753_401_600_000L,
+                        recordTime = 1_753_456_789_123L,
+                        type = "配息",
+                        cashDividend = 100.0,
+                        exDividendShares = 1_000.0,
+                        fee = 10.0,
+                        income = 97_880.0,
+                        dividendIncome = 97_880.0,
+                        supplementaryHealthInsurancePremium = 2_110.0
+                    ),
+                    stock = Stock(name = "台積電", code = "2330")
+                )
+            ),
+            output
+        )
+
+        val imported = CsvService().import(ByteArrayInputStream(output.toByteArray())).single().transaction
+
+        assertEquals(2_110.0, imported.supplementaryHealthInsurancePremium, 0.0)
+        assertEquals(97_880.0, imported.dividendIncome, 0.0)
+    }
+
+    @Test
     fun `old csv without self funded override flag does not infer an override`() {
         val service = CsvService()
         val exported = ByteArrayOutputStream().also { output ->
