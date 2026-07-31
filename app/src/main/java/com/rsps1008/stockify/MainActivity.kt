@@ -46,7 +46,11 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val dataStore = (application as StockifyApplication).settingsDataStore
+        val stockifyApplication = application as StockifyApplication
+        val dataStore = stockifyApplication.settingsDataStore
+        lifecycleScope.launch {
+            stockifyApplication.updateTaiwanStockListIfDue()
+        }
         lifecycleScope.launch {
             dataStore.themeFlow.collect { theme ->
                 val mode = when (theme) {
