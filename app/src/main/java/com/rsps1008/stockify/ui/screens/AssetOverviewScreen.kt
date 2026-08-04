@@ -854,13 +854,10 @@ private fun buildAssetSlices(
     uiState: AssetOverviewUiState,
     chartMode: AssetChartMode
 ): List<AssetSlice> {
-    val colors = listOf(
+    val categoryColors = listOf(
         Color(0xFF4C78A8),
         Color(0xFFF58518),
-        Color(0xFF54A24B),
-        Color(0xFFE45756),
-        Color(0xFFB279A2),
-        Color(0xFFFF9DA6)
+        Color(0xFF54A24B)
     )
     return when (chartMode) {
         AssetChartMode.CATEGORY -> buildList {
@@ -868,19 +865,19 @@ private fun buildAssetSlices(
                 "category_tw",
                 "台股",
                 uiState.taiwanStockValue.coerceAtLeast(0.0),
-                colors[0]
+                categoryColors[0]
             )
             val us = AssetSlice(
                 "category_us",
                 "美股",
                 uiState.usStockValue.coerceAtLeast(0.0),
-                colors[1]
+                categoryColors[1]
             )
             val bank = AssetSlice(
                 "category_bank",
                 "存款",
                 uiState.totalBankDeposit.coerceAtLeast(0.0),
-                colors[2]
+                categoryColors[2]
             )
             val loan = AssetSlice(
                 id = "category_loan",
@@ -905,7 +902,7 @@ private fun buildAssetSlices(
                             id = "stock:${stockValue.stock.market}:${stockValue.stock.code}",
                             label = formatStockLabel(stockValue.stock.code, stockValue.stock.name),
                             value = stockValue.marketValue,
-                            color = colors[index % colors.size]
+                            color = individualAssetColor(index)
                         )
                     )
                 }
@@ -915,7 +912,9 @@ private fun buildAssetSlices(
                         id = "bank:${deposit.id}",
                         label = deposit.name,
                         value = deposit.amount.coerceAtLeast(0.0),
-                        color = colors[(index + uiState.stockValues.size) % colors.size]
+                        color = individualAssetColor(
+                            uiState.stockValues.count { it.marketValue > 0.0 } + index
+                        )
                     )
                 )
             }
@@ -935,6 +934,18 @@ private fun buildAssetSlices(
 }
 
 private fun formatTwd(value: Double): String = String.format(Locale.US, "%,.0f", value)
+
+private fun individualAssetColor(index: Int): Color {
+    val baseHue = (20f + index * 137.508f) % 360f
+    val hue = if (baseHue in 345f..360f || baseHue in 0f..15f) {
+        (baseHue + 32f) % 360f
+    } else {
+        baseHue
+    }
+    val saturation = 0.60f + (index % 3) * 0.07f
+    val lightness = 0.46f + (index % 4) * 0.05f
+    return Color.hsl(hue, saturation, lightness)
+}
 
 private fun formatInputAmount(value: Double): String = String.format(Locale.US, "%.0f", value)
 
