@@ -231,12 +231,15 @@ Windows 指令範例：
 - `AddTransactionScreen` 的日期選擇不可用 `selectedDateMillis!!`，Material DatePicker 可能在未選日期時回傳 `null`，確認時應保留原日期或明確處理空值。
 - `scripts/update_stock_list.py` 可直接抓取 TWSE 上市/上櫃清單並輸出成 `app/src/main/assets/stocks.json` 相同格式的 JSON。
 - App 啟動時會比對 bundled `stocks.json` / `us_stocks.json` 的 checksum，必要時自動把新版 seed 同步進 Room 與本機快取；TW 內建 seed 只會在使用者沒有手動更新股票清單時自動套用，避免覆蓋 `SettingsDataStore.lastStockListUpdateTime` 代表的手動更新結果。
-- 資產總覽頁從首頁左上角圖示進入；圓餅圖可切換資產類別與個別標的（各股票／各銀行存款／各貸款），股票部分使用目前報價及 USD/TWD 匯率換算後的台幣市值。貸款以紅色負債切片呈現，圖形角度使用負債絕對金額，中央淨資產則為股票、銀行存款扣除貸款。個別模式顯示股票代號與名稱，點擊色塊後反白並在圖中央顯示名稱、金額與占比。銀行存款與貸款可新增、編輯、刪除且允許 0 元，只存在各自的 `SettingsDataStore` Flow，不納入任何匯入、匯出或 Google Drive 備份。
+- 資產總覽頁從首頁左上角圖示進入；圓餅圖可切換資產類別與個別標的（各股票／各銀行存款／各貸款），股票部分使用目前報價及 USD/TWD 匯率換算後的台幣市值。貸款以紅色負債切片呈現，圖形角度使用負債絕對金額，中央淨資產則為股票、銀行存款扣除貸款。資產類別模式會隱藏金額為 0 的存款／貸款分類，個別模式顯示股票代號與名稱，點擊色塊後反白並在圖中央顯示名稱、金額與占比。銀行存款與貸款可新增、編輯、刪除且允許 0 元，只存在各自的 `SettingsDataStore` Flow，不納入任何匯入、匯出或 Google Drive 備份。
+- 首頁資產圖示使用 Font Awesome Free 的 `fa-chart-pie` 與 `fa-dollar-sign` VectorDrawable 疊加；右上角股利股息圖示使用可免費取得的 `fa-hand-holding-dollar` 轉換 XML。`fa-hands-holding-dollar` 不在目前使用的 Font Awesome Free 資產中，不能直接當作 Free SVG 內嵌。
+- 資產圓餅圖中央使用較小、以 `surfaceVariant` 為底色的高對比圓形資訊卡顯示淨資產或選取標的，避免暗色主題挖空區塊過黑；選取標的名稱要依中央可用寬度自動縮小為單行，不可換行。圖例使用淡色分類背景、粗體金額與獨立占比文字，切片之間以主題背景色分隔，點擊圖例列也要同步選取對應色塊並更新中央資訊。
 - 設定頁可用使用者填入的 Finnhub API key 手動更新美股股票列表；更新時只刪除並重建 Room 內 `market = US` 的股票資料，不會改動台股清單。
 - 台股股票列表會在每次開啟 App 時檢查上次成功更新時間；超過 7 天才同步 TWSE 清單。這不是背景排程，更新結果不顯示 Toast，失敗或空清單會保留原有資料並在下次開啟時重試。
 - 底部功能列目前以 `ShowChart`、`Payments`、`Add`、`CloudSync`、`Settings` 對應持股、交易、快速新增、資料管理與設定入口；若之後更換 icon，請維持這組語意對應，不要只看原始 Material 預設名稱。
 - 首頁與交易紀錄這兩個 bottom tab 的切換轉場目前固定用淡入淡出，避免預設的上下滑動感；若之後調整 `NavGraph`，請保留這個 top-level 切換風格。
 - 新增交易頁在新增模式下由「買進」切換到「賣出」或反向切換時，會保留已輸入的價格與股數，避免使用者因交易類型選錯而重打欄位；切換到其他交易類型仍會清除不適用欄位。
+- 首頁持股卡的即時股價漲跌金額／百分比區塊使用單行自適應文字，會在可用寬度不足時縮小字級，不可換行。
 
 - Google Drive 使用 Google API Client 的 `GsonFactory`，Release 開啟 R8 時需要在 `app/proguard-rules.pro` 保留 `com.google.api`、Google Sign-In 與 Gson 反射類別；否則雲端備份/還原的 Drive API 回應可能出現 `unable to create new instance of ... abstract` / `key error`。
 

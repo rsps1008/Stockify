@@ -2,10 +2,12 @@ package com.rsps1008.stockify.ui.screens
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
@@ -27,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -45,8 +49,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.rsps1008.stockify.StockifyApplication
@@ -168,7 +180,7 @@ fun AssetOverviewScreen(navController: NavController) {
     deletingDeposit?.let { deposit ->
         AlertDialog(
             onDismissRequest = { deletingDeposit = null },
-            title = { Text("刪除銀行存款") },
+            title = { Text("刪除存款") },
             text = { Text("確定要刪除「${deposit.name}」嗎？") },
             confirmButton = {
                 TextButton(
@@ -241,14 +253,7 @@ private fun AssetSummaryCard(
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("資產與負債配置", style = MaterialTheme.typography.titleLarge)
             Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "股票市值依目前載入的報價計算，貸款以紅色負債區塊呈現，金額均以台幣顯示",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -304,6 +309,7 @@ private fun AssetSummaryCard(
                 AssetPieChart(
                     slices = slices,
                     total = chartTotal,
+                    separatorColor = MaterialTheme.colorScheme.surfaceVariant,
                     selectedSliceId = selectedSliceId,
                     onSliceSelected = { id ->
                         selectedSliceId = if (selectedSliceId == id) null else id
@@ -318,7 +324,14 @@ private fun AssetSummaryCard(
 
             Spacer(modifier = Modifier.height(8.dp))
             slices.forEach { slice ->
-                AssetLegendRow(slice = slice, total = chartTotal)
+                AssetLegendRow(
+                    slice = slice,
+                    total = chartTotal,
+                    isSelected = selectedSliceId == slice.id,
+                    onClick = {
+                        selectedSliceId = if (selectedSliceId == slice.id) null else slice.id
+                    }
+                )
             }
         }
     }
@@ -330,36 +343,96 @@ private fun AssetChartCenterContent(
     netAssets: Double,
     chartTotal: Double
 ) {
-    Column(
-        modifier = Modifier.size(150.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+    val amount = selectedSlice?.value ?: netAssets
+    val amountColor = if (amount < 0.0) {
+        MaterialTheme.colorScheme.error
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
+
+    Surface(
+        modifier = Modifier.size(112.dp),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.96f),
+        tonalElevation = 2.dp,
+        shadowElevation = 2.dp
     ) {
-        if (selectedSlice == null) {
-            Text("淨資產", style = MaterialTheme.typography.bodySmall)
-            Text(formatTwd(netAssets), style = MaterialTheme.typography.titleLarge)
-            Text(
-                "資產－貸款",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        } else {
-            Text(
-                selectedSlice.label,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 2,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-            )
-            Text(
-                formatTwd(selectedSlice.value),
-                style = MaterialTheme.typography.titleMedium
-            )
-            Text(
-                formatPercentage(abs(selectedSlice.value), chartTotal),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 7.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            if (selectedSlice == null) {
+                Text(
+                    "淨資產",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    formatTwd(netAssets),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = amountColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            } else {
+                AutoFitChartLabel(selectedSlice.label)
+                Text(
+                    formatTwd(selectedSlice.value),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = amountColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    formatPercentage(abs(selectedSlice.value), chartTotal),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun AutoFitChartLabel(text: String) {
+    BoxWithConstraints(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center
+    ) {
+        val textMeasurer = rememberTextMeasurer()
+        val density = LocalDensity.current
+        val maxWidthPx = with(density) { maxWidth.roundToPx() }
+        val baseStyle = MaterialTheme.typography.labelMedium.copy(
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        val fontSize = listOf(12, 11, 10, 9, 8, 7)
+            .map { it.sp }
+            .firstOrNull { candidateSize ->
+                val layout = textMeasurer.measure(
+                    text = AnnotatedString(text),
+                    style = baseStyle.copy(fontSize = candidateSize),
+                    constraints = Constraints(maxWidth = maxWidthPx),
+                    maxLines = 1,
+                    softWrap = false
+                )
+                !layout.didOverflowWidth
+            }
+            ?: 7.sp
+
+        Text(
+            text = text,
+            style = baseStyle.copy(fontSize = fontSize),
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Clip,
+            textAlign = TextAlign.Center
+        )
     }
 }
 
@@ -367,6 +440,7 @@ private fun AssetChartCenterContent(
 private fun AssetPieChart(
     slices: List<AssetSlice>,
     total: Double,
+    separatorColor: Color,
     selectedSliceId: String?,
     onSliceSelected: (String) -> Unit
 ) {
@@ -387,7 +461,7 @@ private fun AssetPieChart(
                     }
                 }
         ) {
-            drawAssetSlices(slices, total, selectedSliceId)
+            drawAssetSlices(slices, total, separatorColor, selectedSliceId)
         }
     }
 }
@@ -395,6 +469,7 @@ private fun AssetPieChart(
 private fun DrawScope.drawAssetSlices(
     slices: List<AssetSlice>,
     total: Double,
+    separatorColor: Color,
     selectedSliceId: String?
 ) {
     if (total <= 0.0) return
@@ -416,6 +491,15 @@ private fun DrawScope.drawAssetSlices(
                 useCenter = true,
                 topLeft = topLeft,
                 size = chartSize
+            )
+            drawArc(
+                color = separatorColor,
+                startAngle = startAngle,
+                sweepAngle = sweepAngle,
+                useCenter = true,
+                topLeft = topLeft,
+                size = chartSize,
+                style = Stroke(width = 1.5.dp.toPx())
             )
             if (slice.id == selectedSliceId) {
                 drawArc(
@@ -466,11 +550,19 @@ private fun findTappedSlice(
 }
 
 @Composable
-private fun AssetLegendRow(slice: AssetSlice, total: Double) {
+private fun AssetLegendRow(
+    slice: AssetSlice,
+    total: Double,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 3.dp),
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .background(slice.color.copy(alpha = if (isSelected) 0.18f else 0.08f))
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -484,12 +576,27 @@ private fun AssetLegendRow(slice: AssetSlice, total: Double) {
             modifier = Modifier
                 .weight(1f)
                 .padding(start = 8.dp),
-            style = MaterialTheme.typography.bodyMedium
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface
         )
-        Text(
-            text = "${formatTwd(slice.value)} (${formatPercentage(abs(slice.value), total)})",
-            style = MaterialTheme.typography.bodyMedium
-        )
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = formatTwd(slice.value),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (slice.value < 0.0) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                }
+            )
+            Text(
+                text = formatPercentage(abs(slice.value), total),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
@@ -502,12 +609,12 @@ private fun BankDepositSection(
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("銀行存款", style = MaterialTheme.typography.titleLarge)
+            Text("存款", style = MaterialTheme.typography.titleLarge)
             Spacer(modifier = Modifier.height(8.dp))
 
             if (deposits.isEmpty()) {
                 Text(
-                    "尚未設定銀行存款，可新增一筆金額為 0 元的存款。",
+                    "尚未新增存款。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -542,7 +649,7 @@ private fun BankDepositSection(
                 onClick = onAdd,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("新增銀行存款")
+                Text("新增存款")
             }
         }
     }
@@ -562,7 +669,7 @@ private fun BankDepositEditorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (deposit == null) "新增銀行存款" else "編輯銀行存款") },
+        title = { Text(if (deposit == null) "新增存款" else "編輯存款") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
@@ -572,7 +679,7 @@ private fun BankDepositEditorDialog(
                         errorMessage = null
                     },
                     label = { Text("名稱") },
-                    placeholder = { Text("例如：銀行存款 A") },
+                    placeholder = { Text("例如：存款 A") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -586,11 +693,6 @@ private fun BankDepositEditorDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
-                )
-                Text(
-                    "金額可以填 0 元。這筆資料只會儲存在本機 App。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 errorMessage?.let {
                     Text(it, color = MaterialTheme.colorScheme.error)
@@ -637,7 +739,7 @@ private fun LoanSection(
 
             if (loans.isEmpty()) {
                 Text(
-                    "尚未設定貸款，可新增一筆金額為 0 元的貸款。",
+                    "尚未新增貸款。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -717,11 +819,6 @@ private fun LoanEditorDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Text(
-                    "金額可以填 0 元。貸款會以紅色負債區塊呈現，且只會儲存在本機 App。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
                 errorMessage?.let {
                     Text(it, color = MaterialTheme.colorScheme.error)
                 }
@@ -766,18 +863,37 @@ private fun buildAssetSlices(
         Color(0xFFFF9DA6)
     )
     return when (chartMode) {
-        AssetChartMode.CATEGORY -> listOf(
-            AssetSlice("category_tw", "台股", uiState.taiwanStockValue.coerceAtLeast(0.0), colors[0]),
-            AssetSlice("category_us", "美股", uiState.usStockValue.coerceAtLeast(0.0), colors[1]),
-            AssetSlice("category_bank", "銀行存款", uiState.totalBankDeposit.coerceAtLeast(0.0), colors[2]),
-            AssetSlice(
+        AssetChartMode.CATEGORY -> buildList {
+            val taiwan = AssetSlice(
+                "category_tw",
+                "台股",
+                uiState.taiwanStockValue.coerceAtLeast(0.0),
+                colors[0]
+            )
+            val us = AssetSlice(
+                "category_us",
+                "美股",
+                uiState.usStockValue.coerceAtLeast(0.0),
+                colors[1]
+            )
+            val bank = AssetSlice(
+                "category_bank",
+                "存款",
+                uiState.totalBankDeposit.coerceAtLeast(0.0),
+                colors[2]
+            )
+            val loan = AssetSlice(
                 id = "category_loan",
                 label = "貸款",
                 value = -uiState.totalLoan.coerceAtLeast(0.0),
                 color = Color(0xFFD32F2F),
                 isLiability = true
             )
-        )
+            if (taiwan.value > 0.0) add(taiwan)
+            if (us.value > 0.0) add(us)
+            if (bank.value > 0.0) add(bank)
+            if (loan.value != 0.0) add(loan)
+        }
 
         AssetChartMode.INDIVIDUAL -> buildList {
             uiState.stockValues

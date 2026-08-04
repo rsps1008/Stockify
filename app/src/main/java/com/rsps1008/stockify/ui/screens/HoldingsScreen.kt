@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
@@ -58,6 +59,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.compose.foundation.shape.CircleShape
 import com.rsps1008.stockify.R
 import com.rsps1008.stockify.StockifyApplication
 import com.rsps1008.stockify.ui.navigation.Screen
@@ -79,7 +81,6 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -259,10 +260,7 @@ fun HoldingsScreen(navController: NavController) {
                 onClick = { navController.navigate(Screen.AssetOverview.route) },
                 modifier = Modifier.align(Alignment.TopStart)
             ) {
-                Icon(
-                    imageVector = Icons.Filled.PieChart,
-                    contentDescription = "資產總覽"
-                )
+                AssetOverviewIcon()
             }
 
             val context = LocalContext.current
@@ -283,7 +281,7 @@ fun HoldingsScreen(navController: NavController) {
             ) {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_dividend_info),
-                    contentDescription = "Dividend Info"
+                    contentDescription = "股利股息"
                 )
             }
         }
@@ -470,6 +468,37 @@ fun HoldingsScreen(navController: NavController) {
         HoldingsReorderHintDialog(
             onDismiss = viewModel::markHoldingsReorderHintShown
         )
+    }
+}
+
+@Composable
+private fun AssetOverviewIcon() {
+    Box(
+        modifier = Modifier.size(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            painter = painterResource(id = R.drawable.ic_asset_chart_pie),
+            contentDescription = "資產總覽",
+            modifier = Modifier.fillMaxSize(),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .size(14.dp),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_asset_dollar_sign),
+                    contentDescription = null,
+                    modifier = Modifier.size(width = 8.dp, height = 12.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
     }
 }
 
@@ -1138,6 +1167,33 @@ fun AutoResizeNameText(
 }
 
 @Composable
+private fun AutoResizeSingleLineText(
+    text: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+    maxTextSize: Float = 12f,
+    minTextSize: Float = 8f
+) {
+    var textSize by remember(text) { mutableStateOf(maxTextSize) }
+
+    Text(
+        text = text,
+        fontSize = textSize.sp,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Clip,
+        color = color,
+        textAlign = TextAlign.End,
+        modifier = modifier,
+        onTextLayout = { result ->
+            if (result.didOverflowWidth && textSize > minTextSize) {
+                textSize = (textSize - 0.5f).coerceAtLeast(minTextSize)
+            }
+        }
+    )
+}
+
+@Composable
 fun HoldingCard(
     holding: HoldingInfo,
     navController: NavController,
@@ -1246,11 +1302,10 @@ fun HoldingCard(
                         SizeTransform(clip = false)
                     )
                 }) { targetChange ->
-                    Text(
+                    AutoResizeSingleLineText(
                         text = "$dailyChangeSymbol${String.format("%.2f", abs(targetChange))} (${String.format("%.2f", abs(holding.dailyChangePercentage))}%)",
-                        style = MaterialTheme.typography.bodySmall,
                         color = dailyChangeColor,
-                        textAlign = TextAlign.End
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
@@ -1413,11 +1468,10 @@ fun ZeroHoldingCard(
                         SizeTransform(clip = false)
                     )
                 }) { targetChange ->
-                    Text(
+                    AutoResizeSingleLineText(
                         text = "$dailyChangeSymbol${String.format("%.2f", abs(targetChange))} (${String.format("%.2f", abs(holding.dailyChangePercentage))}%)",
-                        style = MaterialTheme.typography.bodySmall,
                         color = dailyChangeColor,
-                        textAlign = TextAlign.End
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
