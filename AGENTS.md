@@ -43,6 +43,10 @@
 - `HoldingsScreen`
   - 首頁持股總覽，顯示每檔股票的即時價格、持股數、平均成本、未實現損益等資訊。
   - 頂部有 Logo，右上角有配息配股捷徑。
+- `AssetOverviewScreen`
+  - 從首頁左上角資產圖示進入，顯示台股、美股、銀行存款與貸款的資產／負債配置圓餅圖；圖表可切換成資產類別，或逐檔股票／逐筆銀行存款／逐筆貸款的個別標的模式。
+  - 個別標的清單需顯示股票代號與股票名稱；點擊圓餅圖色塊時要反白並在中央顯示標的名稱、台幣金額與占比。
+  - 銀行存款與貸款只保存使用者自訂名稱與目前金額，資料寫入 `SettingsDataStore`，不進入 Room、CSV、本地檔案或 Google Drive 備份；貸款以負值納入淨資產計算，圓餅圖以紅色負債切片並用絕對金額計算角度。
 - `TransactionsScreen`
   - 交易清單頁，依日期分組顯示所有交易紀錄。
   - 每筆交易會顯示股票名稱、交易類型、價格與收支。
@@ -226,6 +230,7 @@ Windows 指令範例：
 - `AddTransactionScreen` 的日期選擇不可用 `selectedDateMillis!!`，Material DatePicker 可能在未選日期時回傳 `null`，確認時應保留原日期或明確處理空值。
 - `scripts/update_stock_list.py` 可直接抓取 TWSE 上市/上櫃清單並輸出成 `app/src/main/assets/stocks.json` 相同格式的 JSON。
 - App 啟動時會比對 bundled `stocks.json` / `us_stocks.json` 的 checksum，必要時自動把新版 seed 同步進 Room 與本機快取；TW 內建 seed 只會在使用者沒有手動更新股票清單時自動套用，避免覆蓋 `SettingsDataStore.lastStockListUpdateTime` 代表的手動更新結果。
+- 資產總覽頁從首頁左上角圖示進入；圓餅圖可切換資產類別與個別標的（各股票／各銀行存款／各貸款），股票部分使用目前報價及 USD/TWD 匯率換算後的台幣市值。貸款以紅色負債切片呈現，圖形角度使用負債絕對金額，中央淨資產則為股票、銀行存款扣除貸款。個別模式顯示股票代號與名稱，點擊色塊後反白並在圖中央顯示名稱、金額與占比。銀行存款與貸款可新增、編輯、刪除且允許 0 元，只存在各自的 `SettingsDataStore` Flow，不納入任何匯入、匯出或 Google Drive 備份。
 - 設定頁可用使用者填入的 Finnhub API key 手動更新美股股票列表；更新時只刪除並重建 Room 內 `market = US` 的股票資料，不會改動台股清單。
 - 台股股票列表會在每次開啟 App 時檢查上次成功更新時間；超過 7 天才同步 TWSE 清單。這不是背景排程，更新結果不顯示 Toast，失敗或空清單會保留原有資料並在下次開啟時重試。
 - 底部功能列目前以 `ShowChart`、`Payments`、`Add`、`CloudSync`、`Settings` 對應持股、交易、快速新增、資料管理與設定入口；若之後更換 icon，請維持這組語意對應，不要只看原始 Material 預設名稱。

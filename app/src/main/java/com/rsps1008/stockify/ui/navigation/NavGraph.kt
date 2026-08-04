@@ -14,6 +14,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.rsps1008.stockify.ui.screens.AddTransactionScreen
+import com.rsps1008.stockify.ui.screens.AssetOverviewScreen
 import com.rsps1008.stockify.ui.screens.DataManagementScreen
 import com.rsps1008.stockify.ui.screens.DividendInfoScreen
 import com.rsps1008.stockify.ui.screens.HoldingsScreen
@@ -44,6 +45,16 @@ fun NavGraph(
         ) {
             LogScreenEntry("HoldingsScreen")
             HoldingsScreen(navController = navController)
+        }
+        composable(
+            route = Screen.AssetOverview.route,
+            enterTransition = { fadeIn() },
+            exitTransition = { fadeOut() },
+            popEnterTransition = { fadeIn() },
+            popExitTransition = { fadeOut() }
+        ) {
+            LogScreenEntry("AssetOverviewScreen")
+            AssetOverviewScreen(navController = navController)
         }
         composable(
             route = Screen.Transactions.route,

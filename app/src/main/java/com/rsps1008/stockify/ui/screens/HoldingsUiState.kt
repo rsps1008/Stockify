@@ -8,10 +8,18 @@ data class HoldingsUiState(
     val cumulativePLPercentage: Double = 0.0,
     val dailyPL: Double = 0.0,
     val marketValue: Double = 0.0,
+    val taiwanMarketValue: Double = 0.0,
+    val usMarketValue: Double = 0.0,
     val totalCost: Double = 0.0,
     val dividendIncome: Double = 0.0,
     val holdings: List<HoldingInfo> = emptyList(),
+    val assetStockValues: List<AssetStockValue> = emptyList(),
     val sellAverage: Double = 0.0
+)
+
+data class AssetStockValue(
+    val stock: Stock,
+    val marketValue: Double
 )
 
 data class HoldingInfo(

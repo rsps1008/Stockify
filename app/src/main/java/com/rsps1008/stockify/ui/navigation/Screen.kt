@@ -4,6 +4,7 @@ import android.net.Uri
 
 sealed class Screen(val route: String) {
     object Holdings : Screen("holdings")
+    object AssetOverview : Screen("asset_overview")
     object Transactions : Screen("transactions")
     object Settings : Screen("settings")
     object DataManagement : Screen("data_management")

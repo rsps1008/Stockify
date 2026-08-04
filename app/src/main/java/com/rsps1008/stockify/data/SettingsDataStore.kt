@@ -64,6 +64,8 @@ class SettingsDataStore(val context: Context) {
     private val marginDayCountKey = intPreferencesKey("margin_day_count")
     private val defaultMarginAnnualRateKey = doublePreferencesKey("default_margin_annual_rate")
     private val defaultShortBorrowAnnualRateKey = doublePreferencesKey("default_short_borrow_annual_rate")
+    private val bankDepositsKey = stringPreferencesKey("bank_deposits")
+    private val loansKey = stringPreferencesKey("asset_overview_loans")
 
     val fetchIntervalFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
@@ -297,6 +299,26 @@ class SettingsDataStore(val context: Context) {
             preferences[defaultShortBorrowAnnualRateKey]
                 ?.takeIf { it.isFinite() && it >= 0.0 }
                 ?: DEFAULT_SHORT_BORROW_ANNUAL_RATE
+        }
+
+    val bankDepositsFlow: Flow<List<BankDeposit>> = context.dataStore.data
+        .map { preferences ->
+            preferences[bankDepositsKey]
+                ?.let { raw ->
+                    runCatching { Json.decodeFromString<List<BankDeposit>>(raw) }
+                        .getOrDefault(emptyList())
+                }
+                ?: emptyList()
+        }
+
+    val loansFlow: Flow<List<Loan>> = context.dataStore.data
+        .map { preferences ->
+            preferences[loansKey]
+                ?.let { raw ->
+                    runCatching { Json.decodeFromString<List<Loan>>(raw) }
+                        .getOrDefault(emptyList())
+                }
+                ?: emptyList()
         }
 
 
@@ -556,6 +578,18 @@ class SettingsDataStore(val context: Context) {
     suspend fun setDefaultShortBorrowAnnualRate(rate: Double) {
         if (!rate.isFinite() || rate < 0.0) return
         context.dataStore.edit { it[defaultShortBorrowAnnualRateKey] = rate }
+    }
+
+    suspend fun setBankDeposits(deposits: List<BankDeposit>) {
+        context.dataStore.edit {
+            it[bankDepositsKey] = Json.encodeToString(deposits)
+        }
+    }
+
+    suspend fun setLoans(loans: List<Loan>) {
+        context.dataStore.edit {
+            it[loansKey] = Json.encodeToString(loans)
+        }
     }
 
 }

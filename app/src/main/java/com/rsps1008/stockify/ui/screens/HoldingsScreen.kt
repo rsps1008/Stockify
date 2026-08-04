@@ -79,6 +79,7 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -253,6 +254,16 @@ fun HoldingsScreen(navController: NavController) {
                 contentDescription = "Stockify Logo",
                 modifier = Modifier.fillMaxWidth(0.35f)
             )
+
+            IconButton(
+                onClick = { navController.navigate(Screen.AssetOverview.route) },
+                modifier = Modifier.align(Alignment.TopStart)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.PieChart,
+                    contentDescription = "資產總覽"
+                )
+            }
 
             val context = LocalContext.current
             IconButton(

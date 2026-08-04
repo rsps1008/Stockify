@@ -48,6 +48,21 @@ class ViewModelFactory(
                     )
                 ) as T
             }
+            modelClass.isAssignableFrom(AssetOverviewViewModel::class.java) -> {
+                requireNotNull(settingsDataStore) { "settingsDataStore is required for AssetOverviewViewModel" }
+                requireNotNull(realtimeStockDataService) { "realtimeStockDataService is required for AssetOverviewViewModel" }
+                requireNotNull(exchangeRateService) { "exchangeRateService is required for AssetOverviewViewModel" }
+                @Suppress("UNCHECKED_CAST")
+                AssetOverviewViewModel(
+                    settingsDataStore = settingsDataStore,
+                    stockRepository = OfflineStockRepository(
+                        stockDao = stockDao,
+                        realtimeStockDataService = realtimeStockDataService,
+                        settingsDataStore = settingsDataStore,
+                        exchangeRateService = exchangeRateService
+                    )
+                ) as T
+            }
             modelClass.isAssignableFrom(AddTransactionViewModel::class.java) -> {
                 requireNotNull(settingsDataStore) { "settingsDataStore is required for AddTransactionViewModel" }
                 requireNotNull(realtimeStockDataService) { "realtimeStockDataService is required for AddTransactionViewModel" }

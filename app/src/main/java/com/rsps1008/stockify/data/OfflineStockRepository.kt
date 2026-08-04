@@ -1,6 +1,7 @@
 package com.rsps1008.stockify.data
 
 import com.rsps1008.stockify.ui.screens.HoldingInfo
+import com.rsps1008.stockify.ui.screens.AssetStockValue
 import com.rsps1008.stockify.ui.screens.HoldingsUiState
 import com.rsps1008.stockify.ui.screens.TransactionUiState
 import kotlinx.coroutines.flow.Flow
@@ -47,24 +48,26 @@ class OfflineStockRepository(
 
             val currentDateMillis = System.currentTimeMillis()
             val mode = HomeDisplayMode.normalize(homeDisplayMode)
-            val filteredStocks = when (mode) {
-                HomeDisplayMode.TW -> stocks.filter { StockMarket.isTw(it.market) }
-                HomeDisplayMode.US -> stocks.filter { StockMarket.isUs(it.market) }
-                else -> stocks
-            }.filter { stock ->
+            val transactedStocks = stocks.filter { stock ->
                 transactions.any {
                     it.stockCode == stock.code && it.date <= currentDateMillis
                 }
             }
 
-            val holdingInfos = filteredStocks.map { stock ->
+            val filteredStocks = when (mode) {
+                HomeDisplayMode.TW -> transactedStocks.filter { StockMarket.isTw(it.market) }
+                HomeDisplayMode.US -> transactedStocks.filter { StockMarket.isUs(it.market) }
+                else -> transactedStocks
+            }
+
+            suspend fun calculateHoldingInfoFor(stock: Stock): HoldingInfo {
                 val realtime = realTimeData[stock.code]
                 val stockTransactions = transactions.filter { it.stockCode == stock.code }
                 val currentPrice = realTimeData[stock.code]?.currentPrice ?: 0.0
                 val dailyChange = realTimeData[stock.code]?.change ?: 0.0
                 val dailyChangePercentage = realTimeData[stock.code]?.changePercent ?: 0.0
                 val limitState = realtime?.limitState ?: LimitState.NONE
-                calculateHoldingInfo(
+                return calculateHoldingInfo(
                     stock = stock,
                     transactions = stockTransactions,
                     currentPrice = currentPrice,
@@ -75,6 +78,31 @@ class OfflineStockRepository(
                     returnRateMode = returnRateMode,
                     currentDateMillis = currentDateMillis,
                     marginDayCount = marginDayCount
+                )
+            }
+
+            val allHoldingInfos = mutableListOf<HoldingInfo>()
+            for (stock in transactedStocks) {
+                allHoldingInfos += calculateHoldingInfoFor(stock)
+            }
+            val holdingInfos = allHoldingInfos.filter { holding ->
+                when (mode) {
+                    HomeDisplayMode.TW -> StockMarket.isTw(holding.stock.market)
+                    HomeDisplayMode.US -> StockMarket.isUs(holding.stock.market)
+                    else -> true
+                }
+            }
+
+            val taiwanMarketValue = allHoldingInfos
+                .filter { StockMarket.isTw(it.stock.market) }
+                .sumOf { it.marketValue }
+            val usMarketValue = allHoldingInfos
+                .filter { StockMarket.isUs(it.stock.market) }
+                .sumOf { it.marketValue * usdToTwdRate }
+            val assetStockValues = allHoldingInfos.map { holding ->
+                AssetStockValue(
+                    stock = holding.stock,
+                    marketValue = holding.marketValue * if (StockMarket.isUs(holding.stock.market)) usdToTwdRate else 1.0
                 )
             }
 
@@ -127,9 +155,12 @@ class OfflineStockRepository(
                 holdings = holdingInfos, // Only show stocks currently held
                 cumulativePL = cumulativePL,
                 marketValue = marketValue,
+                taiwanMarketValue = taiwanMarketValue,
+                usMarketValue = usMarketValue,
                 totalCost = totalCost,
                 cumulativePLPercentage = cumulativePLPercentage,
                 dividendIncome = dividendIncome,
+                assetStockValues = assetStockValues,
                 dailyPL = dailyPL
             )
         }
