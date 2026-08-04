@@ -1,5 +1,6 @@
 package com.rsps1008.stockify.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,6 +18,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.rsps1008.stockify.StockifyApplication
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
+import com.rsps1008.stockify.ui.navigation.Screen
 import com.rsps1008.stockify.ui.viewmodel.DividendInfoViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import com.rsps1008.stockify.ui.viewmodel.DividendItemUiState
@@ -63,15 +65,22 @@ fun DividendInfoScreen(navController: NavController) {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(dividendList) { item ->
-                DividendInfoCard(item)
+                DividendInfoCard(
+                    item = item,
+                    onClick = { navController.navigate(Screen.StockDetail.createRoute(item.stockCode)) }
+                )
             }
         }
     }
 }
 
 @Composable
-fun DividendInfoCard(item: DividendItemUiState) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+fun DividendInfoCard(item: DividendItemUiState, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
             // Stock Name and Code
             Row(
