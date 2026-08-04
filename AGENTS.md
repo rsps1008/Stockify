@@ -181,6 +181,7 @@ Windows 指令範例：
 
 ## 9. 最近的重要變更
 
+- 「最新配息配股」頁只顯示台股持股；最新現金股利、股票股利、日期與本地上次領取資料會快取在 `SettingsDataStore`，再次進入頁面時先顯示本機快取，再於背景刷新 Yahoo 與本地交易資料。
 - 官網首頁 `docs/index.html` 的 `<head>` 含 `SoftwareApplication`／`MobileApplication` JSON-LD；Google Play 下載連結集中使用 `https://play.google.com/store/apps/details?id=com.rsps1008.stockify`，若日後變更上架網址要同步更新 `downloadUrl`、`installUrl` 與 `offers.url`。
 - 部分融資還款若填入券商實際利息，只取代「本次償還本金比例」對應的歷史預估利息，未償本金過去已累積的預估利息必須保留；純付息會結清付款日前的全部預估利息，全額還款則完整改用實際利息。
 - 新增交易必須先完成市場、欄位與整段批次餘額驗證，成功後才能新增股票主檔與交易；編輯若移動帳戶，來源與目的帳戶都要重播驗證。刪除任何交易也要重播整段融資融券時序，因為分割或減資等公司行動也可能影響後續還券合法性；減資比例必須大於 0 且小於 100，分割比例必須大於 0。

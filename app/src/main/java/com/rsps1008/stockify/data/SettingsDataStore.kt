@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.rsps1008.stockify.data.dividend.DividendInfoCacheEntry
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.encodeToString
@@ -44,6 +45,7 @@ class SettingsDataStore(val context: Context) {
     private val usdToTwdRateKey = doublePreferencesKey("usd_to_twd_rate")
     private val usdToTwdRateUpdatedAtKey = longPreferencesKey("usd_to_twd_rate_updated_at")
     private val taiwanWeightedIndexCacheKey = stringPreferencesKey("taiwan_weighted_index_cache")
+    private val dividendInfoCacheKey = stringPreferencesKey("dividend_info_cache")
     private val homeDisplayModeKey = stringPreferencesKey("home_display_mode")
     private val finnhubApiKeyKey = stringPreferencesKey("finnhub_api_key")
     private val holdingsOrderKey = stringPreferencesKey("holdings_order")
@@ -198,6 +200,17 @@ class SettingsDataStore(val context: Context) {
             preferences[taiwanWeightedIndexCacheKey]?.let {
                 Json.decodeFromString<TaiwanWeightedIndexInfo>(it)
             }
+        }
+
+    val dividendInfoCacheFlow: Flow<Map<String, DividendInfoCacheEntry>> = context.dataStore.data
+        .map { preferences ->
+            preferences[dividendInfoCacheKey]
+                ?.let { raw ->
+                    runCatching {
+                        Json.decodeFromString<Map<String, DividendInfoCacheEntry>>(raw)
+                    }.getOrDefault(emptyMap())
+                }
+                ?: emptyMap()
         }
 
     val homeDisplayModeFlow: Flow<String> = context.dataStore.data
@@ -469,6 +482,24 @@ class SettingsDataStore(val context: Context) {
     suspend fun setTaiwanWeightedIndexCache(info: TaiwanWeightedIndexInfo) {
         context.dataStore.edit {
             it[taiwanWeightedIndexCacheKey] = Json.encodeToString(info)
+        }
+    }
+
+    suspend fun setDividendInfoCacheEntry(
+        stockCode: String,
+        entry: DividendInfoCacheEntry
+    ) {
+        context.dataStore.edit { preferences ->
+            val currentCache = preferences[dividendInfoCacheKey]
+                ?.let { raw ->
+                    runCatching {
+                        Json.decodeFromString<Map<String, DividendInfoCacheEntry>>(raw)
+                    }.getOrDefault(emptyMap())
+                }
+                .orEmpty()
+                .toMutableMap()
+            currentCache[stockCode] = entry
+            preferences[dividendInfoCacheKey] = Json.encodeToString(currentCache)
         }
     }
 

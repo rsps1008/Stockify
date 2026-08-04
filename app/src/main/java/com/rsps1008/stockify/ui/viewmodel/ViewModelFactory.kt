@@ -118,7 +118,8 @@ class ViewModelFactory(
                         settingsDataStore = settingsDataStore,
                         exchangeRateService = exchangeRateService
                     ),
-                    dividendRepository = dividendRepository
+                    dividendRepository = dividendRepository,
+                    settingsDataStore = settingsDataStore
                 ) as T
             }
             modelClass.isAssignableFrom(TransactionDetailViewModel::class.java) -> {
