@@ -85,6 +85,26 @@ private enum class AssetChartMode {
     INDIVIDUAL
 }
 
+// Tableau-style categorical colors: distinct hues first, then a light/dark pair when needed.
+private val individualAssetPalette = listOf(
+    Color(0xFF4E79A7), // blue
+    Color(0xFF59A14F), // green
+    Color(0xFF76B7B2), // teal
+    Color(0xFFB07AA1), // purple
+    Color(0xFFEDC948), // yellow
+    Color(0xFFF28E2B), // orange
+    Color(0xFFA0CBE8), // light blue
+    Color(0xFF8CD17D), // light green
+    Color(0xFF86BCB6), // light teal
+    Color(0xFFD4A6C8), // light purple
+    Color(0xFFFFBE7D), // light orange
+    Color(0xFFF1CE63), // light yellow
+    Color(0xFF499894), // dark teal
+    Color(0xFF9C9EDA), // lavender
+    Color(0xFF9C755F), // brown
+    Color(0xFFBAB0AC)  // gray
+)
+
 @Composable
 fun AssetOverviewScreen(navController: NavController) {
     val application = androidx.compose.ui.platform.LocalContext.current
@@ -936,14 +956,17 @@ private fun buildAssetSlices(
 private fun formatTwd(value: Double): String = String.format(Locale.US, "%,.0f", value)
 
 private fun individualAssetColor(index: Int): Color {
-    val baseHue = (20f + index * 137.508f) % 360f
+    individualAssetPalette.getOrNull(index)?.let { return it }
+
+    val fallbackIndex = index - individualAssetPalette.size
+    val baseHue = (190f + fallbackIndex * 137.508f) % 360f
     val hue = if (baseHue in 345f..360f || baseHue in 0f..15f) {
         (baseHue + 32f) % 360f
     } else {
         baseHue
     }
-    val saturation = 0.60f + (index % 3) * 0.07f
-    val lightness = 0.46f + (index % 4) * 0.05f
+    val saturation = 0.58f + (fallbackIndex % 3) * 0.07f
+    val lightness = 0.50f + (fallbackIndex % 4) * 0.04f
     return Color.hsl(hue, saturation, lightness)
 }
 
