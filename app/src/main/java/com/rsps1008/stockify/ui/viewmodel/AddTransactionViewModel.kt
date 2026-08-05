@@ -11,6 +11,7 @@ import com.rsps1008.stockify.data.StockDao
 import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.Account
+import com.rsps1008.stockify.data.TransactionListRepository
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -97,7 +99,8 @@ class AddTransactionViewModel(
     private val settingsDataStore: SettingsDataStore,
     private val transactionId: Int?,
     private val realtimeStockDataService: RealtimeStockDataService,
-    private val dividendRepository: YahooDividendRepository
+    private val dividendRepository: YahooDividendRepository,
+    private val transactionListRepository: TransactionListRepository
 ) : ViewModel() {
     val taxRateNormalListedStock: StateFlow<Double> =
         settingsDataStore.taxRateNormalListedStockFlow
@@ -305,11 +308,12 @@ class AddTransactionViewModel(
     }
 
 
-    val stocks: StateFlow<List<Stock>> = stockDao.getAllStocks()
+    val stocks: StateFlow<List<Stock>> = transactionListRepository.snapshot
+        .map { it.stocks }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000L),
-            initialValue = emptyList()
+            initialValue = transactionListRepository.snapshot.value.stocks
         )
 
     val feeSettings = combine(

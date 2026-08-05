@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.rsps1008.stockify.data.Account
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.StockDao
+import com.rsps1008.stockify.data.TransactionListRepository
 import com.rsps1008.stockify.ui.screens.TransactionUiState
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -14,6 +15,7 @@ import kotlinx.coroutines.launch
 
 class TransactionsViewModel(
     private val stockDao: StockDao,
+    private val transactionListRepository: TransactionListRepository,
     private val settingsDataStore: SettingsDataStore
 ) : ViewModel() {
 
@@ -38,17 +40,17 @@ class TransactionsViewModel(
     }
 
     val transactions: StateFlow<List<TransactionUiState>> = combine(
-        stockDao.getAllStocks(),
-        stockDao.getAllTransactions(),
-        settingsDataStore.activeAccountIdFlow
-    ) { stocks, transactions, activeAccountId ->
+        transactionListRepository.snapshot,
+        activeAccountId
+    ) { snapshot, activeAccountId ->
         val filteredTx = if (activeAccountId == 0) {
-            transactions
+            snapshot.transactions
         } else {
-            transactions.filter { it.accountId == activeAccountId }
+            snapshot.transactions.filter { it.accountId == activeAccountId }
         }
+        val stocksByCode = snapshot.stocks.associateBy { it.code }
         filteredTx.map { transaction ->
-            val stock = stocks.find { it.code == transaction.stockCode }
+            val stock = stocksByCode[transaction.stockCode]
             TransactionUiState(
                 transaction = transaction,
                 stockName = stock?.name ?: "",

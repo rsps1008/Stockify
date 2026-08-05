@@ -82,7 +82,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             application = application,
             realtimeStockDataService = application.realtimeStockDataService,
             dividendRepository = YahooDividendRepository(application.httpClient),
-            exchangeRateService = application.exchangeRateService
+            exchangeRateService = application.exchangeRateService,
+            transactionListRepository = application.transactionListRepository
         )
     )
     val context = LocalContext.current
@@ -186,7 +187,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         }
     }
 
-    val selectedStock = allStocks.find { it.code == stockCode }
+    val stocksByCode = remember(allStocks) { allStocks.associateBy { it.code } }
+    val selectedStock = stocksByCode[stockCode]
     val transactionMarket = StockMarket.inferFromCode(stockCode)
     val isUsStock = StockMarket.isUs(transactionMarket)
     val isTwStock = StockMarket.isTw(transactionMarket)
@@ -210,7 +212,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
 
     LaunchedEffect(prefillStockCode, allStocks) {
         if (transactionId == null && prefillStockCode != null) {
-            val stock = allStocks.find { it.code == prefillStockCode }
+            val stock = stocksByCode[prefillStockCode]
             if (stock != null) {
                 stockName = stock.name
                 stockCode = stock.code
@@ -251,7 +253,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             }
             "賣出", "融券賣出" -> {
                 if (tradePrice > 0.0 && tradeShares > 0.0) {
-                    val stock = allStocks.find { it.code == stockCode }
+                    val stock = stocksByCode[stockCode]
                     viewModel.calculateSellCosts(
                         tradePrice,
                         tradeShares,
@@ -547,7 +549,9 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         else -> false
     }
 
-    val filteredStocks = prioritizeStockSearchResults(allStocks, stockName)
+    val filteredStocks = remember(allStocks, stockName) {
+        prioritizeStockSearchResults(allStocks, stockName)
+    }
 
     Column(
         modifier = Modifier

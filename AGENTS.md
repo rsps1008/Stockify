@@ -27,6 +27,7 @@
   - 建立共用服務，例如 `SettingsDataStore` 和 `RealtimeStockDataService`。
 - `app/src/main/java/com/rsps1008/stockify/data/`
   - 資料來源、Repository、DAO、網路抓取器、長駐服務。
+  - `TransactionListRepository` 在 Application scope 常駐交易清單與股票主檔的 `StateFlow` 快取；Room 仍是唯一資料來源，新增、編輯、刪除、匯入或清除資料都透過 Room observable query 自動同步快取。
 - `app/src/main/java/com/rsps1008/stockify/ui/navigation/`
   - Compose 導航圖與 route 定義。
   - 頁面進入的 logger 由 `NavGraph` 統一處理，進入各 destination 時會記錄 `Enter XXXScreen`，帶參數頁會一起附上主要參數。
@@ -239,7 +240,7 @@ Windows 指令範例：
 - 設定頁可用使用者填入的 Finnhub API key 手動更新美股股票列表；更新時只刪除並重建 Room 內 `market = US` 的股票資料，不會改動台股清單。
 - 台股股票列表會在每次開啟 App 時檢查上次成功更新時間；超過 7 天才同步 TWSE 清單。這不是背景排程，更新結果不顯示 Toast，失敗或空清單會保留原有資料並在下次開啟時重試。
 - 底部功能列目前以 `ShowChart`、`Payments`、`Add`、`CloudSync`、`Settings` 對應持股、交易、快速新增、資料管理與設定入口；若之後更換 icon，請維持這組語意對應，不要只看原始 Material 預設名稱。
-- 首頁與交易紀錄這兩個 bottom tab 的切換轉場目前固定用淡入淡出，避免預設的上下滑動感；若之後調整 `NavGraph`，請保留這個 top-level 切換風格。
+- 五個 bottom tab 對應的 `HoldingsScreen`、`TransactionsScreen`、`AddTransactionScreen`、`DataManagementScreen` 與 `SettingsScreen`，不在 destination 個別指定 transition，使用 Navigation Compose 的 NavHost 預設效果；其他頁面可依頁面需求個別保留淡入淡出。
 - 新增交易頁在新增模式下由「買進」切換到「賣出」或反向切換時，會保留已輸入的價格與股數，避免使用者因交易類型選錯而重打欄位；切換到其他交易類型仍會清除不適用欄位。
 - 首頁持股卡的即時股價漲跌金額／百分比區塊使用單行自適應文字，會在可用寬度不足時縮小字級，不可換行。
 

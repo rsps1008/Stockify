@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -45,13 +46,19 @@ fun TransactionsScreen(navController: NavController) {
     val viewModel: TransactionsViewModel = viewModel(
         factory = ViewModelFactory(
             stockDao = application.database.stockDao(),
-            settingsDataStore = application.settingsDataStore
+            settingsDataStore = application.settingsDataStore,
+            transactionListRepository = application.transactionListRepository
         )
     )
     val transactions by viewModel.transactions.collectAsState()
 
-    val groupedTransactions = transactions.groupBy {
-        SimpleDateFormat("yyyy/MM/dd (E)", Locale.getDefault()).format(Date(it.transaction.date))
+    val dateFormatter = remember {
+        SimpleDateFormat("yyyy/MM/dd (E)", Locale.getDefault())
+    }
+    val groupedTransactions = remember(transactions, dateFormatter) {
+        transactions.groupBy {
+            dateFormatter.format(Date(it.transaction.date))
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
@@ -96,7 +103,10 @@ fun TransactionsScreen(navController: NavController) {
                             .padding(horizontal = 8.dp, vertical = 8.dp)
                     )
                 }
-                items(transactionsOnDate) { transaction ->
+                items(
+                    items = transactionsOnDate,
+                    key = { it.transaction.id }
+                ) { transaction ->
                     TransactionRow(transaction, navController)
                 }
             }

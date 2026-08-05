@@ -1,8 +1,6 @@
 package com.rsps1008.stockify.ui.navigation
 
 import android.util.Log
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
@@ -36,13 +34,7 @@ fun NavGraph(
         startDestination = Screen.Holdings.route,
         modifier = modifier
     ) {
-        composable(
-            route = Screen.Holdings.route,
-            enterTransition = { fadeIn() },
-            exitTransition = { fadeOut() },
-            popEnterTransition = { fadeIn() },
-            popExitTransition = { fadeOut() }
-        ) {
+        composable(Screen.Holdings.route) {
             LogScreenEntry("HoldingsScreen")
             HoldingsScreen(navController = navController)
         }
@@ -56,13 +48,7 @@ fun NavGraph(
             LogScreenEntry("AssetOverviewScreen")
             AssetOverviewScreen(navController = navController)
         }
-        composable(
-            route = Screen.Transactions.route,
-            enterTransition = { EnterTransition.None },
-            exitTransition = { ExitTransition.None },
-            popEnterTransition = { EnterTransition.None },
-            popExitTransition = { ExitTransition.None }
-        ) {
+        composable(Screen.Transactions.route) {
             LogScreenEntry("TransactionsScreen")
             TransactionsScreen(navController = navController)
         }
@@ -75,7 +61,13 @@ fun NavGraph(
             LogScreenEntry("DataManagementScreen")
             DataManagementScreen()
         }
-        composable(Screen.DividendInfo.route) {
+        composable(
+            route = Screen.DividendInfo.route,
+            enterTransition = { fadeIn() },
+            exitTransition = { fadeOut() },
+            popEnterTransition = { fadeIn() },
+            popExitTransition = { fadeOut() }
+        ) {
             LogScreenEntry("DividendInfoScreen")
             DividendInfoScreen(navController = navController)
         }
@@ -84,7 +76,11 @@ fun NavGraph(
             arguments = listOf(
                 navArgument("stockCode") { type = NavType.StringType },
                 navArgument("market") { type = NavType.StringType }
-            )
+            ),
+            enterTransition = { fadeIn() },
+            exitTransition = { fadeOut() },
+            popEnterTransition = { fadeIn() },
+            popExitTransition = { fadeOut() }
         ) { backStackEntry ->
             val stockCode = backStackEntry.arguments?.getString("stockCode") ?: ""
             val market = backStackEntry.arguments?.getString("market") ?: ""

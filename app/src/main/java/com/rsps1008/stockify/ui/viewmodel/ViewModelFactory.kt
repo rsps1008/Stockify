@@ -11,6 +11,7 @@ import com.rsps1008.stockify.data.TaiwanWeightedIndexService
 import com.rsps1008.stockify.data.UsdTwdExchangeRateService
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
 import com.rsps1008.stockify.data.TwseStockHistoryService
+import com.rsps1008.stockify.data.TransactionListRepository
 
 class ViewModelFactory(
     private val stockDao: StockDao,
@@ -22,7 +23,8 @@ class ViewModelFactory(
     private val dividendRepository: YahooDividendRepository? = null,
     private val exchangeRateService: UsdTwdExchangeRateService? = null,
     private val taiwanWeightedIndexService: TaiwanWeightedIndexService? = null,
-    private val twseStockHistoryService: TwseStockHistoryService? = null
+    private val twseStockHistoryService: TwseStockHistoryService? = null,
+    private val transactionListRepository: TransactionListRepository? = null
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return when {
@@ -67,13 +69,22 @@ class ViewModelFactory(
                 requireNotNull(settingsDataStore) { "settingsDataStore is required for AddTransactionViewModel" }
                 requireNotNull(realtimeStockDataService) { "realtimeStockDataService is required for AddTransactionViewModel" }
                 requireNotNull(dividendRepository) { "dividendRepository is required for AddTransactionViewModel" }
+                requireNotNull(transactionListRepository) { "transactionListRepository is required for AddTransactionViewModel" }
                 @Suppress("UNCHECKED_CAST")
-                AddTransactionViewModel(stockDao, settingsDataStore, transactionId, realtimeStockDataService, dividendRepository) as T
+                AddTransactionViewModel(
+                    stockDao = stockDao,
+                    settingsDataStore = settingsDataStore,
+                    transactionId = transactionId,
+                    realtimeStockDataService = realtimeStockDataService,
+                    dividendRepository = dividendRepository,
+                    transactionListRepository = transactionListRepository
+                ) as T
             }
             modelClass.isAssignableFrom(TransactionsViewModel::class.java) -> {
                 requireNotNull(settingsDataStore) { "settingsDataStore is required for TransactionsViewModel" }
+                requireNotNull(transactionListRepository) { "transactionListRepository is required for TransactionsViewModel" }
                 @Suppress("UNCHECKED_CAST")
-                TransactionsViewModel(stockDao, settingsDataStore) as T
+                TransactionsViewModel(stockDao, transactionListRepository, settingsDataStore) as T
             }
             modelClass.isAssignableFrom(SettingsViewModel::class.java) -> {
                 requireNotNull(settingsDataStore) { "settingsDataStore is required for SettingsViewModel" }

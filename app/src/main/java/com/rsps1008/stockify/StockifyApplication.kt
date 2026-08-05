@@ -9,6 +9,7 @@ import com.rsps1008.stockify.data.StockDataFetcher
 import com.rsps1008.stockify.data.StockListRepository
 import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.TaiwanWeightedIndexService
+import com.rsps1008.stockify.data.TransactionListRepository
 import com.rsps1008.stockify.data.UsdTwdExchangeRateService
 import com.rsps1008.stockify.data.TwseStockHistoryService
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
@@ -18,6 +19,9 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 
 private const val TAIWAN_STOCK_LIST_UPDATE_INTERVAL_MILLIS = 7 * 24 * 60 * 60 * 1000L
@@ -30,6 +34,8 @@ class StockifyApplication : Application() {
     lateinit var realtimeStockDataService: RealtimeStockDataService
     lateinit var taiwanWeightedIndexService: TaiwanWeightedIndexService
     lateinit var twseStockHistoryService: TwseStockHistoryService
+    lateinit var transactionListRepository: TransactionListRepository
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     // ★ 新增：全域 HttpClient（給 TWSE / 即時股價 / 配息用）
 
     val httpClient: HttpClient by lazy {
@@ -91,6 +97,7 @@ class StockifyApplication : Application() {
             applicationContext = this
         )
         twseStockHistoryService = TwseStockHistoryService(httpClient, database.stockDao())
+        transactionListRepository = TransactionListRepository(database.stockDao(), applicationScope)
     }
 
     private companion object {
