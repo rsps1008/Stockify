@@ -181,21 +181,8 @@ class OfflineStockRepository(
             settingsDataStore.marginDayCountFlow
         ) { values ->
             val stock = values[0] as Stock?
-            val transactions = (values[1] as? List<*>)
-                ?.filterIsInstance<StockTransaction>()
-                .orEmpty()
-            val realTimeData = (values[2] as? Map<*, *>)
-                ?.mapNotNull { (code, info) ->
-                    val stockCode = code as? String
-                    val realtimeInfo = info as? RealtimeStockInfo
-                    if (stockCode != null && realtimeInfo != null) {
-                        stockCode to realtimeInfo
-                    } else {
-                        null
-                    }
-                }
-                ?.toMap()
-                .orEmpty()
+            val transactions = values[1] as List<StockTransaction>
+            val realTimeData = values[2] as Map<String, RealtimeStockInfo>
             val preDeductSellFees = values[3] as Boolean
             val returnRateMode = values[4] as ReturnRateMode
             val marginDayCount = values[5] as Int
