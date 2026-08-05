@@ -37,6 +37,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.statusBarsPadding
 
 @Composable
 fun TransactionsScreen(navController: NavController) {
@@ -53,7 +54,7 @@ fun TransactionsScreen(navController: NavController) {
         SimpleDateFormat("yyyy/MM/dd (E)", Locale.getDefault()).format(Date(it.transaction.date))
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()

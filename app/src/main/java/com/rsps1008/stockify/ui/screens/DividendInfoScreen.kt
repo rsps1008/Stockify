@@ -52,8 +52,7 @@ fun DividendInfoScreen(navController: NavController) {
                     IconButton(onClick = { viewModel.refresh() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                     }
-                },
-                windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)
+                }
             )
         }
     ) { innerPadding ->

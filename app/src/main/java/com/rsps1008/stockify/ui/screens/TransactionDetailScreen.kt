@@ -100,8 +100,7 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                     ) {
                         Icon(Icons.Filled.Edit, contentDescription = "Edit")
                     }
-                },
-                windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)
+                }
             )
         }
     ) { paddingValues ->

@@ -248,6 +248,7 @@ Windows 指令範例：
 - 資料管理頁新增 PDF 庫存匯入，支援使用者手動輸入 PDF 密碼後解密與抽取文字。
 - 資料管理頁已分成「雲端備份」、「本地備份」、「外部匯入」與「其他資料操作」；雲端備份會同步持股交易、帳戶與持股排序，本地備份則分別提供這三類資料的六顆按鈕。
 - 「刪除全部交易資料」現在只刪除交易，可選單一帳戶或所有帳戶，帳戶資料會保留；只有「刪除全部資料」才會一併清除交易、帳戶、持股排序與即時價格快取，股票代號主清單保留。
+- 自 Android 15 (SDK 35/36) 起系統預設對 targetSdk >= 35 應用程式強制啟用 Edge-to-Edge（無邊框畫面）。`MainActivity` 最外層 `Scaffold` 的 `contentWindowInsets` 設為 `WindowInsets(0, 0, 0, 0)`（由 `BottomAppBar` 自動吸收導覽列 inset），而狀態欄 inset 交由 `StockDetailScreen`、`TransactionDetailScreen`、`DividendInfoScreen` 與 `YahooWebViewScreen` 等次頁面的 `TopAppBar` 自然吸收，無 TopAppBar 的主頁面（`HoldingsScreen`、`TransactionsScreen`、`DataManagementScreen`、`SettingsScreen`、`AssetOverviewScreen`、`AddTransactionScreen`）頂層容器則套用 `statusBarsPadding()`，確保符合 Google Play 規範且 UI 不會被系統狀態欄覆蓋。
 - PDF 庫存匯入會先整理股票代號與庫存，再抓取目前價格做預覽，最後可選擇替代匯入或新增匯入。
 - PDF import writes snapshot buy transactions with current price, zero fee, expense = price * shares, and note = PDF import snapshot.
 - 首次點擊 PDF 庫存匯入時，會先顯示 4 張教學圖片；使用者可勾選「下次不再提醒」，這個偏好會存到 `SettingsDataStore`。
