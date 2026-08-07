@@ -312,7 +312,11 @@ Windows 指令範例：
 - `ReturnRateMode.REMAINING_POSITION` 若仍有持股但剩餘成本已被配息、減資返還或部分賣出壓到 `<= 0`，也要改以 `totalInvestment` 作為 fallback 分母；不要直接把報酬率顯示成 `0%`。這套規則與配息相容性回傳，已收斂至新增的共用計算輔助工具 `HoldingCalculationSupport.kt`。
 - 配息交易的成本扣減與 XIRR 現金流都應優先使用 `StockTransaction.dividendIncome`，但若遇到舊資料或匯入資料只有 `income` 有值，需 fallback 讀 `income`，避免三種損益模式對同一筆配息各算各的，此規則亦收斂於 `HoldingCalculationSupport.resolveDividendIncome` 中。
 - 個股歷史圖在逐日回放交易後，若因舊資料或事件順序造成股數短暫小於 `0`，要先 clamp 回 `0` 再算市值與報酬，避免 detail chart 單獨畫出負持股。
-- 首頁歷史總圖若某檔股票本次完全抓不到任何有效歷史價，不能把該檔當成 `price = 0` 累加進總圖；要先從該次 home history 計算排除，避免把整體圖表誤算成大幅虧損。
+- 首頁歷史總圖若某檔股票本次完全抓不到任何有效歷史價，不能把該檔當成 `price = 0` 累加進總圖；要先從該次 home history 計算排除，避免把整體圖表誤算成大幅虧損。首次載入只有部分快取時要先維持載入狀態，跨股票日期回放若某檔已有交易但該日期以前沒有可用歷史價，也要跳過該日期，不能以零價格繪圖。
+- 首頁切換歷史圖表的 1M／6M／1Y 區間時，`fetchPortfolioHistory()` 必須先立即將狀態設為 Loading，再背景讀取快取與下載新區間；`HistoryChartSectionContent` 也要在點擊當下鎖定 Loading，直到回傳的 `HistoryState.Success.range` 等於所選區間，避免快取 Success 蓋掉載入畫面而仍顯示上一個區間。
+- 歷史圖表切換區間時，不能只因快取資料非空就視為目標區間已完成；要先確認資料涵蓋所選月份範圍，只有一個月快取時點選 6M／1Y 必須維持 Loading，直到背景抓取完成。
+- 歷史圖表 Loading 畫面要使用 indeterminate `CircularProgressIndicator`；不要把初始 `progress = 0` 當成載入動畫，避免畫面只顯示空的進度軌道。
+- 圖表元件為了立即顯示 Loading 而建立暫時狀態時，若 ViewModel 已提供 `HistoryState.Loading`，必須保留其 `statusText` 與目前進度文案，不可覆蓋成固定的準備文字。
 - 歷史報酬率圖表只有在 0% 接近目前資料範圍時才納入 Y 軸並繪製 0% 基準線，避免高報酬率區間被 0% 拉大比例；報酬率曲線依正負值分段使用漲跌色，穿越 0% 時在交叉點切換顏色。
 - 分割與減資都以事件日記錄的前後股數更新持股，再乘上來源回傳的未還原現價；舊 CSV 若缺少事件後股數，才分別用拆分倍率或減資比例回推。首頁、個股與歷史圖表必須共用這套規則，且同日事件按 `date`、`recordTime` 順序回放。
 - 主畫面外層 `Scaffold` 明確使用 `WindowInsets.safeDrawing`；明細頁與 Yahoo WebView 頁面的 TopAppBar 保持 0 inset，因為它們已位於外層 Scaffold 消費過系統列 inset 的內容區內，避免重複套用間距。

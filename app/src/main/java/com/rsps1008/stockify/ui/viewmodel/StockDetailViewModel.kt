@@ -16,6 +16,7 @@ import com.rsps1008.stockify.data.HoldingCalculationSupport
 import com.rsps1008.stockify.data.MarginCalculationSupport
 import com.rsps1008.stockify.data.ReturnRateCalculator
 import com.rsps1008.stockify.data.ShortSellingCalculationSupport
+import com.rsps1008.stockify.data.HistoryChartCalculationSupport
 import com.rsps1008.stockify.ui.screens.HoldingInfo
 import com.rsps1008.stockify.ui.screens.TransactionUiState
 import kotlinx.coroutines.Dispatchers
@@ -202,8 +203,8 @@ class StockDetailViewModel(
             val market = holdingInfo.value?.stock?.market ?: StockMarket.inferFromCode(stockCode)
 
             val cachedPoints = twseStockHistoryService.getCachedHistory(stockCode, rangeMonths)
-            val hasCachedPoints = cachedPoints.isNotEmpty()
-            if (hasCachedPoints) {
+            val hasCompleteCachedHistory = HistoryChartCalculationSupport.hasHistoryCoverage(cachedPoints, rangeMonths)
+            if (hasCompleteCachedHistory) {
                 _historyStateInternal.value = DetailHistoryStateInternal.Success(range, cachedPoints)
             } else {
                 _historyStateInternal.value = DetailHistoryStateInternal.Loading(0f, "準備下載歷史股價...")
@@ -217,13 +218,13 @@ class StockDetailViewModel(
                     } else {
                         "正在載入第 $step/$total 個月..."
                     }
-                    if (!hasCachedPoints) {
+                    if (!hasCompleteCachedHistory) {
                         _historyStateInternal.value = DetailHistoryStateInternal.Loading(progress, statusText)
                     }
                 }
                 
                 if (rawPoints.isEmpty()) {
-                    if (!hasCachedPoints) {
+                    if (!hasCompleteCachedHistory) {
                         _historyStateInternal.value = DetailHistoryStateInternal.Error("歷史股價回傳資料為空，請稍後重試。")
                     }
                     return@launch
@@ -231,7 +232,7 @@ class StockDetailViewModel(
 
                 _historyStateInternal.value = DetailHistoryStateInternal.Success(range, rawPoints)
             } catch (e: Exception) {
-                if (!hasCachedPoints) {
+                if (!hasCompleteCachedHistory) {
                     _historyStateInternal.value = DetailHistoryStateInternal.Error("載入失敗: ${e.localizedMessage}")
                 }
             }

@@ -260,6 +260,18 @@ class HoldingsViewModel(
                     continue
                 }
 
+                val stocksRequiringPrice = historicalTxsByStock
+                    .filterValues { stockTxs -> stockTxs.any { it.date <= dayEnd } }
+                    .keys
+                if (!HistoryChartCalculationSupport.hasHistoryAtOrBeforeForStocks(
+                        date = pt.date,
+                        stockCodes = stocksRequiringPrice,
+                        allRawPoints = historyInternal.allRawPoints
+                    )
+                ) {
+                    continue
+                }
+
                 var totalMarketValue = 0.0
                 var totalInvestment = 0.0
                 var totalRemainingPositionInvestment = 0.0
@@ -268,9 +280,7 @@ class HoldingsViewModel(
                 val portfolioCashFlows = mutableListOf<CashFlow>()
 
                 for ((stockCode, rawList) in historyInternal.allRawPoints) {
-                    val dailyPrice = rawList.firstOrNull { it.date == pt.date }?.price
-                        ?: rawList.filter { it.date <= pt.date }.lastOrNull()?.price
-                        ?: 0.0
+                    val dailyPrice = HistoryChartCalculationSupport.priceAtOrBefore(rawList, pt.date) ?: 0.0
 
                     val stockTxs = historicalTxsByStock[stockCode] ?: emptyList()
                     val stockType = holdingsState.holdings.firstOrNull { it.stock.code == stockCode }?.stock?.stockType ?: ""
@@ -386,6 +396,7 @@ class HoldingsViewModel(
 
         fetchPortfolioHistoryJob?.cancel()
         val requestVersion = ++homeHistoryRequestVersion
+        _historyStateInternal.value = HomeHistoryStateInternal.Loading(0f, "準備載入歷史股價...")
         fetchPortfolioHistoryJob = viewModelScope.launch {
             val selectedStocks = uiState.value.holdings
                 .map { it.stock }
@@ -411,8 +422,12 @@ class HoldingsViewModel(
                     cachedRawPoints[stock.code] = cachedPoints
                 }
             }
-            val hasCachedPoints = cachedRawPoints.isNotEmpty()
-            if (hasCachedPoints) {
+            val hasCompleteCachedPoints = HistoryChartCalculationSupport.hasHistoryForAllStocks(
+                stockCodes = selectedStocks.map { it.code },
+                allRawPoints = cachedRawPoints,
+                rangeMonths = rangeMonths
+            )
+            if (hasCompleteCachedPoints) {
                 if (requestVersion == homeHistoryRequestVersion) {
                     _historyStateInternal.value = buildHomeHistorySuccess(range, portfolioKey, cachedRawPoints)
                 }
@@ -435,7 +450,7 @@ class HoldingsViewModel(
                         } else {
                             "正在載入 ${stock.name} (${index + 1}/$totalStocks) 第 $step/$total 個月..."
                         }
-                        if (!hasCachedPoints) {
+                        if (!hasCompleteCachedPoints) {
                             if (requestVersion == homeHistoryRequestVersion) {
                                 _historyStateInternal.value = HomeHistoryStateInternal.Loading(
                                     baseProgress + stepProgress,
@@ -450,7 +465,7 @@ class HoldingsViewModel(
                 val availableRawPoints = HistoryChartCalculationSupport.filterEmptyHistorySeries(allRawPoints)
 
                 if (availableRawPoints.isEmpty()) {
-                    if (!hasCachedPoints && requestVersion == homeHistoryRequestVersion) {
+                    if (!hasCompleteCachedPoints && requestVersion == homeHistoryRequestVersion) {
                         _historyStateInternal.value = HomeHistoryStateInternal.Error("無歷史股價數據，請稍後重試。")
                     }
                     return@launch
@@ -460,7 +475,7 @@ class HoldingsViewModel(
                     _historyStateInternal.value = buildHomeHistorySuccess(range, portfolioKey, availableRawPoints)
                 }
             } catch (e: Exception) {
-                if (!hasCachedPoints && requestVersion == homeHistoryRequestVersion) {
+                if (!hasCompleteCachedPoints && requestVersion == homeHistoryRequestVersion) {
                     _historyStateInternal.value = HomeHistoryStateInternal.Error("載入失敗: ${e.localizedMessage}")
                 }
             }

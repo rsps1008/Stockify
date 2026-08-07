@@ -97,9 +97,35 @@ fun HistoryChartSectionContent(
 ) {
     var selectedRange by remember { mutableStateOf(HistoryRange.ONE_MONTH) }
     var selectedMetric by remember { mutableStateOf("報酬") }
+    var rangeLoadRequested by remember { mutableStateOf(false) }
     val normalizedDisplayMode = HomeDisplayMode.normalize(displayMode)
     LaunchedEffect(controlledSelectedRange) {
-        controlledSelectedRange?.let { selectedRange = it }
+        controlledSelectedRange?.let { range ->
+            if (range != selectedRange) {
+                selectedRange = range
+                rangeLoadRequested = true
+            }
+        }
+    }
+    LaunchedEffect(historyState, selectedRange) {
+        when (val state = historyState) {
+            is HistoryState.Success -> {
+                if (state.range == selectedRange) {
+                    rangeLoadRequested = false
+                }
+            }
+            is HistoryState.Error -> rangeLoadRequested = false
+            else -> Unit
+        }
+    }
+    val displayedHistoryState = if (rangeLoadRequested) {
+        when (historyState) {
+            is HistoryState.Loading,
+            is HistoryState.Error -> historyState
+            else -> HistoryState.Loading(0f, "準備載入歷史股價...")
+        }
+    } else {
+        historyState
     }
 
     Card(
@@ -159,9 +185,10 @@ fun HistoryChartSectionContent(
                         selectedRange = selectedRange,
                         onRangeSelected = { range ->
                             selectedRange = range
+                            rangeLoadRequested = true
                             onRangeSelected(range)
                         },
-                        enabled = historyState !is HistoryState.Loading
+                        enabled = displayedHistoryState !is HistoryState.Loading
                     )
                 }
 
@@ -169,7 +196,7 @@ fun HistoryChartSectionContent(
 
                 // State content
                 Crossfade(
-                    targetState = historyState to normalizedDisplayMode,
+                    targetState = displayedHistoryState to normalizedDisplayMode,
                     label = "HistoryStateCrossfade"
                 ) { (state, crossfadeDisplayMode) ->
                     when (state) {
@@ -192,7 +219,6 @@ fun HistoryChartSectionContent(
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 CircularProgressIndicator(
-                                    progress = { state.progress.coerceIn(0f, 1f) },
                                     color = MaterialTheme.colorScheme.primary,
                                     trackColor = MaterialTheme.colorScheme.surfaceVariant
                                 )
