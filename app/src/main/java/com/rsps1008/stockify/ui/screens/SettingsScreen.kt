@@ -31,7 +31,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -43,14 +42,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rsps1008.stockify.BuildConfig
 import com.rsps1008.stockify.R
@@ -86,7 +80,6 @@ fun SettingsScreen() {
     val message by viewModel.message.collectAsState()
     val lastUpdateTime by viewModel.lastStockListUpdateTime.collectAsState()
     val lastUsUpdateTime by viewModel.lastUsStockListUpdateTime.collectAsState()
-    val finnhubApiKey by viewModel.finnhubApiKey.collectAsState()
     val updatingStockListMarket by viewModel.updatingStockListMarket.collectAsState()
 
     val feeDiscount by viewModel.feeDiscount.collectAsState()
@@ -113,16 +106,12 @@ fun SettingsScreen() {
     val defaultMarginAnnualRate by viewModel.defaultMarginAnnualRate.collectAsState()
     val defaultShortBorrowAnnualRate by viewModel.defaultShortBorrowAnnualRate.collectAsState()
     val context = LocalContext.current
-    val uriHandler = LocalUriHandler.current
-    val focusManager = LocalFocusManager.current
     var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
     val privacyPolicyText = remember {
         context.resources.openRawResource(R.raw.privacy_policy).bufferedReader().use { it.readText() }
     }
 
     val scope = rememberCoroutineScope()
-    var finnhubApiKeyText by remember(finnhubApiKey) { mutableStateOf(finnhubApiKey) }
-
     LaunchedEffect(message) {
         message?.let {
             Toast.makeText(context, it, Toast.LENGTH_LONG).show()
@@ -676,37 +665,9 @@ fun SettingsScreen() {
                                     Text("美股股票列表", style = MaterialTheme.typography.titleMedium)
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
-                                        text = "更新前請先到 Finnhub 自行取得免費 API key，再填入下方欄位。",
+                                        text = "資料來源為 Nasdaq Trader，更新時會同步 Nasdaq 與其他美國交易所掛牌商品。",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    TextButton(onClick = { uriHandler.openUri("https://finnhub.io/register") }) {
-                                        Text("前往 Finnhub 取得免費 API key")
-                                    }
-                                    OutlinedTextField(
-                                        value = finnhubApiKeyText,
-                                        onValueChange = { finnhubApiKeyText = it },
-                                        label = { Text("Finnhub API key") },
-                                        singleLine = true,
-                                        keyboardOptions = KeyboardOptions(
-                                            keyboardType = KeyboardType.Ascii,
-                                            autoCorrectEnabled = false,
-                                            imeAction = ImeAction.Done
-                                        ),
-                                        keyboardActions = KeyboardActions(
-                                            onDone = {
-                                                focusManager.clearFocus()
-                                                viewModel.setFinnhubApiKey(finnhubApiKeyText.trim())
-                                            }
-                                        ),
-                                        visualTransformation = VisualTransformation.None,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .onFocusChanged { focusState ->
-                                                if (!focusState.isFocused) {
-                                                    viewModel.setFinnhubApiKey(finnhubApiKeyText.trim())
-                                                }
-                                            }
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Row(
@@ -714,8 +675,8 @@ fun SettingsScreen() {
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
                                         Button(
-                                            onClick = { viewModel.updateStockListFromFinnhub() },
-                                            enabled = !isLoading && finnhubApiKey.isNotBlank(),
+                                            onClick = { viewModel.updateStockListFromNasdaq() },
+                                            enabled = !isLoading,
                                             shape = SettingsButtonShape
                                         ) {
                                             Text("更新美股股票列表")

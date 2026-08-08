@@ -47,7 +47,6 @@ class SettingsDataStore(val context: Context) {
     private val taiwanWeightedIndexCacheKey = stringPreferencesKey("taiwan_weighted_index_cache")
     private val dividendInfoCacheKey = stringPreferencesKey("dividend_info_cache")
     private val homeDisplayModeKey = stringPreferencesKey("home_display_mode")
-    private val finnhubApiKeyKey = stringPreferencesKey("finnhub_api_key")
     private val holdingsOrderKey = stringPreferencesKey("holdings_order")
     private val realizedHoldingsOrderKey = stringPreferencesKey("realized_holdings_order")
     private val holdingsReorderHintShownKey = booleanPreferencesKey("holdings_reorder_hint_shown")
@@ -216,11 +215,6 @@ class SettingsDataStore(val context: Context) {
     val homeDisplayModeFlow: Flow<String> = context.dataStore.data
         .map { preferences ->
             preferences[homeDisplayModeKey] ?: HomeDisplayMode.COMBINED
-        }
-
-    val finnhubApiKeyFlow: Flow<String> = context.dataStore.data
-        .map { preferences ->
-            preferences[finnhubApiKeyKey] ?: ""
         }
 
     val holdingsOrderFlow: Flow<List<String>> = context.dataStore.data
@@ -506,12 +500,6 @@ class SettingsDataStore(val context: Context) {
     suspend fun setHomeDisplayMode(mode: String) {
         context.dataStore.edit {
             it[homeDisplayModeKey] = HomeDisplayMode.normalize(mode)
-        }
-    }
-
-    suspend fun setFinnhubApiKey(apiKey: String) {
-        context.dataStore.edit {
-            it[finnhubApiKeyKey] = apiKey.trim()
         }
     }
 

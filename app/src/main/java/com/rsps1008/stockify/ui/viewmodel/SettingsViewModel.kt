@@ -141,9 +141,6 @@ class SettingsViewModel(
     val lastUsStockListUpdateTime: StateFlow<Long?> = settingsDataStore.lastUsStockListUpdateTimeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
-    val finnhubApiKey: StateFlow<String> = settingsDataStore.finnhubApiKeyFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), "")
-
     val feeDiscount: StateFlow<Double> = settingsDataStore.feeDiscountFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 0.28)
 
@@ -1117,12 +1114,6 @@ class SettingsViewModel(
         }
     }
 
-    fun setFinnhubApiKey(apiKey: String) {
-        viewModelScope.launch {
-            settingsDataStore.setFinnhubApiKey(apiKey)
-        }
-    }
-
     fun setFallbackNoticeEnabled(enabled: Boolean) {
         viewModelScope.launch {
             settingsDataStore.setFallbackNoticeEnabled(enabled)
@@ -1277,27 +1268,21 @@ class SettingsViewModel(
         }
     }
 
-    fun updateStockListFromFinnhub() {
-        val apiKey = finnhubApiKey.value.trim()
-        if (apiKey.isBlank()) {
-            _message.value = "請先到 Finnhub 取得免費 API key 並填入後再更新美股列表"
-            return
-        }
-
+    fun updateStockListFromNasdaq() {
         viewModelScope.launch {
             _isLoading.value = true
             _updatingStockListMarket.value = StockMarket.US
             try {
-                val stocks = stockDataFetcher.fetchUsStockList(apiKey)
+                val stocks = stockDataFetcher.fetchUsStockList()
                 if (stocks.isEmpty()) {
-                    throw IllegalStateException("Finnhub 未回傳可用的美股資料")
+                    throw IllegalStateException("Nasdaq Trader 未回傳可用的美股資料")
                 }
                 stockDao.deleteStocksByMarket(StockMarket.US)
                 stockDao.insertStocks(stocks)
                 settingsDataStore.setLastUsStockListUpdateTime(System.currentTimeMillis())
                 _message.value = "美股股票列表更新成功！共 ${stocks.size} 筆"
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to update US stock list from Finnhub", e)
+                Log.e(TAG, "Failed to update US stock list from Nasdaq Trader", e)
                 _message.value = "美股列表更新失敗: ${e.message}"
             } finally {
                 _updatingStockListMarket.value = null

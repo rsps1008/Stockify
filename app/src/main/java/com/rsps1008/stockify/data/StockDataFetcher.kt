@@ -6,13 +6,9 @@ import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import org.jsoup.Jsoup
+import java.io.BufferedReader
+import java.io.StringReader
 
 class StockDataFetcher {
     private val client = HttpClient(CIO) {
@@ -88,37 +84,54 @@ class StockDataFetcher {
         stocks
     }
 
-    suspend fun fetchUsStockList(finnhubApiKey: String): List<Stock> = withContext(Dispatchers.IO) {
-        val apiKey = finnhubApiKey.trim()
-        require(apiKey.isNotBlank()) { "請先輸入 Finnhub API key" }
+    suspend fun fetchUsStockList(): List<Stock> = withContext(Dispatchers.IO) {
+        val sources = listOf(
+            "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt" to "Symbol",
+            "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt" to "ACT Symbol"
+        )
+        val stocksByCode = linkedMapOf<String, Stock>()
 
-        val url = "https://finnhub.io/api/v1/stock/symbol?exchange=US&token=$apiKey"
-        val responseText = client.get(url).bodyAsText()
-        val root = Json.parseToJsonElement(responseText)
-        val symbols = root as? JsonArray
-        if (symbols == null) {
-            val errorMessage = runCatching {
-                root.jsonObject["error"]?.jsonPrimitive?.contentOrNull
-            }.getOrNull()
-            throw IllegalStateException(errorMessage ?: "Finnhub 回傳格式不正確")
+        for ((url, symbolColumn) in sources) {
+            val responseText = client.get(url).bodyAsText()
+            val reader = BufferedReader(StringReader(responseText))
+            val header = reader.readLine()
+                ?.removePrefix("\uFEFF")
+                ?.split('|')
+                ?: continue
+            val columns = header.withIndex().associate { it.value to it.index }
+            val symbolIndex = columns[symbolColumn] ?: continue
+            val nameIndex = columns["Security Name"] ?: continue
+            val testIssueIndex = columns["Test Issue"] ?: -1
+            val etfIndex = columns["ETF"] ?: -1
+
+            reader.forEachLine { line ->
+                val fields = line.split('|')
+                val symbol = fields.getOrNull(symbolIndex)?.trim().orEmpty()
+                if (symbol.isBlank() || symbol.startsWith("File Creation Time:")) return@forEachLine
+                if (testIssueIndex >= 0 && fields.getOrNull(testIssueIndex)?.trim() == "Y") return@forEachLine
+
+                val name = fields.getOrNull(nameIndex)?.trim().orEmpty()
+                val stockType = if (etfIndex >= 0 && fields.getOrNull(etfIndex)?.trim() == "Y") {
+                    "ETF"
+                } else {
+                    "Stock"
+                }
+                stocksByCode.putIfAbsent(
+                    symbol,
+                    Stock(
+                        id = 0,
+                        code = symbol,
+                        name = name.ifBlank { symbol },
+                        market = StockMarket.US,
+                        industry = "",
+                        stockType = stockType
+                    )
+                )
+            }
         }
 
-        symbols.mapNotNull { item ->
-            val stockJson = item as? JsonObject ?: return@mapNotNull null
-            val symbol = stockJson["symbol"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
-            if (symbol.isBlank()) return@mapNotNull null
-
-            val description = stockJson["description"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
-            val type = stockJson["type"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
-
-            Stock(
-                id = 0,
-                code = symbol,
-                name = description.ifBlank { symbol },
-                market = StockMarket.US,
-                industry = "",
-                stockType = if (type == "ETF" || type == "ETP") "ETF" else "Stock"
-            )
+        stocksByCode.values.toList().also {
+            if (it.isEmpty()) throw IllegalStateException("Nasdaq Trader 未回傳可用的美股資料")
         }
     }
 }
