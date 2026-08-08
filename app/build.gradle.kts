@@ -144,6 +144,9 @@ dependencies {
     // DataStore
     implementation(libs.datastore.preferences)
 
+    // App lock biometric authentication
+    implementation(libs.androidx.biometric)
+
     // Kotlinx Serialization
     implementation(libs.kotlinx.serialization.json)
 

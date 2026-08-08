@@ -11,8 +11,11 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.rsps1008.stockify.data.dividend.DividendInfoCacheEntry
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -67,6 +70,10 @@ class SettingsDataStore(val context: Context) {
     private val defaultShortBorrowAnnualRateKey = doublePreferencesKey("default_short_borrow_annual_rate")
     private val bankDepositsKey = stringPreferencesKey("bank_deposits")
     private val loansKey = stringPreferencesKey("asset_overview_loans")
+    private val appLockEnabledKey = booleanPreferencesKey("app_lock_enabled")
+    private val appLockPinSaltKey = stringPreferencesKey("app_lock_pin_salt")
+    private val appLockPinHashKey = stringPreferencesKey("app_lock_pin_hash")
+    private val appLockBiometricEnabledKey = booleanPreferencesKey("app_lock_biometric_enabled")
 
     val fetchIntervalFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
@@ -326,6 +333,19 @@ class SettingsDataStore(val context: Context) {
                         .getOrDefault(emptyList())
                 }
                 ?: emptyList()
+        }
+
+    val appLockEnabledFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[appLockEnabledKey] == true &&
+                !preferences[appLockPinSaltKey].isNullOrBlank() &&
+                !preferences[appLockPinHashKey].isNullOrBlank()
+        }
+
+    val appLockBiometricEnabledFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[appLockEnabledKey] == true &&
+                preferences[appLockBiometricEnabledKey] == true
         }
 
 
@@ -608,6 +628,54 @@ class SettingsDataStore(val context: Context) {
     suspend fun setLoans(loans: List<Loan>) {
         context.dataStore.edit {
             it[loansKey] = Json.encodeToString(loans)
+        }
+    }
+
+    suspend fun enableAppLock(pin: String) {
+        val pinHash = withContext(Dispatchers.Default) { hashAppLockPin(pin) }
+        context.dataStore.edit {
+            it[appLockPinSaltKey] = pinHash.salt
+            it[appLockPinHashKey] = pinHash.hash
+            it[appLockBiometricEnabledKey] = false
+            it[appLockEnabledKey] = true
+        }
+    }
+
+    suspend fun verifyAppLockPin(pin: String): Boolean {
+        val preferences = context.dataStore.data.first()
+        val salt = preferences[appLockPinSaltKey] ?: return false
+        val hash = preferences[appLockPinHashKey] ?: return false
+        return withContext(Dispatchers.Default) { verifyAppLockPin(pin, salt, hash) }
+    }
+
+    suspend fun changeAppLockPin(currentPin: String, newPin: String): Boolean {
+        if (!verifyAppLockPin(currentPin) || !isValidAppLockPin(newPin)) return false
+        val pinHash = withContext(Dispatchers.Default) { hashAppLockPin(newPin) }
+        context.dataStore.edit {
+            it[appLockPinSaltKey] = pinHash.salt
+            it[appLockPinHashKey] = pinHash.hash
+        }
+        return true
+    }
+
+    suspend fun disableAppLock(pin: String): Boolean {
+        if (!verifyAppLockPin(pin)) return false
+        context.dataStore.edit {
+            it.remove(appLockEnabledKey)
+            it.remove(appLockPinSaltKey)
+            it.remove(appLockPinHashKey)
+            it.remove(appLockBiometricEnabledKey)
+        }
+        return true
+    }
+
+    suspend fun setAppLockBiometricEnabled(enabled: Boolean) {
+        context.dataStore.edit {
+            if (it[appLockEnabledKey] == true) {
+                it[appLockBiometricEnabledKey] = enabled
+            } else {
+                it.remove(appLockBiometricEnabledKey)
+            }
         }
     }
 

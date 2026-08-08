@@ -216,6 +216,12 @@ class SettingsViewModel(
     val defaultShortBorrowAnnualRate: StateFlow<Double> = settingsDataStore.defaultShortBorrowAnnualRateFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 3.5)
 
+    val appLockEnabled: StateFlow<Boolean> = settingsDataStore.appLockEnabledFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), false)
+
+    val appLockBiometricEnabled: StateFlow<Boolean> = settingsDataStore.appLockBiometricEnabledFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), false)
+
     fun setMarginFeatureEnabled(enabled: Boolean) = viewModelScope.launch {
         settingsDataStore.setMarginFeatureEnabled(enabled)
     }
@@ -230,6 +236,29 @@ class SettingsViewModel(
 
     fun setDefaultShortBorrowAnnualRate(rate: Double) = viewModelScope.launch {
         settingsDataStore.setDefaultShortBorrowAnnualRate(rate)
+    }
+
+    fun enableAppLock(pin: String, onResult: (Boolean) -> Unit) = viewModelScope.launch {
+        val succeeded = runCatching { settingsDataStore.enableAppLock(pin) }.isSuccess
+        if (succeeded) _message.value = "應用程式鎖定已啟用"
+        onResult(succeeded)
+    }
+
+    fun disableAppLock(pin: String, onResult: (Boolean) -> Unit) = viewModelScope.launch {
+        val succeeded = settingsDataStore.disableAppLock(pin)
+        if (succeeded) _message.value = "應用程式鎖定已關閉"
+        onResult(succeeded)
+    }
+
+    fun changeAppLockPin(currentPin: String, newPin: String, onResult: (Boolean) -> Unit) =
+        viewModelScope.launch {
+            val succeeded = settingsDataStore.changeAppLockPin(currentPin, newPin)
+            if (succeeded) _message.value = "數字密碼已更新"
+            onResult(succeeded)
+        }
+
+    fun setAppLockBiometricEnabled(enabled: Boolean) = viewModelScope.launch {
+        settingsDataStore.setAppLockBiometricEnabled(enabled)
     }
 
     init {

@@ -19,6 +19,7 @@
 - Room 是交易、股票、帳戶與歷史價格的唯一資料來源；目前資料庫版本為 16。修改 entity 必須新增 migration，不可破壞既有資料。
 - `TransactionListRepository` 在 Application scope 維護 Room observable query 的 `StateFlow` 快取；新增、編輯、刪除、匯入與清除仍須經 Room 自動同步。
 - 使用者偏好與輕量快取集中在 `SettingsDataStore`。若新增或修改設定，需一起檢查 DataStore、ViewModel、畫面、預設值與舊版相容性。
+- App 鎖定使用 4–8 位數字密碼，DataStore 只保存隨機 salt 與 PBKDF2 雜湊，不可保存明文；冷啟動及離開 App 後重新上鎖。生物辨識僅作快速解鎖，數字密碼必須保留為備援。
 - `Stock.market` 使用穩定代碼 `TW` / `US`；`Stock.exchange` 僅表示台股上市、上櫃、興櫃。所有查詢、cache key、排序與批次識別都要保留市場／股票／帳戶邊界。
 - 導航參數必須使用 `Screen.*.createRoute()` 或 `Uri.encode()`，避免美股 ticker 或保留字元造成 route 解析失敗。
 

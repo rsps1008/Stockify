@@ -60,7 +60,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private val SettingsButtonShape: Shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+internal val SettingsButtonShape: Shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,6 +105,8 @@ fun SettingsScreen() {
     val marginDayCount by viewModel.marginDayCount.collectAsState()
     val defaultMarginAnnualRate by viewModel.defaultMarginAnnualRate.collectAsState()
     val defaultShortBorrowAnnualRate by viewModel.defaultShortBorrowAnnualRate.collectAsState()
+    val appLockEnabled by viewModel.appLockEnabled.collectAsState()
+    val appLockBiometricEnabled by viewModel.appLockBiometricEnabled.collectAsState()
     val context = LocalContext.current
     var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
     val privacyPolicyText = remember {
@@ -286,6 +288,14 @@ fun SettingsScreen() {
                         }
                     }
                 }
+            }
+
+            item {
+                AppLockSettingsSection(
+                    viewModel = viewModel,
+                    appLockEnabled = appLockEnabled,
+                    biometricEnabled = appLockBiometricEnabled
+                )
             }
 
             item {
@@ -649,10 +659,10 @@ fun SettingsScreen() {
                                             Text("更新台股股票列表")
                                         }
                                         if (updatingStockListMarket == "TW") CircularProgressIndicator()
-
-                                        val updateTimeText = lastUpdateTime?.let { "(${formatTimestamp(it)})" } ?: "(預設列表)"
-                                        Text(text = updateTimeText, style = MaterialTheme.typography.bodySmall)
                                     }
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    val updateTimeText = lastUpdateTime?.let { "更新時間: (${formatTimestamp(it)})" } ?: "(預設列表)"
+                                    Text(text = updateTimeText, style = MaterialTheme.typography.bodySmall)
                                     Spacer(modifier = Modifier.height(8.dp))
                                 }
                             }
@@ -676,10 +686,10 @@ fun SettingsScreen() {
                                             Text("更新美股股票列表")
                                         }
                                         if (updatingStockListMarket == "US") CircularProgressIndicator()
-
-                                        val usUpdateTimeText = lastUsUpdateTime?.let { "(${formatTimestamp(it)})" } ?: "(預設列表)"
-                                        Text(text = usUpdateTimeText, style = MaterialTheme.typography.bodySmall)
                                     }
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    val usUpdateTimeText = lastUsUpdateTime?.let { "(更新時間: ${formatTimestamp(it)})" } ?: "(預設列表)"
+                                    Text(text = usUpdateTimeText, style = MaterialTheme.typography.bodySmall)
                                 }
                             }
                         }
