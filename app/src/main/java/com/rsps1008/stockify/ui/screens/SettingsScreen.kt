@@ -623,7 +623,7 @@ fun SettingsScreen() {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("股票列表更新", style = MaterialTheme.typography.titleLarge)
                         Text(
-                            text = "新上市的股票可透過此區自行新增。",
+                            text = "新上市的股票可透過此區自行更新。APP也會在超過7日未更新時嘗試自動更新。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp)
@@ -663,12 +663,6 @@ fun SettingsScreen() {
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Text("美股股票列表", style = MaterialTheme.typography.titleMedium)
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text(
-                                        text = "資料來源為 Nasdaq Trader，更新時會同步 Nasdaq 與其他美國交易所掛牌商品。",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,

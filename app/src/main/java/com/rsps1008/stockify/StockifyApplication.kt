@@ -24,7 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 
-private const val TAIWAN_STOCK_LIST_UPDATE_INTERVAL_MILLIS = 7 * 24 * 60 * 60 * 1000L
+private const val STOCK_LIST_UPDATE_INTERVAL_MILLIS = 7 * 24 * 60 * 60 * 1000L
 
 
 class StockifyApplication : Application() {
@@ -62,7 +62,7 @@ class StockifyApplication : Application() {
      */
     suspend fun updateTaiwanStockListIfDue() {
         val lastUpdatedAt = settingsDataStore.lastStockListUpdateTimeFlow.first()
-        if (lastUpdatedAt != null && System.currentTimeMillis() - lastUpdatedAt < TAIWAN_STOCK_LIST_UPDATE_INTERVAL_MILLIS) {
+        if (lastUpdatedAt != null && System.currentTimeMillis() - lastUpdatedAt < STOCK_LIST_UPDATE_INTERVAL_MILLIS) {
             return
         }
 
@@ -80,6 +80,32 @@ class StockifyApplication : Application() {
             Log.i(TAG, "Updated Taiwan stock list on app open: ${stocks.size} stocks")
         } catch (e: Exception) {
             Log.w(TAG, "Failed to update Taiwan stock list on app open", e)
+        }
+    }
+
+    /**
+     * Checks the U.S. stock list once when the app opens. This deliberately does not
+     * schedule background work or surface a user-facing message.
+     */
+    suspend fun updateUsStockListIfDue() {
+        val lastUpdatedAt = settingsDataStore.lastUsStockListUpdateTimeFlow.first()
+        if (lastUpdatedAt != null && System.currentTimeMillis() - lastUpdatedAt < STOCK_LIST_UPDATE_INTERVAL_MILLIS) {
+            return
+        }
+
+        try {
+            val stocks = StockDataFetcher().fetchUsStockList()
+            if (stocks.isEmpty()) {
+                Log.w(TAG, "U.S. stock list update returned no stocks")
+                return
+            }
+
+            database.stockDao().deleteStocksByMarket(StockMarket.US)
+            database.stockDao().insertStocks(stocks)
+            settingsDataStore.setLastUsStockListUpdateTime(System.currentTimeMillis())
+            Log.i(TAG, "Updated U.S. stock list on app open: ${stocks.size} stocks")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to update U.S. stock list on app open", e)
         }
     }
 

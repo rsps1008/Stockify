@@ -49,7 +49,8 @@ class MainActivity : AppCompatActivity() {
         val stockifyApplication = application as StockifyApplication
         val dataStore = stockifyApplication.settingsDataStore
         lifecycleScope.launch {
-            stockifyApplication.updateTaiwanStockListIfDue()
+            launch { stockifyApplication.updateTaiwanStockListIfDue() }
+            launch { stockifyApplication.updateUsStockListIfDue() }
         }
         lifecycleScope.launch {
             dataStore.themeFlow.collect { theme ->
