@@ -20,11 +20,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.BottomAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -131,6 +138,7 @@ class AppLockSessionViewModel : ViewModel() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(navController: NavHostController) {
     Scaffold(
@@ -145,83 +153,93 @@ fun MainScreen(navController: NavHostController) {
                     ) {
                         val navBackStackEntry by navController.currentBackStackEntryAsState()
                         val currentDestination = navBackStackEntry?.destination
-                        IconButton(onClick = {
-                            navigateToTopLevel(navController, Screen.Holdings.route)
-                        }) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_nav_holdings),
-                                contentDescription = "Holdings",
-                                modifier = Modifier.size(30.dp),
-                                tint = if (currentDestination?.hierarchy?.any { it.route == Screen.Holdings.route } == true) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                }
-                            )
-                        }
-                        IconButton(onClick = {
-                            navigateToTopLevel(navController, Screen.Transactions.route)
-                        }) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_nav_transactions),
-                                contentDescription = "Transactions",
-                                modifier = Modifier.size(30.dp),
-                                tint = if (currentDestination?.hierarchy?.any { it.route == Screen.Transactions.route } == true) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                }
-                            )
-                        }
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            shadowElevation = 3.dp,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .size(50.dp)
-                                .clickable {
-                                    val currentEntry = navController.currentBackStackEntry
-                                    val stockCode = if (currentEntry?.destination?.route == Screen.StockDetail.route) {
-                                        currentEntry.arguments?.getString("stockCode")
+                        NavigationTooltip("查看持股總覽") {
+                            IconButton(onClick = {
+                                navigateToTopLevel(navController, Screen.Holdings.route)
+                            }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_nav_holdings),
+                                    contentDescription = "持股總覽",
+                                    modifier = Modifier.size(30.dp),
+                                    tint = if (currentDestination?.hierarchy?.any { it.route == Screen.Holdings.route } == true) {
+                                        MaterialTheme.colorScheme.primary
                                     } else {
-                                        null
+                                        MaterialTheme.colorScheme.onSurface
                                     }
-                                    navController.navigate(Screen.AddTransaction.createRoute(stockCode = stockCode)) {
-                                        launchSingleTop = true
-                                    }
-                                }
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Filled.Add, contentDescription = "Add")
+                                )
                             }
                         }
-                        IconButton(onClick = {
-                            navigateToTopLevel(navController, Screen.DataManagement.route)
-                        }) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_nav_data_management),
-                                contentDescription = "Data Management",
-                                modifier = Modifier.size(30.dp),
-                                tint = if (currentDestination?.hierarchy?.any { it.route == Screen.DataManagement.route } == true) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                }
-                            )
+                        NavigationTooltip("查看交易紀錄") {
+                            IconButton(onClick = {
+                                navigateToTopLevel(navController, Screen.Transactions.route)
+                            }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_nav_transactions),
+                                    contentDescription = "交易紀錄",
+                                    modifier = Modifier.size(30.dp),
+                                    tint = if (currentDestination?.hierarchy?.any { it.route == Screen.Transactions.route } == true) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    }
+                                )
+                            }
                         }
-                        IconButton(onClick = {
-                            navigateToTopLevel(navController, Screen.Settings.route)
-                        }) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_nav_settings),
-                                contentDescription = "Settings",
-                                modifier = Modifier.size(30.dp),
-                                tint = if (currentDestination?.hierarchy?.any { it.route == Screen.Settings.route } == true) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
+                        NavigationTooltip("新增一筆交易") {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                shadowElevation = 3.dp,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .size(50.dp)
+                                    .clickable {
+                                        val currentEntry = navController.currentBackStackEntry
+                                        val stockCode = if (currentEntry?.destination?.route == Screen.StockDetail.route) {
+                                            currentEntry.arguments?.getString("stockCode")
+                                        } else {
+                                            null
+                                        }
+                                        navController.navigate(Screen.AddTransaction.createRoute(stockCode = stockCode)) {
+                                            launchSingleTop = true
+                                        }
+                                    }
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Filled.Add, contentDescription = "新增交易")
                                 }
-                            )
+                            }
+                        }
+                        NavigationTooltip("匯入、匯出與備份資料") {
+                            IconButton(onClick = {
+                                navigateToTopLevel(navController, Screen.DataManagement.route)
+                            }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_nav_data_management),
+                                    contentDescription = "資料管理",
+                                    modifier = Modifier.size(30.dp),
+                                    tint = if (currentDestination?.hierarchy?.any { it.route == Screen.DataManagement.route } == true) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    }
+                                )
+                            }
+                        }
+                        NavigationTooltip("調整 App 設定") {
+                            IconButton(onClick = {
+                                navigateToTopLevel(navController, Screen.Settings.route)
+                            }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_nav_settings),
+                                    contentDescription = "設定",
+                                    modifier = Modifier.size(30.dp),
+                                    tint = if (currentDestination?.hierarchy?.any { it.route == Screen.Settings.route } == true) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    }
+                                )
+                            }
                         }
 
                     }
@@ -234,6 +252,21 @@ fun MainScreen(navController: NavHostController) {
             modifier = Modifier.padding(innerPadding)
         )
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NavigationTooltip(
+    message: String,
+    content: @Composable () -> Unit
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+        tooltip = { PlainTooltip { Text(message) } },
+        state = rememberTooltipState(),
+        hasAction = false,
+        content = content
+    )
 }
 
 private fun navigateToTopLevel(
