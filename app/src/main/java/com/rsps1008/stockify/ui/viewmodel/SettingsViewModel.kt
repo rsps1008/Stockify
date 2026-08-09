@@ -9,6 +9,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.content.ContentUris
 import android.util.Log
+import androidx.room.withTransaction
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -19,6 +20,7 @@ import com.google.api.services.drive.DriveScopes
 import com.rsps1008.stockify.data.CsvService
 import com.rsps1008.stockify.data.CsvTransaction
 import com.rsps1008.stockify.data.Account
+import com.rsps1008.stockify.StockifyApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 import com.rsps1008.stockify.data.GoogleDriveService
@@ -39,6 +41,7 @@ import com.rsps1008.stockify.data.StockListRepository
 import com.rsps1008.stockify.data.TwseStockHistoryService
 import com.rsps1008.stockify.data.assignProvisionalImportIds
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -77,6 +80,7 @@ class SettingsViewModel(
     private val csvService = CsvService()
     private val pdfHoldingImportService = PdfHoldingImportService()
     private val holdingsOrderBackupService = HoldingsOrderBackupService()
+    private val appDatabase = (application as StockifyApplication).database
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -766,46 +770,47 @@ class SettingsViewModel(
                     throw IllegalArgumentException("沒有可匯入的股票，請確認目前價格是否抓取成功")
                 }
 
-                if (replaceExisting) {
-                    deleteAllData()
-                }
-
-                val allStocksByCode = stockDao.getAllStocks().first().associateBy { it.code }
                 val importDate = System.currentTimeMillis()
-
-                importableItems.forEachIndexed { index, item ->
-                    val existingStock = allStocksByCode[item.stockCode]
-                    val stock = existingStock ?: Stock(
-                        name = item.stockName.ifBlank { item.stockCode },
-                        code = item.stockCode,
-                        market = StockMarket.inferFromCode(item.stockCode)
-                    ).also { stockDao.insertStock(it) }
-
-                    val currentPrice = item.currentPrice ?: return@forEachIndexed
-                    val expense = ((currentPrice * item.balance).roundToInt()).toDouble()
-
-                    stockDao.insertTransaction(
-                        StockTransaction(
-                            stockCode = stock.code,
-                            date = importDate,
-                            recordTime = importDate + index,
-                            type = "買進",
-                            buyPrice = currentPrice,
-                            buyShares = item.balance.toDouble(),
-                            fee = 0.0,
-                            tax = 0.0,
-                            income = 0.0,
-                            expense = expense,
-                            note = "PDF 匯入快照"
-                        )
-                    )
-
-                    if (existingStock == null) {
-                        realtimeStockDataService.refreshStock(stock.code)
+                val newStockCodes = appDatabase.withTransaction {
+                    if (replaceExisting) {
+                        deleteAllData()
                     }
+
+                    val newCodes = linkedSetOf<String>()
+                    importableItems.forEachIndexed { index, item ->
+                        val existingStock = stockDao.getStockByCode(item.stockCode)
+                        val stock = existingStock ?: Stock(
+                            name = item.stockName.ifBlank { item.stockCode },
+                            code = item.stockCode,
+                            market = StockMarket.inferFromCode(item.stockCode)
+                        ).also {
+                            stockDao.insertStock(it)
+                            newCodes += it.code
+                        }
+
+                        val currentPrice = item.currentPrice ?: return@forEachIndexed
+                        val expense = ((currentPrice * item.balance).roundToInt()).toDouble()
+
+                        stockDao.insertTransaction(
+                            StockTransaction(
+                                stockCode = stock.code,
+                                date = importDate,
+                                recordTime = importDate + index,
+                                type = "買進",
+                                buyPrice = currentPrice,
+                                buyShares = item.balance.toDouble(),
+                                fee = 0.0,
+                                tax = 0.0,
+                                income = 0.0,
+                                expense = expense,
+                                note = "PDF 匯入快照"
+                            )
+                        )
+                    }
+                    newCodes
                 }
 
-                realtimeStockDataService.startFetching()
+                refreshImportedStocks(newStockCodes)
                 val skippedCount = preview.items.size - importableItems.size
                 _message.value = buildString {
                     append("PDF 匯入完成，共新增 ")
@@ -823,25 +828,6 @@ class SettingsViewModel(
             } finally {
                 _isLoading.value = false
             }
-        }
-    }
-
-    private suspend fun restoreAccountsIfPresent(deleteOldData: Boolean) {
-        val bytes = accountsBackupData ?: return
-        try {
-            val restoredAccounts = Json.decodeFromString<List<Account>>(bytes.toString(Charsets.UTF_8))
-            if (restoredAccounts.isNotEmpty()) {
-                if (deleteOldData) {
-                    stockDao.deleteAllAccounts()
-                }
-                restoredAccounts.forEach {
-                    stockDao.insertAccount(it)
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Restoring accounts from json failed", e)
-        } finally {
-            accountsBackupData = null
         }
     }
 
@@ -910,18 +896,47 @@ class SettingsViewModel(
         dismissDownloadBackups()
     }
 
-    private suspend fun restoreHoldingsOrderIfPresent() {
-        val bytes = holdingsOrderBackupData ?: return
+    private fun parseAccountsBackup(): List<Account> {
+        val bytes = accountsBackupData ?: return emptyList()
+        return Json.decodeFromString(bytes.toString(Charsets.UTF_8))
+    }
+
+    private fun parseHoldingsOrderBackup(): com.rsps1008.stockify.data.HoldingsOrderBackupData? {
+        val bytes = holdingsOrderBackupData ?: return null
+        return holdingsOrderBackupService.import(bytes)
+    }
+
+    private suspend fun applyHoldingsOrderBackup(
+        backup: com.rsps1008.stockify.data.HoldingsOrderBackupData?
+    ) {
+        backup ?: return
         try {
-            val backup = withContext(Dispatchers.IO) {
-                holdingsOrderBackupService.import(bytes)
-            }
             settingsDataStore.setHoldingsOrder(backup.order)
             settingsDataStore.setRealizedHoldingsOrder(backup.realizedOrder)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            Log.e(TAG, "Restoring holdings order from json failed", e)
-        } finally {
-            holdingsOrderBackupData = null
+            Log.e(TAG, "Applying holdings order backup failed after database commit", e)
+        }
+    }
+
+    private suspend fun refreshImportedStocks(stockCodes: Set<String>) {
+        try {
+            if (stockCodes.isNotEmpty()) {
+                realtimeStockDataService.refreshStocks(stockCodes)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Imported data committed, but quote refresh failed", e)
+        }
+
+        try {
+            realtimeStockDataService.startFetching()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Imported data committed, but background quote refresh failed", e)
         }
     }
 
@@ -934,24 +949,15 @@ class SettingsViewModel(
                         csvService.import(it)
                     }
                 } ?: emptyList()
-                require(csvTransactions.isNotEmpty()) { "CSV 不含可還原的交易資料" }
-
-                validateImportedTransactions(
-                    csvTransactions,
-                    includeExistingTransactions = !deleteOldData
-                )
-                if (deleteOldData) {
-                    deleteAllData()
-                }
-                restoreAccountsIfPresent(deleteOldData)
-                processImportedTransactions(csvTransactions)
-                restoreHoldingsOrderIfPresent()
+                importCsvTransactions(csvTransactions, deleteOldData)
 
             } catch (e: Exception) {
                 _message.value = "還原失敗: ${e.message}"
             } finally {
                 _isLoading.value = false
                 importUri = null
+                accountsBackupData = null
+                holdingsOrderBackupData = null
             }
         }
     }
@@ -990,26 +996,51 @@ class SettingsViewModel(
                         csvService.import(it)
                     }
                 }
-                require(csvTransactions.isNotEmpty()) { "CSV 不含可還原的交易資料" }
-
-                validateImportedTransactions(
-                    csvTransactions,
-                    includeExistingTransactions = !deleteOldData
-                )
-                if (deleteOldData) {
-                    deleteAllData()
-                }
-                restoreAccountsIfPresent(deleteOldData)
-                processImportedTransactions(csvTransactions)
-                restoreHoldingsOrderIfPresent()
+                importCsvTransactions(csvTransactions, deleteOldData)
 
             } catch (e: Exception) {
                 _message.value = "還原失敗: ${e.message}"
             } finally {
                 _isLoading.value = false
                 importData = null
+                accountsBackupData = null
+                holdingsOrderBackupData = null
             }
         }
+    }
+
+    private suspend fun importCsvTransactions(
+        transactions: List<CsvTransaction>,
+        deleteOldData: Boolean
+    ) {
+        require(transactions.isNotEmpty()) { "CSV 不含可還原的交易資料" }
+
+        validateImportedTransactions(
+            transactions,
+            includeExistingTransactions = !deleteOldData
+        )
+
+        // Parse optional companion backups before any destructive database work.
+        val restoredAccounts = parseAccountsBackup()
+        val restoredOrder = parseHoldingsOrderBackup()
+        val refreshedStockCodes = appDatabase.withTransaction {
+            if (deleteOldData) {
+                deleteAllData()
+            }
+
+            if (restoredAccounts.isNotEmpty()) {
+                if (deleteOldData) {
+                    stockDao.deleteAllAccounts()
+                }
+                restoredAccounts.forEach { stockDao.insertAccount(it) }
+            }
+
+            writeImportedTransactions(transactions)
+        }
+
+        applyHoldingsOrderBackup(restoredOrder)
+        refreshImportedStocks(refreshedStockCodes)
+        _message.value = "還原成功，共 ${transactions.size} 筆紀錄"
     }
 
     private suspend fun validateImportedTransactions(
@@ -1065,8 +1096,7 @@ class SettingsViewModel(
         }
     }
 
-    private suspend fun processImportedTransactions(transactions: List<CsvTransaction>) {
-
+    private suspend fun writeImportedTransactions(transactions: List<CsvTransaction>): Set<String> {
         val refreshedStockCodes = linkedSetOf<String>()
 
         transactions.forEach { csvTransaction ->
@@ -1092,13 +1122,7 @@ class SettingsViewModel(
             stockDao.insertTransaction(csvTransaction.transaction)
             refreshedStockCodes += csvTransaction.stockCode
         }
-
-        if (refreshedStockCodes.isNotEmpty()) {
-            realtimeStockDataService.refreshStocks(refreshedStockCodes)
-        }
-
-        realtimeStockDataService.startFetching()
-        _message.value = "還原成功，共 ${transactions.size} 筆紀錄"
+        return refreshedStockCodes
     }
 
     fun setFetchInterval(interval: Int) {
