@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.withTransaction
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.CoroutineScope
@@ -70,6 +71,7 @@ abstract class AppDatabase : RoomDatabase() {
 
                     syncBundledStockList(
                         context = context,
+                        database = database,
                         stockDao = stockDao,
                         market = StockMarket.TW,
                         assetName = TW_STOCKS_ASSET_NAME,
@@ -81,6 +83,7 @@ abstract class AppDatabase : RoomDatabase() {
 
                     syncBundledStockList(
                         context = context,
+                        database = database,
                         stockDao = stockDao,
                         market = StockMarket.US,
                         assetName = US_STOCKS_ASSET_NAME,
@@ -95,6 +98,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         private suspend fun syncBundledStockList(
             context: Context,
+            database: AppDatabase,
             stockDao: StockDao,
             market: String,
             assetName: String,
@@ -116,7 +120,10 @@ abstract class AppDatabase : RoomDatabase() {
                 return
             }
 
-            stockDao.replaceStocks(bundledStocks)
+            database.withTransaction {
+                stockDao.deleteUnreferencedStocksByMarket(market)
+                stockDao.replaceStocks(bundledStocks)
+            }
             refreshBundledCache?.invoke()
             checksumFile.writeText(bundledChecksum)
         }

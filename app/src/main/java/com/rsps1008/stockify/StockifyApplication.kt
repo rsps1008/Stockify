@@ -73,11 +73,19 @@ class StockifyApplication : Application() {
                 return
             }
 
-            StockListRepository(this).saveStocks(stocks)
-            database.stockDao().deleteStocksByMarket(StockMarket.TW)
-            database.stockDao().insertStocks(stocks)
+            val stockListRepository = StockListRepository(this)
+            val updatedStocks = stockListRepository.replaceStocksInDatabase(
+                database = database,
+                market = StockMarket.TW,
+                stocks = stocks
+            )
+            try {
+                stockListRepository.saveStocks(updatedStocks)
+            } catch (e: Exception) {
+                Log.w(TAG, "Taiwan stock list database updated, but local cache save failed", e)
+            }
             settingsDataStore.setLastStockListUpdateTime(System.currentTimeMillis())
-            Log.i(TAG, "Updated Taiwan stock list on app open: ${stocks.size} stocks")
+            Log.i(TAG, "Updated Taiwan stock list on app open: ${updatedStocks.size} stocks")
         } catch (e: Exception) {
             Log.w(TAG, "Failed to update Taiwan stock list on app open", e)
         }
@@ -100,10 +108,13 @@ class StockifyApplication : Application() {
                 return
             }
 
-            database.stockDao().deleteStocksByMarket(StockMarket.US)
-            database.stockDao().insertStocks(stocks)
+            val updatedStocks = StockListRepository(this).replaceStocksInDatabase(
+                database = database,
+                market = StockMarket.US,
+                stocks = stocks
+            )
             settingsDataStore.setLastUsStockListUpdateTime(System.currentTimeMillis())
-            Log.i(TAG, "Updated U.S. stock list on app open: ${stocks.size} stocks")
+            Log.i(TAG, "Updated U.S. stock list on app open: ${updatedStocks.size} stocks")
         } catch (e: Exception) {
             Log.w(TAG, "Failed to update U.S. stock list on app open", e)
         }

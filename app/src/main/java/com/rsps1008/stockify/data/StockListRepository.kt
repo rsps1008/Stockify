@@ -1,6 +1,7 @@
 package com.rsps1008.stockify.data
 
 import android.content.Context
+import androidx.room.withTransaction
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -120,6 +121,25 @@ class StockListRepository(private val context: Context) {
         }
         val jsonString = Json.encodeToString(jsonStocks)
         jsonFile.writeText(jsonString)
+    }
+
+    suspend fun replaceStocksInDatabase(
+        database: AppDatabase,
+        market: String,
+        stocks: List<Stock>
+    ): List<Stock> {
+        val normalizedMarket = StockMarket.normalize(market)
+        val marketStocks = stocks
+            .filter { StockMarket.normalize(it.market) == normalizedMarket }
+            .distinctBy { it.code }
+        require(marketStocks.isNotEmpty()) { "股票列表沒有可用的 ${normalizedMarket} 資料" }
+
+        database.withTransaction {
+            val stockDao = database.stockDao()
+            stockDao.deleteUnreferencedStocksByMarket(normalizedMarket)
+            stockDao.replaceStocks(marketStocks)
+        }
+        return marketStocks
     }
 
     fun readStocks(): List<Stock> {

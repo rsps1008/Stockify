@@ -1305,13 +1305,18 @@ class SettingsViewModel(
             _updatingStockListMarket.value = StockMarket.TW
             try {
                 val stocks = stockDataFetcher.fetchStockList()
-                // Save to json file
-                stockListRepository.saveStocks(stocks)
-                // And also save to Room database
-                stockDao.deleteStocksByMarket(StockMarket.TW)
-                stockDao.insertStocks(stocks)
+                val updatedStocks = stockListRepository.replaceStocksInDatabase(
+                    database = appDatabase,
+                    market = StockMarket.TW,
+                    stocks = stocks
+                )
+                try {
+                    stockListRepository.saveStocks(updatedStocks)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Taiwan stock list database updated, but local cache save failed", e)
+                }
                 settingsDataStore.setLastStockListUpdateTime(System.currentTimeMillis())
-                _message.value = "股票列表更新成功！共 ${stocks.size} 筆"
+                _message.value = "股票列表更新成功！共 ${updatedStocks.size} 筆"
             } catch (e: Exception) {
                 _message.value = "更新失敗: ${e.message}"
             } finally {
@@ -1330,10 +1335,13 @@ class SettingsViewModel(
                 if (stocks.isEmpty()) {
                     throw IllegalStateException("Nasdaq Trader 未回傳可用的美股資料")
                 }
-                stockDao.deleteStocksByMarket(StockMarket.US)
-                stockDao.insertStocks(stocks)
+                val updatedStocks = stockListRepository.replaceStocksInDatabase(
+                    database = appDatabase,
+                    market = StockMarket.US,
+                    stocks = stocks
+                )
                 settingsDataStore.setLastUsStockListUpdateTime(System.currentTimeMillis())
-                _message.value = "美股股票列表更新成功！共 ${stocks.size} 筆"
+                _message.value = "美股股票列表更新成功！共 ${updatedStocks.size} 筆"
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to update US stock list from Nasdaq Trader", e)
                 _message.value = "美股列表更新失敗: ${e.message}"
