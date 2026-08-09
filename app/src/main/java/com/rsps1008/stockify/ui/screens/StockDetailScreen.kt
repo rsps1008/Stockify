@@ -52,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.style.TextAlign
@@ -219,7 +220,7 @@ private fun StockDetailSummary(
 
                     // 小字（%）→ 用 padding 調整
                     AnimatedNumberText(
-                        text = String.format("%+.2f%%", holdingInfo.totalPLPercentage),
+                        text = String.format(Locale.US, "%+.2f%%", holdingInfo.totalPLPercentage),
                         color = totalPlColor,
                         style = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier.padding(bottom = 4.dp)
@@ -229,11 +230,11 @@ private fun StockDetailSummary(
                 Row {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(text = "成本均", style = MaterialTheme.typography.bodySmall)
-                        Text(text = String.format("%,.2f", holdingInfo.averageCost), style = MaterialTheme.typography.bodyLarge)
+                        Text(text = String.format(Locale.US, "%,.2f", holdingInfo.averageCost), style = MaterialTheme.typography.bodyLarge)
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(text = "買均", style = MaterialTheme.typography.bodySmall)
-                        Text(text = String.format("%,.2f", holdingInfo.buyAverage), style = MaterialTheme.typography.bodyLarge)
+                        Text(text = String.format(Locale.US, "%,.2f", holdingInfo.buyAverage), style = MaterialTheme.typography.bodyLarge)
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(text = "持股數", style = MaterialTheme.typography.bodySmall)
@@ -485,7 +486,7 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
         "融券補償" -> formatMarketAmount(-transaction.transaction.shortCompensation, transaction.market)
         "配息" -> formatMarketAmount(transaction.transaction.income, transaction.market)
         "配股" -> "${formatShareCount(transaction.transaction.dividendShares)}股"
-        "減資" -> String.format("%,.1f", transaction.transaction.cashReturned)
+        "減資" -> String.format(Locale.US, "%,.1f", transaction.transaction.cashReturned)
         "分割" -> "-"
         else -> ""
     }
@@ -505,7 +506,7 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        val sdf = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault())
+        val sdf = SimpleDateFormat("yyyy/MM/dd", LocalConfiguration.current.locales[0])
         Text(text = sdf.format(Date(transaction.transaction.date)), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1.5f))
 
         val transactionText = when(transaction.transaction.type) {
@@ -526,15 +527,15 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
             "融券補償" -> "融券補償${formatMarketAmount(transaction.transaction.shortCompensation, transaction.market)}"
             "配息" -> "配息"
             "配股" -> "配股"
-            "減資" -> "減資${String.format("%.1f", transaction.transaction.capitalReductionRatio)}%"
+            "減資" -> "減資${String.format(Locale.US, "%.1f", transaction.transaction.capitalReductionRatio)}%"
             "分割" -> "分割(1→${transaction.transaction.stockSplitRatio.toInt()})"
             else -> transaction.transaction.type
         }
         Text(text = transactionText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1.5f), textAlign = TextAlign.Center)
 
         val priceText = when (transaction.transaction.type) {
-            "買進", "融資買進", "買券還券" -> String.format("%,.2f", transaction.transaction.buyPrice)
-            "賣出", "融券賣出" -> String.format("%,.2f", transaction.transaction.sellPrice)
+            "買進", "融資買進", "買券還券" -> String.format(Locale.US, "%,.2f", transaction.transaction.buyPrice)
+            "賣出", "融券賣出" -> String.format(Locale.US, "%,.2f", transaction.transaction.sellPrice)
             else -> "-"
         }
         Text(text = priceText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)

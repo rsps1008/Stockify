@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -74,6 +75,7 @@ private val AddTransactionButtonShape: Shape = androidx.compose.foundation.shape
 @Composable
 fun AddTransactionScreen(navController: NavController, transactionId: Int?, prefillStockCode: String? = null) {
     val application = LocalContext.current.applicationContext as StockifyApplication
+    val locale = LocalConfiguration.current.locales[0]
     val viewModel: AddTransactionViewModel = viewModel(
         factory = ViewModelFactory(
             stockDao = application.database.stockDao(),
@@ -696,7 +698,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             onClick = { showDatePicker = true },
             shape = AddTransactionButtonShape
         ) {
-            Text(text = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault()).format(Date(date)))
+            Text(text = SimpleDateFormat("yyyy/MM/dd", locale).format(Date(date)))
         }
         if (showDatePicker) {
             val datePickerState = rememberDatePickerState(

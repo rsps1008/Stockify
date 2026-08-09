@@ -21,6 +21,7 @@ import java.time.DayOfWeek
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import java.util.Locale
 
 @kotlinx.serialization.Serializable
 data class StockHistoryPoint(
@@ -330,8 +331,8 @@ class TwseStockHistoryService(
                 val dateParts = dateStr.split("/")
                 if (dateParts.size != 3) continue
                 val year = dateParts[2].trim()
-                val month = dateParts[0].trim().toIntOrNull()?.let { String.format("%02d", it) } ?: dateParts[0].trim()
-                val day = dateParts[1].trim().toIntOrNull()?.let { String.format("%02d", it) } ?: dateParts[1].trim()
+                val month = dateParts[0].trim().toIntOrNull()?.let { String.format(Locale.US, "%02d", it) } ?: dateParts[0].trim()
+                val day = dateParts[1].trim().toIntOrNull()?.let { String.format(Locale.US, "%02d", it) } ?: dateParts[1].trim()
                 val formattedDate = "$year-$month-$day"
 
                 val price = closeStr.replace("$", "").replace(",", "").trim().toDoubleOrNull() ?: continue
@@ -353,7 +354,7 @@ class TwseStockHistoryService(
             temp.add(Calendar.MONTH, -i)
             val y = temp.get(Calendar.YEAR)
             val m = temp.get(Calendar.MONTH) + 1
-            val monthStr = String.format("%04d%02d", y, m)
+            val monthStr = String.format(Locale.US, "%04d%02d", y, m)
             list.add(monthStr)
         }
         return list.reversed() // Oldest month first
@@ -460,7 +461,7 @@ class TwseStockHistoryService(
         val month = parts[1].toIntOrNull() ?: return null
         val day = parts[2].toIntOrNull() ?: return null
         val gregorianYear = rocYear + 1911
-        return String.format("%04d-%02d-%02d", gregorianYear, month, day)
+        return String.format(Locale.US, "%04d-%02d-%02d", gregorianYear, month, day)
     }
 
     private fun safeLogD(message: String) {

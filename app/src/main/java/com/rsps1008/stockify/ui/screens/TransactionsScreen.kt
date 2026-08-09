@@ -150,7 +150,7 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
         "融券補償" -> formatMarketAmount(-transaction.transaction.shortCompensation, transaction.market)
         "配息" -> formatMarketAmount(transaction.transaction.income, transaction.market)
         "配股" -> "0"
-        "減資" -> String.format("%,.0f", transaction.transaction.cashReturned)
+        "減資" -> String.format(Locale.US, "%,.0f", transaction.transaction.cashReturned)
         "分割" -> "-"
         "融資還款" -> formatMarketAmount(
             -(transaction.transaction.marginRepayment + transaction.transaction.marginActualInterest),
@@ -196,7 +196,7 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
             }
             "配息" -> "配息${formatMarketAmount(transaction.transaction.income, transaction.market)}元"
             "配股" -> "配股${formatShareCount(transaction.transaction.dividendShares)}股"
-            "減資" -> "減資${String.format("%.1f", transaction.transaction.capitalReductionRatio)}%"
+            "減資" -> "減資${String.format(Locale.US, "%.1f", transaction.transaction.capitalReductionRatio)}%"
             "分割" -> "分割(1→${transaction.transaction.stockSplitRatio.toInt()})"
             "融資還款" -> if (transaction.transaction.marginRepayment > 0.0) {
                 "還融資${formatMarketAmount(transaction.transaction.marginRepayment, transaction.market)}"
@@ -216,8 +216,8 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
         )
 
         val priceText = when (transaction.transaction.type) {
-            "買進", "融資買進", "買券還券" -> String.format("%,.2f", transaction.transaction.buyPrice)
-            "賣出", "融券賣出" -> String.format("%,.2f", transaction.transaction.sellPrice)
+            "買進", "融資買進", "買券還券" -> String.format(Locale.US, "%,.2f", transaction.transaction.buyPrice)
+            "賣出", "融券賣出" -> String.format(Locale.US, "%,.2f", transaction.transaction.sellPrice)
             else -> "-"
         }
         Text(

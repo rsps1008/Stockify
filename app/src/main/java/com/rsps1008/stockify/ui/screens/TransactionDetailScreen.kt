@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import android.widget.Toast
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -45,6 +46,7 @@ import java.util.Locale
 @Composable
 fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
     val application = LocalContext.current.applicationContext as StockifyApplication
+    val locale = LocalConfiguration.current.locales[0]
     val viewModel: TransactionDetailViewModel = viewModel(
         factory = ViewModelFactory(application.database.stockDao(), transactionId = transactionId)
     )
@@ -113,24 +115,24 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                     .padding(16.dp)
             ) {
                 DetailRow(label = "股票", value = uiState.stockName)
-                DetailRow(label = "日期", value = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault()).format(Date(transaction.date)))
+                DetailRow(label = "日期", value = SimpleDateFormat("yyyy/MM/dd", locale).format(Date(transaction.date)))
                 DetailRow(label = "交易", value = transaction.type)
 
                 when (transaction.type) {
                     "買進", "融資買進" -> {
-                        DetailRow(label = "買進價格", value = String.format("%,.2f", transaction.buyPrice))
+                        DetailRow(label = "買進價格", value = String.format(Locale.US, "%,.2f", transaction.buyPrice))
                         DetailRow(label = "買進股數", value = formatShareCount(transaction.buyShares))
                         DetailRow(label = "手續費", value = formatMarketAmount(transaction.fee, uiState.market))
                         DetailRow(label = "支出", value = formatMarketAmount(transaction.expense, uiState.market), valueColor = StockifyAppTheme.stockColors.loss)
                         if (transaction.type == "融資買進") {
                             DetailRow(label = "融資本金", value = formatMarketAmount(transaction.marginPrincipal, uiState.market))
                             DetailRow(label = "融資自備款", value = formatMarketAmount(if (transaction.marginSelfFundedOverridden) transaction.marginSelfFunded else transaction.expense - transaction.marginPrincipal, uiState.market))
-                            DetailRow(label = "年利率", value = String.format("%.4f%%", transaction.marginAnnualRate))
+                            DetailRow(label = "年利率", value = String.format(Locale.US, "%.4f%%", transaction.marginAnnualRate))
                             DetailRow(label = "融資批次", value = formatLotId(transaction.marginLotId))
                         }
                     }
                     "賣出" -> {
-                        DetailRow(label = "賣出價格", value = String.format("%,.2f", transaction.sellPrice))
+                        DetailRow(label = "賣出價格", value = String.format(Locale.US, "%,.2f", transaction.sellPrice))
                         DetailRow(label = "賣出股數", value = formatShareCount(transaction.sellShares))
                         DetailRow(label = "手續費", value = formatMarketAmount(transaction.fee, uiState.market))
                         DetailRow(label = "交易稅", value = formatMarketAmount(transaction.tax, uiState.market))
@@ -142,25 +144,25 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                         }
                     }
                     "配息" -> {
-                        DetailRow(label = "每股股息", value = String.format("%,.4f", transaction.cashDividend))
+                        DetailRow(label = "每股股息", value = String.format(Locale.US, "%,.4f", transaction.cashDividend))
                         DetailRow(label = "除息股數", value = formatShareCount(transaction.exDividendShares))
                         DetailRow(label = "手續費", value = formatMarketAmount(transaction.fee, uiState.market))
                         DetailRow(label = "補充保費", value = formatMarketAmount(transaction.supplementaryHealthInsurancePremium, uiState.market))
                         DetailRow(label = "股息收入", value = formatMarketAmount(transaction.income, uiState.market), valueColor = StockifyAppTheme.stockColors.gain)
                     }
                     "配股" -> {
-                        DetailRow(label = "股票股利", value = String.format("%,.4f", transaction.stockDividend))
+                        DetailRow(label = "股票股利", value = String.format(Locale.US, "%,.4f", transaction.stockDividend))
                         DetailRow(label = "除權股數", value = formatShareCount(transaction.exRightsShares))
                         DetailRow(label = "配發股數", value = formatShareCount(transaction.dividendShares))
                     }
                     "減資" -> {
-                        DetailRow(label = "減資比例", value = "${String.format("%.2f", transaction.capitalReductionRatio)}%")
+                        DetailRow(label = "減資比例", value = "${String.format(Locale.US, "%.2f", transaction.capitalReductionRatio)}%")
                         DetailRow(label = "原持股數", value = formatShareCount(transaction.sharesBeforeReduction))
                         DetailRow(label = "新持股數", value = formatShareCount(transaction.sharesAfterReduction))
-                        DetailRow(label = "退還股款", value = String.format("%,.0f", transaction.cashReturned), valueColor = StockifyAppTheme.stockColors.gain)
+                        DetailRow(label = "退還股款", value = String.format(Locale.US, "%,.0f", transaction.cashReturned), valueColor = StockifyAppTheme.stockColors.gain)
                     }
                     "分割" -> {
-                        DetailRow(label = "每股拆分", value = String.format("%,.0f", transaction.stockSplitRatio))
+                        DetailRow(label = "每股拆分", value = String.format(Locale.US, "%,.0f", transaction.stockSplitRatio))
                         DetailRow(label = "原持股數", value = formatShareCount(transaction.sharesBeforeSplit))
                         DetailRow(label = "新持股數", value = formatShareCount(transaction.sharesAfterSplit))
                     }
@@ -170,17 +172,17 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                         DetailRow(label = "沖抵融資批次", value = formatLotId(transaction.marginRepaymentLotId))
                     }
                     "融券賣出" -> {
-                        DetailRow(label = "融券賣出價格", value = String.format("%,.2f", transaction.sellPrice))
+                        DetailRow(label = "融券賣出價格", value = String.format(Locale.US, "%,.2f", transaction.sellPrice))
                         DetailRow(label = "融券賣出股數", value = formatShareCount(transaction.sellShares))
                         DetailRow(label = "手續費", value = formatMarketAmount(transaction.fee, uiState.market))
                         DetailRow(label = "交易稅", value = formatMarketAmount(transaction.tax, uiState.market))
                         DetailRow(label = "收入", value = formatMarketAmount(transaction.income, uiState.market), valueColor = StockifyAppTheme.stockColors.gain)
                         DetailRow(label = "融券本金", value = formatMarketAmount(transaction.shortBorrowPrincipal, uiState.market))
-                        DetailRow(label = "借券年費率", value = String.format("%.4f%%", transaction.shortBorrowAnnualRate))
+                        DetailRow(label = "借券年費率", value = String.format(Locale.US, "%.4f%%", transaction.shortBorrowAnnualRate))
                         DetailRow(label = "融券批次", value = formatLotId(transaction.shortLotId))
                     }
                     "買券還券" -> {
-                        DetailRow(label = "買券價格", value = String.format("%,.2f", transaction.buyPrice))
+                        DetailRow(label = "買券價格", value = String.format(Locale.US, "%,.2f", transaction.buyPrice))
                         DetailRow(label = "還券股數", value = formatShareCount(transaction.shortCoverShares))
                         DetailRow(label = "手續費", value = formatMarketAmount(transaction.fee, uiState.market))
                         DetailRow(label = "支出", value = formatMarketAmount(transaction.expense, uiState.market), valueColor = StockifyAppTheme.stockColors.loss)

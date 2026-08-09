@@ -99,6 +99,7 @@ import com.rsps1008.stockify.data.TaiwanWeightedIndexInfo
 import com.rsps1008.stockify.data.formatHomeAmount
 import com.rsps1008.stockify.data.formatMarketAmount
 import com.rsps1008.stockify.data.formatShareCount
+import java.util.Locale
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import com.rsps1008.stockify.data.Account
@@ -979,7 +980,7 @@ fun SummarySection(
                         Spacer(modifier = Modifier.padding(horizontal = 4.dp))
 
                         Text(
-                            text = String.format("%+.2f%%", uiState.cumulativePLPercentage),
+                            text = String.format(Locale.US, "%+.2f%%", uiState.cumulativePLPercentage),
                             style = MaterialTheme.typography.bodyLarge,
                             color = cumulativePlColor,
                             modifier = Modifier.alignByBaseline()
@@ -1108,11 +1109,11 @@ private fun TaiwanWeightedIndexSection(
                     else -> ""
                 }
                 if (arrow.isEmpty()) {
-                    "${String.format("%,.2f", indexInfo.current)}  0.00  (0.00%)"
+                    "${String.format(Locale.US, "%,.2f", indexInfo.current)}  0.00  (0.00%)"
                 } else {
                     val absChange = kotlin.math.abs(indexInfo.change)
                     val absPercent = kotlin.math.abs(indexInfo.changePercent)
-                    "${String.format("%,.2f", indexInfo.current)}  $arrow${String.format("%.2f", absChange)}  (${String.format("%.2f%%", absPercent)})"
+                    "${String.format(Locale.US, "%,.2f", indexInfo.current)}  $arrow${String.format(Locale.US, "%.2f", absChange)}  (${String.format(Locale.US, "%.2f%%", absPercent)})"
                 }
             },
             style = MaterialTheme.typography.labelMedium,
@@ -1276,7 +1277,7 @@ fun HoldingCard(
                     )
                 }) { targetPrice ->
                     Text(
-                        text = String.format("%,.2f", targetPrice),
+                        text = String.format(Locale.US, "%,.2f", targetPrice),
                         style = MaterialTheme.typography.bodyLarge,
                         color = when (holding.limitState) {
                             LimitState.LIMIT_UP,
@@ -1304,7 +1305,7 @@ fun HoldingCard(
                     )
                 }) { targetChange ->
                     AutoResizeSingleLineText(
-                        text = "$dailyChangeSymbol${String.format("%.2f", abs(targetChange))} (${String.format("%.2f", abs(holding.dailyChangePercentage))}%)",
+                        text = "$dailyChangeSymbol${String.format(Locale.US, "%.2f", abs(targetChange))} (${String.format(Locale.US, "%.2f", abs(holding.dailyChangePercentage))}%)",
                         color = dailyChangeColor,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1312,8 +1313,8 @@ fun HoldingCard(
             }
 
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                Text(text = String.format("%,.2f", holding.averageCost), style = MaterialTheme.typography.bodyLarge)
-                Text(text = String.format("%,.2f", holding.buyAverage), style = MaterialTheme.typography.bodySmall)
+                Text(text = String.format(Locale.US, "%,.2f", holding.averageCost), style = MaterialTheme.typography.bodyLarge)
+                Text(text = String.format(Locale.US, "%,.2f", holding.buyAverage), style = MaterialTheme.typography.bodySmall)
             }
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
                 AnimatedContent(targetState = holding.totalPL, transitionSpec = {
@@ -1346,7 +1347,7 @@ fun HoldingCard(
                     )
                 }) { targetTotalPLPercentage ->
                     Text(
-                        text = String.format("%+.2f%%", targetTotalPLPercentage),
+                        text = String.format(Locale.US, "%+.2f%%", targetTotalPLPercentage),
                         style = MaterialTheme.typography.bodySmall,
                         color = totalPlColor
                     )
@@ -1442,7 +1443,7 @@ fun ZeroHoldingCard(
                     )
                 }) { targetPrice ->
                     Text(
-                        text = String.format("%,.2f", targetPrice),
+                        text = String.format(Locale.US, "%,.2f", targetPrice),
                         style = MaterialTheme.typography.bodyLarge,
                         color = when (holding.limitState) {
                             LimitState.LIMIT_UP,
@@ -1470,7 +1471,7 @@ fun ZeroHoldingCard(
                     )
                 }) { targetChange ->
                     AutoResizeSingleLineText(
-                        text = "$dailyChangeSymbol${String.format("%.2f", abs(targetChange))} (${String.format("%.2f", abs(holding.dailyChangePercentage))}%)",
+                        text = "$dailyChangeSymbol${String.format(Locale.US, "%.2f", abs(targetChange))} (${String.format(Locale.US, "%.2f", abs(holding.dailyChangePercentage))}%)",
                         color = dailyChangeColor,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1478,8 +1479,8 @@ fun ZeroHoldingCard(
             }
 
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                Text(text = String.format("%,.2f", holding.sellAverage), style = MaterialTheme.typography.bodyLarge)
-                Text(text = String.format("%,.2f", holding.buyAverage), style = MaterialTheme.typography.bodySmall)
+                Text(text = String.format(Locale.US, "%,.2f", holding.sellAverage), style = MaterialTheme.typography.bodyLarge)
+                Text(text = String.format(Locale.US, "%,.2f", holding.buyAverage), style = MaterialTheme.typography.bodySmall)
             }
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
                 AnimatedContent(targetState = holding.totalPL, transitionSpec = {
@@ -1512,7 +1513,7 @@ fun ZeroHoldingCard(
                     )
                 }) { targetTotalPLPercentage ->
                     Text(
-                        text = String.format("%+.2f%%", targetTotalPLPercentage),
+                        text = String.format(Locale.US, "%+.2f%%", targetTotalPLPercentage),
                         style = MaterialTheme.typography.bodySmall,
                         color = totalPlColor
                     )

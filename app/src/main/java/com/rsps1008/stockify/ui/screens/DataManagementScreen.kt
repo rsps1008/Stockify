@@ -1103,10 +1103,10 @@ private fun PdfImportPreviewDialog(
                                     text = title,
                                     style = MaterialTheme.typography.titleMedium
                                 )
-                                Text("庫存: ${String.format("%,d", item.balance)} 股")
+                                Text("庫存: ${String.format(Locale.US, "%,d", item.balance)} 股")
                                 Text(
                                     if (item.currentPrice != null) {
-                                        "現價: ${String.format("%.2f", item.currentPrice)}，市值約 ${String.format("%,.0f", item.marketValue ?: 0.0)}"
+                                        "現價: ${String.format(Locale.US, "%.2f", item.currentPrice)}，市值約 ${String.format(Locale.US, "%,.0f", item.marketValue ?: 0.0)}"
                                     } else {
                                         "現價: 抓取失敗，這筆資料匯入時會略過"
                                     }

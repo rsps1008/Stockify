@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import androidx.annotation.RequiresApi
 import android.content.ContentUris
 import android.util.Log
 import androidx.room.withTransaction
@@ -555,10 +556,14 @@ class SettingsViewModel(
             .format(java.util.Date())
 
     private fun writeToDownloads(fileName: String, mimeType: String, content: ByteArray) {
-        check(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            "Android 9 以下需要檔案選擇器才能儲存備份"
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            error("Android 9 以下需要檔案選擇器才能儲存備份")
         }
+        writeToDownloadsOnQ(fileName, mimeType, content)
+    }
 
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun writeToDownloadsOnQ(fileName: String, mimeType: String, content: ByteArray) {
         val resolver = getApplication<Application>().contentResolver
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)

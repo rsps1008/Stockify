@@ -41,6 +41,7 @@ import com.rsps1008.stockify.data.HomeDisplayMode
 import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.formatHomeAmount
 import com.rsps1008.stockify.data.formatShareCount
+import java.util.Locale
 
 @Composable
 fun HistoryChartSection(
@@ -461,6 +462,7 @@ private fun HistoricalChartContent(
                 )
                 Text(
                     text = String.format(
+                        Locale.US,
                         "%+.2f%% (%s %s%s)",
                         displayPLPercentage,
                         currencyLabel,
@@ -787,17 +789,17 @@ private fun InteractiveLineChart(
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = if (isPercentage) String.format("%+.1f%%", maxVal) else "$currencyLabel ${formatHomeAmount(maxVal, displayMode)}",
+                text = if (isPercentage) String.format(Locale.US, "%+.1f%%", maxVal) else "$currencyLabel ${formatHomeAmount(maxVal, displayMode)}",
                 fontSize = 10.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
             Text(
-                text = if (isPercentage) String.format("%+.1f%%", (maxVal + minVal) / 2) else "$currencyLabel ${formatHomeAmount((maxVal + minVal) / 2, displayMode)}",
+                text = if (isPercentage) String.format(Locale.US, "%+.1f%%", (maxVal + minVal) / 2) else "$currencyLabel ${formatHomeAmount((maxVal + minVal) / 2, displayMode)}",
                 fontSize = 10.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
             )
             Text(
-                text = if (isPercentage) String.format("%+.1f%%", minVal) else "$currencyLabel ${formatHomeAmount(minVal, displayMode)}",
+                text = if (isPercentage) String.format(Locale.US, "%+.1f%%", minVal) else "$currencyLabel ${formatHomeAmount(minVal, displayMode)}",
                 fontSize = 10.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
