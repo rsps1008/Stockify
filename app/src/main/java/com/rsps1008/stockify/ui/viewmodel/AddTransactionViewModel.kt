@@ -14,6 +14,7 @@ import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.Account
 import com.rsps1008.stockify.data.TransactionListRepository
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -37,6 +38,8 @@ data class MarginLotOption(
 )
 
 data class ShortLotOption(val lotId: String, val label: String, val remainingShares: Double)
+
+private val dividendDateFormatter = DateTimeFormatter.ofPattern("yyyy/MM/dd")
 
 internal fun resolveMarginOpeningLotId(type: String, lotId: String): String =
     if (type == "融資買進") lotId.ifBlank { UUID.randomUUID().toString() } else lotId
@@ -79,6 +82,21 @@ internal fun holdingSharesAtDate(
     return HoldingCalculationSupport
         .replayLongPosition(scopedTransactions, valuationDate)
         .shares
+}
+
+internal fun dividendDateToTransactionDateMillis(
+    dateText: String,
+    zoneId: ZoneId = ZoneId.systemDefault()
+): Long? {
+    return runCatching {
+        LocalDate.parse(
+            dateText.trim().replace('-', '/'),
+            dividendDateFormatter
+        )
+            .atStartOfDay(zoneId)
+            .toInstant()
+            .toEpochMilli()
+    }.getOrNull()
 }
 
 internal fun transactionsWithCandidateForValidation(
@@ -281,6 +299,7 @@ class AddTransactionViewModel(
         viewModelScope.launch {
             try {
                 val result = dividendRepository.fetchLatestCashDividend(stockCode)
+                if (accountId != _selectedAccountId.value) return@launch
                 if (result == null) {
                     onFail()
                     return@launch
@@ -291,14 +310,19 @@ class AddTransactionViewModel(
                     accountId = accountId,
                     valuationDate = result.date.toTransactionDateMillis() ?: valuationDate
                 )
+                if (accountId != _selectedAccountId.value) return@launch
                 if (holdingShares <= 0) {
                     onFail()
                     return@launch
                 }
 
                 onResult(result.amount, holdingShares, result.date)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                onFail()
+                if (accountId == _selectedAccountId.value) {
+                    onFail()
+                }
             }
         }
     }
@@ -314,6 +338,7 @@ class AddTransactionViewModel(
         viewModelScope.launch {
             try {
                 val result = dividendRepository.fetchLatestStockDividend(stockCode)
+                if (accountId != _selectedAccountId.value) return@launch
                 if (result == null) {
                     onFail()
                     return@launch
@@ -324,14 +349,19 @@ class AddTransactionViewModel(
                     accountId = accountId,
                     valuationDate = result.date.toTransactionDateMillis() ?: valuationDate
                 )
+                if (accountId != _selectedAccountId.value) return@launch
                 if (holdingShares <= 0) {
                     onFail()
                     return@launch
                 }
 
                 onResult(result.amount, holdingShares, result.date)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                onFail()
+                if (accountId == _selectedAccountId.value) {
+                    onFail()
+                }
             }
         }
     }
@@ -350,14 +380,7 @@ class AddTransactionViewModel(
         )
     }
 
-    private fun String.toTransactionDateMillis(): Long? {
-        return runCatching {
-            LocalDate.parse(this, DateTimeFormatter.ofPattern("yyyy/MM/dd"))
-                .atStartOfDay(ZoneId.systemDefault())
-                .toInstant()
-                .toEpochMilli()
-        }.getOrNull()
-    }
+    private fun String.toTransactionDateMillis(): Long? = dividendDateToTransactionDateMillis(this)
 
 
     val stocks: StateFlow<List<Stock>> = transactionListRepository.snapshot

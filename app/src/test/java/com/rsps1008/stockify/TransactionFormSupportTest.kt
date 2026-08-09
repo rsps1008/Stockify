@@ -6,6 +6,8 @@ import com.rsps1008.stockify.ui.screens.autoCalculatedMarginSelfFundedText
 import com.rsps1008.stockify.ui.screens.annualRateInputText
 import com.rsps1008.stockify.ui.screens.isValidMarginRepaymentAmounts
 import com.rsps1008.stockify.ui.screens.resolveSellMarginRepayment
+import com.rsps1008.stockify.ui.screens.shouldApplyDividendAutoFill
+import com.rsps1008.stockify.ui.screens.shouldApplyTransactionTypeChange
 import com.rsps1008.stockify.ui.screens.transactionCashFlowAmount
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.ui.screens.normalizeTransactionDateMillis
@@ -26,6 +28,64 @@ class TransactionFormSupportTest {
         assertFalse(shouldAutoCalculateTransactionCosts(transactionId = 1, hasUserEditedTradeInputs = false))
         assertTrue(shouldAutoCalculateTransactionCosts(transactionId = 1, hasUserEditedTradeInputs = true))
         assertTrue(shouldAutoCalculateTransactionCosts(transactionId = null, hasUserEditedTradeInputs = false))
+    }
+
+    @Test
+    fun reselectingTheCurrentTransactionTypeDoesNotCountAsAnEdit() {
+        assertFalse(shouldApplyTransactionTypeChange("買進", "買進"))
+        assertTrue(shouldApplyTransactionTypeChange("買進", "賣出"))
+    }
+
+    @Test
+    fun dividendAutoFillOnlyAppliesToTheOriginalFormScope() {
+        assertTrue(
+            shouldApplyDividendAutoFill(
+                requestedStockCode = "2330",
+                requestedAccountId = 1,
+                requestedDate = 1_000L,
+                requestedType = "配息",
+                currentStockCode = "2330",
+                currentAccountId = 1,
+                currentDate = 1_000L,
+                currentType = "配息"
+            )
+        )
+        assertFalse(
+            shouldApplyDividendAutoFill(
+                requestedStockCode = "2330",
+                requestedAccountId = 1,
+                requestedDate = 1_000L,
+                requestedType = "配息",
+                currentStockCode = "2330",
+                currentAccountId = 2,
+                currentDate = 1_000L,
+                currentType = "配息"
+            )
+        )
+        assertFalse(
+            shouldApplyDividendAutoFill(
+                requestedStockCode = "2330",
+                requestedAccountId = 1,
+                requestedDate = 1_000L,
+                requestedType = "配息",
+                currentStockCode = "0050",
+                currentAccountId = 1,
+                currentDate = 1_000L,
+                currentType = "配息"
+            )
+        )
+        assertFalse(
+            shouldApplyDividendAutoFill(
+                requestedStockCode = "2330",
+                requestedAccountId = 1,
+                requestedDate = 1_000L,
+                requestedType = "配息",
+                currentStockCode = "2330",
+                currentAccountId = 1,
+                currentDate = 2_000L,
+                currentType = "配股"
+            )
+        )
     }
 
     @Test

@@ -22,6 +22,7 @@ import com.rsps1008.stockify.data.CsvService
 import com.rsps1008.stockify.data.CsvTransaction
 import com.rsps1008.stockify.data.Account
 import com.rsps1008.stockify.StockifyApplication
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 import com.rsps1008.stockify.data.GoogleDriveService
@@ -43,6 +44,9 @@ import com.rsps1008.stockify.data.TwseStockHistoryService
 import com.rsps1008.stockify.data.assignProvisionalImportIds
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -52,6 +56,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -62,6 +68,10 @@ data class DownloadBackupFile(
     val displayName: String,
     val modifiedAt: Long
 )
+
+internal fun accountsForReplacementRestore(restoredAccounts: List<Account>): List<Account> {
+    return restoredAccounts.ifEmpty { listOf(Account(id = 1, name = "預設帳戶")) }
+}
 
 class SettingsViewModel(
     private val stockDao: StockDao,
@@ -371,6 +381,8 @@ class SettingsViewModel(
 
                     refreshCloudBackupTimes(account)
                     _message.value = "Google 雲端備份成功"
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     _message.value = "Google 雲端備份失敗: ${e.message}"
                 } finally {
@@ -396,6 +408,8 @@ class SettingsViewModel(
                     accountsBackupData = accountsJson
                     holdingsOrderBackupData = orderJson
                     _showImportConfirmDialog.value = true
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     _message.value = "Google 雲端還原失敗: ${e.message}"
                 } finally {
@@ -418,6 +432,8 @@ class SettingsViewModel(
                     } ?: error("無法建立備份檔案")
                 }
                 _message.value = "本地備份成功"
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _message.value = "本地備份失敗: ${e.message}"
             } finally {
@@ -442,6 +458,8 @@ class SettingsViewModel(
                     writeToDownloads(fileName, "text/csv", content)
                 }
                 _message.value = "本地備份成功，已儲存至 Download/Stockify/$fileName"
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _message.value = "本地備份失敗: ${e.message}"
             } finally {
@@ -462,6 +480,8 @@ class SettingsViewModel(
                     } ?: error("無法建立帳戶備份檔案")
                 }
                 _message.value = "本地帳戶名稱備份成功"
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _message.value = "本地帳戶名稱備份失敗: ${e.message}"
             } finally {
@@ -481,6 +501,8 @@ class SettingsViewModel(
                     writeToDownloads(fileName, "application/json", content)
                 }
                 _message.value = "本地帳戶名稱備份成功，已儲存至 Download/Stockify/$fileName"
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _message.value = "本地帳戶名稱備份失敗: ${e.message}"
             } finally {
@@ -501,6 +523,8 @@ class SettingsViewModel(
                 val accounts = Json.decodeFromString<List<Account>>(content.toString(Charsets.UTF_8))
                 accounts.forEach { stockDao.insertAccount(it) }
                 _message.value = "本地帳戶名稱還原成功，共 ${accounts.size} 個帳戶"
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _message.value = "本地帳戶名稱還原失敗: ${e.message}"
             } finally {
@@ -521,6 +545,8 @@ class SettingsViewModel(
                     } ?: error("無法建立排序備份檔案")
                 }
                 _message.value = "持股排序本地備份成功"
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _message.value = "持股排序本地備份失敗: ${e.message}"
             } finally {
@@ -543,6 +569,8 @@ class SettingsViewModel(
                     writeToDownloads(fileName, "application/json", content)
                 }
                 _message.value = "持股排序本地備份成功，已儲存至 Download/Stockify/$fileName"
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _message.value = "持股排序本地備份失敗: ${e.message}"
             } finally {
@@ -583,6 +611,9 @@ class SettingsViewModel(
                 null,
                 null
             )
+        } catch (e: CancellationException) {
+            resolver.delete(uri, null, null)
+            throw e
         } catch (e: Exception) {
             resolver.delete(uri, null, null)
             throw e
@@ -602,6 +633,8 @@ class SettingsViewModel(
                 settingsDataStore.setHoldingsOrder(backup.order)
                 settingsDataStore.setRealizedHoldingsOrder(backup.realizedOrder)
                 _message.value = "持股排序本地還原成功，共 ${backup.order.size + backup.realizedOrder.size} 筆"
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _message.value = "持股排序本地還原失敗: ${e.message}"
             } finally {
@@ -628,6 +661,8 @@ class SettingsViewModel(
                     ).getOrThrow()
                     refreshCloudBackupTimes(account)
                     _message.value = "持股排序 Google 雲端備份成功"
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     _message.value = "持股排序 Google 雲端備份失敗: ${e.message}"
                 } finally {
@@ -652,6 +687,8 @@ class SettingsViewModel(
                     settingsDataStore.setHoldingsOrder(backup.order)
                     settingsDataStore.setRealizedHoldingsOrder(backup.realizedOrder)
                     _message.value = "持股排序 Google 雲端還原成功，共 ${backup.order.size + backup.realizedOrder.size} 筆"
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     _message.value = "持股排序 Google 雲端還原失敗: ${e.message}"
                 } finally {
@@ -700,6 +737,7 @@ class SettingsViewModel(
         importUri = null
         importData = null
         accountsBackupData = null
+        holdingsOrderBackupData = null
     }
 
     fun onPdfImportRequest(uri: Uri) {
@@ -746,6 +784,8 @@ class SettingsViewModel(
                 _showPdfPasswordDialog.value = false
                 _pdfPassword.value = ""
                 pdfImportUri = null
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val errorMessage = e.message.orEmpty()
                 if (errorMessage.contains("the password is incorrect", ignoreCase = true)) {
@@ -779,6 +819,10 @@ class SettingsViewModel(
                 val newStockCodes = appDatabase.withTransaction {
                     if (replaceExisting) {
                         deleteAllData()
+                    } else {
+                        // PDF snapshots use account 1. A prior full-data deletion may have
+                        // removed it, so restore the default account before writing snapshots.
+                        stockDao.insertAccount(Account(id = 1, name = "預設帳戶"))
                     }
 
                     val newCodes = linkedSetOf<String>()
@@ -828,6 +872,8 @@ class SettingsViewModel(
                     }
                 }
                 _pdfImportPreview.value = null
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _message.value = "PDF 匯入失敗: ${e.message}"
             } finally {
@@ -879,6 +925,8 @@ class SettingsViewModel(
                     }.orEmpty()
                 }
                 _downloadBackupType.value = type
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _message.value = "讀取 Download/Stockify 備份失敗: ${e.message}"
             } finally {
@@ -903,12 +951,20 @@ class SettingsViewModel(
 
     private fun parseAccountsBackup(): List<Account> {
         val bytes = accountsBackupData ?: return emptyList()
-        return Json.decodeFromString(bytes.toString(Charsets.UTF_8))
+        return try {
+            Json.decodeFromString(bytes.toString(Charsets.UTF_8))
+        } catch (e: SerializationException) {
+            throw IllegalArgumentException("帳戶備份格式錯誤，已取消還原", e)
+        }
     }
 
     private fun parseHoldingsOrderBackup(): com.rsps1008.stockify.data.HoldingsOrderBackupData? {
         val bytes = holdingsOrderBackupData ?: return null
-        return holdingsOrderBackupService.import(bytes)
+        return try {
+            holdingsOrderBackupService.import(bytes)
+        } catch (e: SerializationException) {
+            throw IllegalArgumentException("持股排序備份格式錯誤，已取消還原", e)
+        }
     }
 
     private suspend fun applyHoldingsOrderBackup(
@@ -956,6 +1012,8 @@ class SettingsViewModel(
                 } ?: emptyList()
                 importCsvTransactions(csvTransactions, deleteOldData)
 
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _message.value = "還原失敗: ${e.message}"
             } finally {
@@ -971,20 +1029,26 @@ class SettingsViewModel(
         extraction: com.rsps1008.stockify.data.PdfHoldingExtractionResult
     ): PdfStockImportPreview {
         val allStocksByCode = stockDao.getAllStocks().first().associateBy { it.code }
+        val priceRequestLimit = Semaphore(3)
 
-        val items = extraction.holdings.map { holding ->
-            val stock = allStocksByCode[holding.stockCode]
-            val priceInfo = realtimeStockDataService.fetchCurrentStockInfo(holding.stockCode)
-            val currentPrice = priceInfo?.currentPrice
+        val items = coroutineScope {
+            extraction.holdings.map { holding ->
+                async(Dispatchers.IO) {
+                    val stock = allStocksByCode[holding.stockCode]
+                    val currentPrice = priceRequestLimit.withPermit {
+                        realtimeStockDataService.fetchCurrentStockInfo(holding.stockCode)?.currentPrice
+                    }
 
-            PdfStockImportPreviewItem(
-                stockCode = holding.stockCode,
-                stockName = stock?.name.orEmpty(),
-                balance = holding.balance,
-                currentPrice = currentPrice,
-                marketValue = currentPrice?.let { (it * holding.balance).roundToInt().toDouble() }
-            )
-        }.sortedBy { it.stockCode }
+                    PdfStockImportPreviewItem(
+                        stockCode = holding.stockCode,
+                        stockName = stock?.name.orEmpty(),
+                        balance = holding.balance,
+                        currentPrice = currentPrice,
+                        marketValue = currentPrice?.let { (it * holding.balance).roundToInt().toDouble() }
+                    )
+                }
+            }.awaitAll().sortedBy { it.stockCode }
+        }
 
         return PdfStockImportPreview(
             extractedTextLength = extraction.extractedText.length,
@@ -1003,6 +1067,8 @@ class SettingsViewModel(
                 }
                 importCsvTransactions(csvTransactions, deleteOldData)
 
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _message.value = "還原失敗: ${e.message}"
             } finally {
@@ -1030,13 +1096,8 @@ class SettingsViewModel(
         val restoredOrder = parseHoldingsOrderBackup()
         val refreshedStockCodes = appDatabase.withTransaction {
             if (deleteOldData) {
-                deleteAllData()
-            }
-
-            if (restoredAccounts.isNotEmpty()) {
-                if (deleteOldData) {
-                    stockDao.deleteAllAccounts()
-                }
+                deleteAllData(restoredAccounts)
+            } else if (restoredAccounts.isNotEmpty()) {
                 restoredAccounts.forEach { stockDao.insertAccount(it) }
             }
 
@@ -1287,8 +1348,10 @@ class SettingsViewModel(
 
     fun deleteAllUserDataAndShowToast() {
         viewModelScope.launch {
-            stockDao.deleteAllTransactions()
-            stockDao.deleteAllAccounts()
+            appDatabase.withTransaction {
+                stockDao.deleteAllTransactions()
+                stockDao.deleteAllAccounts()
+            }
             settingsDataStore.setHoldingsOrder(emptyList())
             settingsDataStore.setRealizedHoldingsOrder(emptyList())
             settingsDataStore.setActiveAccountId(0)
@@ -1298,10 +1361,10 @@ class SettingsViewModel(
         }
     }
 
-    private suspend fun deleteAllData() {
+    private suspend fun deleteAllData(restoredAccounts: List<Account> = emptyList()) {
         stockDao.deleteAllTransactions()
         stockDao.deleteAllAccounts()
-        stockDao.insertAccount(Account(id = 1, name = "預設帳戶"))
+        accountsForReplacementRestore(restoredAccounts).forEach { stockDao.insertAccount(it) }
     }
 
     fun updateStockListFromTwse() {
@@ -1317,11 +1380,15 @@ class SettingsViewModel(
                 )
                 try {
                     stockListRepository.saveStocks(updatedStocks)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Log.w(TAG, "Taiwan stock list database updated, but local cache save failed", e)
                 }
                 settingsDataStore.setLastStockListUpdateTime(System.currentTimeMillis())
                 _message.value = "股票列表更新成功！共 ${updatedStocks.size} 筆"
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _message.value = "更新失敗: ${e.message}"
             } finally {
@@ -1347,6 +1414,8 @@ class SettingsViewModel(
                 )
                 settingsDataStore.setLastUsStockListUpdateTime(System.currentTimeMillis())
                 _message.value = "美股股票列表更新成功！共 ${updatedStocks.size} 筆"
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to update US stock list from Nasdaq Trader", e)
                 _message.value = "美股列表更新失敗: ${e.message}"

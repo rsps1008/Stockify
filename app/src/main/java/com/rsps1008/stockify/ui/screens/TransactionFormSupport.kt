@@ -32,6 +32,27 @@ internal fun shouldAutoCalculateTransactionCosts(
     hasUserEditedTradeInputs: Boolean
 ): Boolean = transactionId == null || hasUserEditedTradeInputs
 
+internal fun shouldApplyTransactionTypeChange(
+    currentType: String,
+    requestedType: String
+): Boolean = currentType != requestedType
+
+internal fun shouldApplyDividendAutoFill(
+    requestedStockCode: String,
+    requestedAccountId: Int,
+    requestedDate: Long,
+    requestedType: String,
+    currentStockCode: String,
+    currentAccountId: Int,
+    currentDate: Long,
+    currentType: String
+): Boolean {
+    return requestedStockCode == currentStockCode &&
+        requestedAccountId == currentAccountId &&
+        requestedDate == currentDate &&
+        requestedType == currentType
+}
+
 internal fun autoCalculatedMarginSelfFundedText(
     expense: Double,
     marginPrincipalText: String

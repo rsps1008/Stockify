@@ -99,7 +99,6 @@ fun DataManagementScreen() {
     val pdfImportPreview by viewModel.pdfImportPreview.collectAsState()
     val skipPdfImportTutorial by viewModel.skipPdfImportTutorial.collectAsState()
     val cloudDataBackupUpdatedAt by viewModel.cloudDataBackupUpdatedAt.collectAsState()
-    val cloudOrderBackupUpdatedAt by viewModel.cloudOrderBackupUpdatedAt.collectAsState()
     val accounts by viewModel.accounts.collectAsState()
     val activeAccountId by viewModel.activeAccountId.collectAsState()
 
@@ -242,7 +241,6 @@ fun DataManagementScreen() {
                     isLoading = isLoading,
                     googleSignInAccount = googleSignInAccount,
                     cloudDataBackupUpdatedAt = cloudDataBackupUpdatedAt,
-                    cloudOrderBackupUpdatedAt = cloudOrderBackupUpdatedAt,
                     onSignInClick = { googleSignInLauncher.launch(googleSignInClient.signInIntent) },
                     onSignOutClick = viewModel::signOut
                 )
@@ -403,113 +401,10 @@ fun DataManagementScreen() {
     }
 }
 
-@Composable
-private fun GoogleDriveAccountSection(
-    googleSignInAccount: GoogleSignInAccount?,
-    cloudDataBackupUpdatedAt: Long?,
-    cloudOrderBackupUpdatedAt: Long?,
-    onSignInClick: () -> Unit,
-    onSignOutClick: () -> Unit
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Google Drive", style = MaterialTheme.typography.titleLarge)
-            Spacer(modifier = Modifier.height(12.dp))
-
-            if (googleSignInAccount == null) {
-                Text("尚未登入")
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(
-                    onClick = onSignInClick,
-                    shape = DataManagementButtonShape
-                ) {
-                    Text("登入 Google")
-                }
-            } else {
-                Text("目前帳號: ${googleSignInAccount.email}")
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("雲端資料最後備份: ${formatBackupTime(cloudDataBackupUpdatedAt)}")
-                Text("排序資料最後備份: ${formatBackupTime(cloudOrderBackupUpdatedAt)}")
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(
-                    onClick = onSignOutClick,
-                    shape = DataManagementButtonShape
-                ) {
-                    Text("登出")
-                }
-            }
-        }
-    }
-}
-
 private fun formatBackupTime(timeMillis: Long?): String {
     return timeMillis?.let {
         SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date(it))
     } ?: "尚無備份"
-}
-
-@Composable
-private fun HoldingsOrderManagementSection(
-    viewModel: SettingsViewModel,
-    isLoading: Boolean,
-    exportHoldingsOrderLauncher: ActivityResultLauncher<String>,
-    importHoldingsOrderLauncher: ActivityResultLauncher<String>,
-    isGoogleSignedIn: Boolean
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("持股排序管理", style = MaterialTheme.typography.titleLarge)
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text("雲端資料", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = viewModel::backupHoldingsOrderToGoogleDrive,
-                    enabled = !isLoading && isGoogleSignedIn,
-                    shape = DataManagementButtonShape
-                ) {
-                    Text("備份雲端排序")
-                }
-
-                Button(
-                    onClick = viewModel::restoreHoldingsOrderFromGoogleDrive,
-                    enabled = !isLoading && isGoogleSignedIn,
-                    shape = DataManagementButtonShape
-                ) {
-                    Text("還原雲端排序")
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text("本地資料", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = {
-                        val sdf = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-                        val fileName = "stockify_holdings_order_${sdf.format(Date())}.json"
-                        exportHoldingsOrderLauncher.launch(fileName)
-                    },
-                    enabled = !isLoading,
-                    shape = DataManagementButtonShape
-                ) {
-                    Text("備份本地排序")
-                }
-
-                Button(
-                    onClick = { importHoldingsOrderLauncher.launch("*/*") },
-                    enabled = !isLoading,
-                    shape = DataManagementButtonShape
-                ) {
-                    Text("還原本地排序")
-                }
-            }
-        }
-    }
 }
 
 @Composable
@@ -665,109 +560,6 @@ private fun OtherDataOperationsSection(
 }
 
 @Composable
-private fun DataManagementSection(
-    viewModel: SettingsViewModel,
-    isLoading: Boolean,
-    exportCsvLauncher: ActivityResultLauncher<String>,
-    importCsvLauncher: ActivityResultLauncher<String>,
-    exportAccountsLauncher: ActivityResultLauncher<String>,
-    importAccountsLauncher: ActivityResultLauncher<String>,
-    isGoogleSignedIn: Boolean,
-    onImportPdfClick: () -> Unit
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("持股資料管理", style = MaterialTheme.typography.titleLarge)
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text("雲端資料（包含帳戶名稱）", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = viewModel::backupToGoogleDrive,
-                    enabled = !isLoading && isGoogleSignedIn,
-                    shape = DataManagementButtonShape
-                ) {
-                    Text("備份雲端資料")
-                }
-
-                Button(
-                    onClick = viewModel::restoreFromGoogleDrive,
-                    enabled = !isLoading && isGoogleSignedIn,
-                    shape = DataManagementButtonShape
-                ) {
-                    Text("還原雲端資料")
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text("本地資料", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = {
-                        val sdf = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-                        val fileName = "stockify_backup_${sdf.format(Date())}.csv"
-                        exportCsvLauncher.launch(fileName)
-                    },
-                    enabled = !isLoading,
-                    shape = DataManagementButtonShape
-                ) {
-                    Text("備份本地資料")
-                }
-
-                Button(
-                    onClick = { importCsvLauncher.launch("*/*") },
-                    enabled = !isLoading,
-                    shape = DataManagementButtonShape
-                ) {
-                    Text("還原本地資料")
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = {
-                        val sdf = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-                        exportAccountsLauncher.launch("stockify_accounts_${sdf.format(Date())}.json")
-                    },
-                    enabled = !isLoading,
-                    shape = DataManagementButtonShape
-                ) {
-                    Text("備份本地帳戶名稱")
-                }
-
-                Button(
-                    onClick = { importAccountsLauncher.launch("application/json") },
-                    enabled = !isLoading,
-                    shape = DataManagementButtonShape
-                ) {
-                    Text("還原本地帳戶名稱")
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text("集保E存摺", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Button(
-                onClick = onImportPdfClick,
-                enabled = !isLoading,
-                shape = DataManagementButtonShape
-            ) {
-                Text("匯入『集保E存摺』 庫存 (PDF)")
-            }
-        }
-    }
-}
-
-@Composable
 private fun PdfImportTutorialDialog(
     dontShowAgain: Boolean,
     onDontShowAgainChange: (Boolean) -> Unit,
@@ -855,7 +647,6 @@ private fun CloudBackupSection(
     isLoading: Boolean,
     googleSignInAccount: GoogleSignInAccount?,
     cloudDataBackupUpdatedAt: Long?,
-    cloudOrderBackupUpdatedAt: Long?,
     onSignInClick: () -> Unit,
     onSignOutClick: () -> Unit
 ) {

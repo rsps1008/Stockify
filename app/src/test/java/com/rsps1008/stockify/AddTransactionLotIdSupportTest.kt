@@ -6,12 +6,16 @@ import com.rsps1008.stockify.ui.viewmodel.resolveMarginOpeningLotId
 import com.rsps1008.stockify.ui.viewmodel.resolveShortOpeningLotId
 import com.rsps1008.stockify.ui.viewmodel.transactionFeeForType
 import com.rsps1008.stockify.ui.viewmodel.calculateSupplementaryHealthInsurancePremium
+import com.rsps1008.stockify.ui.viewmodel.dividendDateToTransactionDateMillis
 import com.rsps1008.stockify.ui.viewmodel.holdingSharesAtDate
 import com.rsps1008.stockify.ui.viewmodel.transactionsBeforeCandidateForLotSelection
 import com.rsps1008.stockify.ui.viewmodel.transactionsWithCandidateForValidation
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.LocalDate
+import java.time.ZoneId
 
 class AddTransactionLotIdSupportTest {
     @Test
@@ -34,6 +38,19 @@ class AddTransactionLotIdSupportTest {
     fun regularTransactionsDoNotCreateFinancingLotIds() {
         assertEquals("", resolveMarginOpeningLotId("買進", ""))
         assertEquals("", resolveShortOpeningLotId("賣出", ""))
+    }
+
+    @Test
+    fun dividendDateParserAcceptsSlashAndDashSeparatedDates() {
+        val taipei = ZoneId.of("Asia/Taipei")
+        val expected = LocalDate.of(2026, 8, 10)
+            .atStartOfDay(taipei)
+            .toInstant()
+            .toEpochMilli()
+
+        assertEquals(expected, dividendDateToTransactionDateMillis("2026/08/10", taipei))
+        assertEquals(expected, dividendDateToTransactionDateMillis("2026-08-10", taipei))
+        assertNull(dividendDateToTransactionDateMillis("2026.08.10", taipei))
     }
 
     @Test

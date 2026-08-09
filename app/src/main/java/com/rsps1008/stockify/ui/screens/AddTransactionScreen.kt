@@ -209,9 +209,11 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         hasUserEditedTradeInputs = true
     }
     val selectTransactionType: (String) -> Unit = { type ->
-        transactionType = type
-        hasUserEditedTradeInputs = true
-        if (type != "賣出") isDayTrading = false
+        if (shouldApplyTransactionTypeChange(transactionType, type)) {
+            transactionType = type
+            hasUserEditedTradeInputs = true
+            if (type != "賣出") isDayTrading = false
+        }
     }
 
     LaunchedEffect(prefillStockCode, allStocks) {
@@ -1081,11 +1083,29 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                                 return@Button
                             }
 
+                            val requestedStockCode = stockCode
+                            val requestedAccountId = selectedAccountId
+                            val requestedDate = date
+                            val isCurrentAutoFillRequest = {
+                                shouldApplyDividendAutoFill(
+                                    requestedStockCode = requestedStockCode,
+                                    requestedAccountId = requestedAccountId,
+                                    requestedDate = requestedDate,
+                                    requestedType = "配息",
+                                    currentStockCode = stockCode,
+                                    currentAccountId = selectedAccountId,
+                                    currentDate = date,
+                                    currentType = transactionType
+                                )
+                            }
                             viewModel.autoFillDividendCashFromYahooUsingHolding(
-                                stockCode,
-                                selectedAccountId,
-                                date,
-                                onResult = { perShare, holdingShares, dateStr ->
+                                requestedStockCode,
+                                requestedAccountId,
+                                requestedDate,
+                                onResult = autoFillResult@{ perShare, holdingShares, dateStr ->
+                                    if (!isCurrentAutoFillRequest()) {
+                                        return@autoFillResult
+                                    }
                                     shouldAutoCalculateSupplementaryHealthInsurancePremium = true
                                     cashDividend = perShare.toString()
                                     exDividendShares = formatShareInputValue(holdingShares)
@@ -1098,7 +1118,9 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                                     Toast.makeText(context, "已帶入最近一次配息（${dateStr ?: "-"}）", Toast.LENGTH_SHORT).show()
                                 },
                                 onFail = {
-                                    Toast.makeText(context, "找不到最近一次配息資料", Toast.LENGTH_SHORT).show()
+                                    if (isCurrentAutoFillRequest()) {
+                                        Toast.makeText(context, "找不到最近一次配息資料", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             )
                         },
@@ -1194,11 +1216,29 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                             return@Button
                         }
 
+                        val requestedStockCode = stockCode
+                        val requestedAccountId = selectedAccountId
+                        val requestedDate = date
+                        val isCurrentAutoFillRequest = {
+                            shouldApplyDividendAutoFill(
+                                requestedStockCode = requestedStockCode,
+                                requestedAccountId = requestedAccountId,
+                                requestedDate = requestedDate,
+                                requestedType = "配股",
+                                currentStockCode = stockCode,
+                                currentAccountId = selectedAccountId,
+                                currentDate = date,
+                                currentType = transactionType
+                            )
+                        }
                         viewModel.autoFillDividendStockFromYahooUsingHolding(
-                            stockCode,
-                            selectedAccountId,
-                            date,
-                            onResult = { rate, holdingShares, dateStr ->
+                            requestedStockCode,
+                            requestedAccountId,
+                            requestedDate,
+                            onResult = autoFillResult@{ rate, holdingShares, dateStr ->
+                                if (!isCurrentAutoFillRequest()) {
+                                    return@autoFillResult
+                                }
                                 stockDividendRate = rate.toString()
                                 exRightsShares = formatShareInputValue(holdingShares)
 
@@ -1210,7 +1250,9 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                                 Toast.makeText(context, "已帶入最近一次配股（${dateStr ?: "-"}）", Toast.LENGTH_SHORT).show()
                             },
                             onFail = {
-                                Toast.makeText(context, "找不到最近一次配股資料", Toast.LENGTH_SHORT).show()
+                                if (isCurrentAutoFillRequest()) {
+                                    Toast.makeText(context, "找不到最近一次配股資料", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         )
                     },

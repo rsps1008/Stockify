@@ -463,6 +463,8 @@ fun AnimatedTimeText(text: String, color: Color) {
 
 @Composable
 private fun TransactionRow(transaction: TransactionUiState, navController: NavController) {
+    val locale = LocalConfiguration.current.locales[0]
+    val dateFormatter = remember(locale) { SimpleDateFormat("yyyy/MM/dd", locale) }
     val amountText = when (transaction.transaction.type) {
         "買進" -> formatMarketAmount(-transaction.transaction.expense, transaction.market)
         "賣出" -> formatMarketAmount(
@@ -506,8 +508,11 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        val sdf = SimpleDateFormat("yyyy/MM/dd", LocalConfiguration.current.locales[0])
-        Text(text = sdf.format(Date(transaction.transaction.date)), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1.5f))
+        Text(
+            text = dateFormatter.format(Date(transaction.transaction.date)),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1.5f)
+        )
 
         val transactionText = when(transaction.transaction.type) {
             "買進" -> "買${formatShareCount(transaction.transaction.buyShares)}股"
