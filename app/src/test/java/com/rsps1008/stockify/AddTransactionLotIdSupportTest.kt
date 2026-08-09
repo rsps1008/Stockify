@@ -6,6 +6,7 @@ import com.rsps1008.stockify.ui.viewmodel.resolveMarginOpeningLotId
 import com.rsps1008.stockify.ui.viewmodel.resolveShortOpeningLotId
 import com.rsps1008.stockify.ui.viewmodel.transactionFeeForType
 import com.rsps1008.stockify.ui.viewmodel.calculateSupplementaryHealthInsurancePremium
+import com.rsps1008.stockify.ui.viewmodel.holdingSharesAtDate
 import com.rsps1008.stockify.ui.viewmodel.transactionsBeforeCandidateForLotSelection
 import com.rsps1008.stockify.ui.viewmodel.transactionsWithCandidateForValidation
 import org.junit.Assert.assertEquals
@@ -115,5 +116,55 @@ class AddTransactionLotIdSupportTest {
         val summary = MarginCalculationSupport.calculate(replay, editedInterestPayment.date)
 
         assertEquals(100_000.0, summary.lots.single().remainingPrincipal, 0.0)
+    }
+
+    @Test
+    fun dividendHoldingSharesAreScopedByAccountDateAndCompanyActions() {
+        val day = 86_400_000L
+        val transactions = listOf(
+            StockTransaction(
+                id = 1,
+                stockCode = "2330",
+                accountId = 1,
+                date = 0L,
+                recordTime = 0L,
+                type = "買進",
+                buyShares = 100.0
+            ),
+            StockTransaction(
+                id = 2,
+                stockCode = "2330",
+                accountId = 2,
+                date = 0L,
+                recordTime = 0L,
+                type = "買進",
+                buyShares = 200.0
+            ),
+            StockTransaction(
+                id = 3,
+                stockCode = "2330",
+                accountId = 1,
+                date = day,
+                recordTime = day,
+                type = "分割",
+                stockSplitRatio = 2.0,
+                sharesBeforeSplit = 100.0,
+                sharesAfterSplit = 200.0
+            ),
+            StockTransaction(
+                id = 4,
+                stockCode = "2330",
+                accountId = 1,
+                date = day * 3,
+                recordTime = day * 3,
+                type = "買進",
+                buyShares = 50.0
+            )
+        )
+
+        assertEquals(100.0, holdingSharesAtDate(transactions, "2330", 1, day - 1), 0.0)
+        assertEquals(200.0, holdingSharesAtDate(transactions, "2330", 1, day * 2), 0.0)
+        assertEquals(200.0, holdingSharesAtDate(transactions, "2330", 2, day * 2), 0.0)
+        assertEquals(200.0, holdingSharesAtDate(transactions, "2330", 1, day * 2 + 1), 0.0)
     }
 }

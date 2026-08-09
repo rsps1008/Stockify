@@ -8,6 +8,7 @@ import com.rsps1008.stockify.data.CalculationRoundingMode
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.StockDao
+import com.rsps1008.stockify.data.HoldingCalculationSupport
 import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.Account
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -62,6 +64,21 @@ internal fun calculateSupplementaryHealthInsurancePremium(
         return 0.0
     }
     return (grossDividend * 0.0211).roundToInt().toDouble()
+}
+
+internal fun holdingSharesAtDate(
+    transactions: List<StockTransaction>,
+    stockCode: String,
+    accountId: Int,
+    valuationDate: Long
+): Double {
+    val scopedTransactions = transactions.filter { transaction ->
+        transaction.stockCode == stockCode &&
+            (accountId == 0 || transaction.accountId == accountId)
+    }
+    return HoldingCalculationSupport
+        .replayLongPosition(scopedTransactions, valuationDate)
+        .shares
 }
 
 internal fun transactionsWithCandidateForValidation(
@@ -256,19 +273,25 @@ class AddTransactionViewModel(
     //除息
     fun autoFillDividendCashFromYahooUsingHolding(
         stockCode: String,
+        accountId: Int,
+        valuationDate: Long,
         onResult: (cashDividend: Double, holdingShares: Double, dateStr: String?) -> Unit,
         onFail: () -> Unit
     ) {
         viewModelScope.launch {
             try {
-                val holdingShares = stockDao.getHoldingShares(stockCode)
-                if (holdingShares <= 0) {
+                val result = dividendRepository.fetchLatestCashDividend(stockCode)
+                if (result == null) {
                     onFail()
                     return@launch
                 }
 
-                val result = dividendRepository.fetchLatestCashDividend(stockCode)
-                if (result == null) {
+                val holdingShares = loadHoldingSharesForDividend(
+                    stockCode = stockCode,
+                    accountId = accountId,
+                    valuationDate = result.date.toTransactionDateMillis() ?: valuationDate
+                )
+                if (holdingShares <= 0) {
                     onFail()
                     return@launch
                 }
@@ -283,19 +306,25 @@ class AddTransactionViewModel(
     //除權
     fun autoFillDividendStockFromYahooUsingHolding(
         stockCode: String,
+        accountId: Int,
+        valuationDate: Long,
         onResult: (rate: Double, holdingShares: Double, dateStr: String?) -> Unit,
         onFail: () -> Unit
     ) {
         viewModelScope.launch {
             try {
-                val holdingShares = stockDao.getHoldingShares(stockCode)
-                if (holdingShares <= 0) {
+                val result = dividendRepository.fetchLatestStockDividend(stockCode)
+                if (result == null) {
                     onFail()
                     return@launch
                 }
 
-                val result = dividendRepository.fetchLatestStockDividend(stockCode)
-                if (result == null) {
+                val holdingShares = loadHoldingSharesForDividend(
+                    stockCode = stockCode,
+                    accountId = accountId,
+                    valuationDate = result.date.toTransactionDateMillis() ?: valuationDate
+                )
+                if (holdingShares <= 0) {
                     onFail()
                     return@launch
                 }
@@ -305,6 +334,29 @@ class AddTransactionViewModel(
                 onFail()
             }
         }
+    }
+
+    private suspend fun loadHoldingSharesForDividend(
+        stockCode: String,
+        accountId: Int,
+        valuationDate: Long
+    ): Double {
+        val transactions = stockDao.getTransactionsForStock(stockCode).firstOrNull().orEmpty()
+        return holdingSharesAtDate(
+            transactions = transactions,
+            stockCode = stockCode,
+            accountId = accountId,
+            valuationDate = valuationDate
+        )
+    }
+
+    private fun String.toTransactionDateMillis(): Long? {
+        return runCatching {
+            LocalDate.parse(this, DateTimeFormatter.ofPattern("yyyy/MM/dd"))
+                .atStartOfDay(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+        }.getOrNull()
     }
 
 

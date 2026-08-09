@@ -1078,6 +1078,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
 
                             viewModel.autoFillDividendCashFromYahooUsingHolding(
                                 stockCode,
+                                selectedAccountId,
+                                date,
                                 onResult = { perShare, holdingShares, dateStr ->
                                     shouldAutoCalculateSupplementaryHealthInsurancePremium = true
                                     cashDividend = perShare.toString()
@@ -1189,6 +1191,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
 
                         viewModel.autoFillDividendStockFromYahooUsingHolding(
                             stockCode,
+                            selectedAccountId,
+                            date,
                             onResult = { rate, holdingShares, dateStr ->
                                 stockDividendRate = rate.toString()
                                 exRightsShares = formatShareInputValue(holdingShares)

@@ -11,5 +11,6 @@ data class DividendInfoCacheEntry(
     val lastLocalCashDividend: Double? = null,
     val lastLocalCashDividendDate: String? = null,
     val lastLocalStockDividend: Double? = null,
-    val lastLocalStockDividendDate: String? = null
+    val lastLocalStockDividendDate: String? = null,
+    val lastLocalAccountId: Int? = null
 )

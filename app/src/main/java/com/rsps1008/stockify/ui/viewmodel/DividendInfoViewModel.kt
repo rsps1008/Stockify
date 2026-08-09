@@ -13,6 +13,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -47,6 +48,7 @@ class DividendInfoViewModel(
     val dividendList: StateFlow<List<DividendItemUiState>> = _dividendList.asStateFlow()
 
     private var latestTaiwanStocks: List<TaiwanStockRef> = emptyList()
+    private var latestAccountId: Int = 0
     private var refreshJob: Job? = null
 
     init {
@@ -55,16 +57,22 @@ class DividendInfoViewModel(
 
     private fun observeHoldingsAndRefresh() {
         viewModelScope.launch {
-            stockRepository.getHoldings()
-                .map { holdingsState ->
+            combine(
+                stockRepository.getHoldings().map { holdingsState ->
                     holdingsState.holdings
                         .filter { holding -> StockMarket.isTw(holding.stock.market) }
                         .map { holding -> TaiwanStockRef(holding.stock.code, holding.stock.name) }
                         .distinctBy { it.stockCode }
-                }
+                },
+                settingsDataStore.activeAccountIdFlow
+            ) { stocks, accountId ->
+                DividendRefreshScope(stocks, accountId)
+            }
                 .distinctUntilChanged()
-                .collect { stocks ->
+                .collect { scope ->
+                    val stocks = scope.stocks
                     latestTaiwanStocks = stocks
+                    latestAccountId = scope.accountId
                     refreshJob?.cancel()
 
                     if (stocks.isEmpty()) {
@@ -72,17 +80,18 @@ class DividendInfoViewModel(
                         return@collect
                     }
 
-                    showCachedResults(stocks)
-                    startRefresh(stocks)
+                    showCachedResults(stocks, scope.accountId)
+                    startRefresh(stocks, scope.accountId)
                 }
         }
     }
 
-    private suspend fun showCachedResults(stocks: List<TaiwanStockRef>) {
+    private suspend fun showCachedResults(stocks: List<TaiwanStockRef>, accountId: Int) {
         val cache = settingsDataStore.dividendInfoCacheFlow.first()
         _dividendList.value = sortItems(
             stocks.map { stock ->
                 val cached = cache[stock.stockCode]
+                val localCacheMatchesAccount = cached?.lastLocalAccountId == accountId
                 DividendItemUiState(
                     stockCode = stock.stockCode,
                     stockName = stock.stockName,
@@ -90,32 +99,32 @@ class DividendInfoViewModel(
                     cashDividendDate = cached?.cashDividendDate,
                     stockDividend = cached?.stockDividend,
                     stockDividendDate = cached?.stockDividendDate,
-                    lastLocalCashDividend = cached?.lastLocalCashDividend,
-                    lastLocalCashDividendDate = cached?.lastLocalCashDividendDate,
-                    lastLocalStockDividend = cached?.lastLocalStockDividend,
-                    lastLocalStockDividendDate = cached?.lastLocalStockDividendDate,
+                    lastLocalCashDividend = cached?.lastLocalCashDividend.takeIf { localCacheMatchesAccount },
+                    lastLocalCashDividendDate = cached?.lastLocalCashDividendDate.takeIf { localCacheMatchesAccount },
+                    lastLocalStockDividend = cached?.lastLocalStockDividend.takeIf { localCacheMatchesAccount },
+                    lastLocalStockDividendDate = cached?.lastLocalStockDividendDate.takeIf { localCacheMatchesAccount },
                     isLoading = true
                 )
             }
         )
     }
 
-    private fun startRefresh(stocks: List<TaiwanStockRef>) {
+    private fun startRefresh(stocks: List<TaiwanStockRef>, accountId: Int) {
         refreshJob = viewModelScope.launch {
             coroutineScope {
                 stocks.forEach { stock ->
                     launch {
-                        fetchDividendForStock(stock)
+                        fetchDividendForStock(stock, accountId)
                     }
                 }
             }
         }
     }
 
-    private suspend fun fetchDividendForStock(stock: TaiwanStockRef) {
+    private suspend fun fetchDividendForStock(stock: TaiwanStockRef, accountId: Int) {
         try {
             // 1. Fetch Local Dividends
-            val transactions = stockRepository.getTransactionsForStock(stock.stockCode).first()
+            val transactions = stockRepository.getTransactionsForStock(stock.stockCode, accountId).first()
             val lastCashTx = transactions
                 .filter { it.transaction.type == "配息" }
                 .maxByOrNull { it.transaction.date }
@@ -141,7 +150,8 @@ class DividendInfoViewModel(
                     lastLocalCashDividend = lastCashTx?.transaction?.cashDividend,
                     lastLocalCashDividendDate = localCashDate,
                     lastLocalStockDividend = lastStockTx?.transaction?.stockDividend,
-                    lastLocalStockDividendDate = localStockDate
+                    lastLocalStockDividendDate = localStockDate,
+                    lastLocalAccountId = accountId
                 )
             )
 
@@ -215,11 +225,16 @@ class DividendInfoViewModel(
             items.map { it.copy(isLoading = true, errorMessage = null) }
         }
         refreshJob?.cancel()
-        startRefresh(stocks)
+        startRefresh(stocks, latestAccountId)
     }
 
     private data class TaiwanStockRef(
         val stockCode: String,
         val stockName: String
+    )
+
+    private data class DividendRefreshScope(
+        val stocks: List<TaiwanStockRef>,
+        val accountId: Int
     )
 }
