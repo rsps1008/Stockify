@@ -11,6 +11,7 @@ import com.rsps1008.stockify.data.TwseStockHistoryService
 import com.rsps1008.stockify.data.ReturnRateMode
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.StockHistoryPoint
+import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.HomeDisplayMode
 import com.rsps1008.stockify.data.HistoryChartCalculationSupport
 import com.rsps1008.stockify.data.HoldingCalculationSupport
@@ -29,8 +30,10 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -84,6 +87,17 @@ class HoldingsViewModel(
             started = SharingStarted.WhileSubscribed(5000L),
             initialValue = HoldingsUiState()
         )
+
+    private val historyStocks: StateFlow<List<Stock>> = uiState
+        .map { state ->
+            state.holdings
+                .map { it.stock }
+                .filter { StockMarket.isTw(it.market) || StockMarket.isUs(it.market) }
+                .distinctBy { StockMarket.normalize(it.market) to it.code }
+                .sortedWith(compareBy<Stock> { StockMarket.normalize(it.market) }.thenBy { it.code })
+        }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
     val homeDisplayMode: StateFlow<String> = settingsDataStore.homeDisplayModeFlow
         .stateIn(
@@ -207,12 +221,12 @@ class HoldingsViewModel(
         _historyStateInternal,
         stockDao.getAllTransactions(),
         historyCalculationBundle,
-        uiState,
+        historyStocks,
         settingsDataStore.activeAccountIdFlow
-    ) { historyInternal, allTxs, calculationBundle, holdingsState, activeAccountId ->
+    ) { historyInternal, allTxs, calculationBundle, stocks, activeAccountId ->
         if (historyInternal is HomeHistoryStateInternal.Success) {
             val expectedPortfolioKey = buildPortfolioKey(
-                holdingsState,
+                stocks,
                 calculationBundle.displayMode,
                 activeAccountId
             )
@@ -229,7 +243,7 @@ class HoldingsViewModel(
             }
 
             val personalPoints = mutableListOf<PersonalHistoryPoint>()
-            val selectedStocksByCode = holdingsState.holdings.associateBy { it.stock.code }
+            val selectedStocksByCode = stocks.associateBy { it.code }
 
             val accountFilteredTxs = if (activeAccountId == 0) {
                 allTxs
@@ -289,7 +303,7 @@ class HoldingsViewModel(
                     val dailyPrice = HistoryChartCalculationSupport.priceAtOrBefore(rawList, pt.date) ?: 0.0
 
                     val stockTxs = historicalTxsByStock[stockCode] ?: emptyList()
-                    val stockType = holdingsState.holdings.firstOrNull { it.stock.code == stockCode }?.stock?.stockType ?: ""
+                    val stockType = stocks.firstOrNull { it.code == stockCode }?.stockType ?: ""
 
                     val stats = calculateHistoricalHoldingStatsAt(
                         ptPrice = dailyPrice,
@@ -297,14 +311,14 @@ class HoldingsViewModel(
                         preDeductSellFees = settings.preDeductSellFees,
                         feeDiscount = settings.feeDiscount,
                         minFeeRegular = minFee,
-                        market = selectedStocksByCode[stockCode]?.stock?.market ?: StockMarket.inferFromCode(stockCode),
+                        market = selectedStocksByCode[stockCode]?.market ?: StockMarket.inferFromCode(stockCode),
                         stockType = stockType,
                         dayEnd = dayEnd,
                         marginDayCount = settings.marginDayCount
                     )
                     val currencyRate = if (
                         normalizedMode == HomeDisplayMode.COMBINED &&
-                        StockMarket.isUs(selectedStocksByCode[stockCode]?.stock?.market)
+                        StockMarket.isUs(selectedStocksByCode[stockCode]?.market)
                     ) {
                         normalizedUsdToTwdRate
                     } else {
@@ -377,8 +391,8 @@ class HoldingsViewModel(
     init {
         viewModelScope.launch {
             var lastPortfolioKey = ""
-            combine(uiState, homeDisplayMode, activeAccountId) { state, mode, accountId ->
-                buildPortfolioKey(state, mode, accountId)
+            combine(historyStocks, homeDisplayMode, activeAccountId) { stocks, mode, accountId ->
+                buildPortfolioKey(stocks, mode, accountId)
             }.collect { portfolioKey ->
                 val hasStocks = portfolioKey.substringAfterLast("|").isNotBlank()
                 val shouldLoad = lastPortfolioKey.isNotBlank() || hasStocks
@@ -402,10 +416,8 @@ class HoldingsViewModel(
         val requestVersion = ++homeHistoryRequestVersion
         _historyStateInternal.value = HomeHistoryStateInternal.Loading(0f, "準備載入歷史股價...")
         fetchPortfolioHistoryJob = viewModelScope.launch {
-            val selectedStocks = uiState.value.holdings
-                .map { it.stock }
-                .filter { StockMarket.isTw(it.market) || StockMarket.isUs(it.market) }
-            val portfolioKey = buildPortfolioKey(uiState.value, homeDisplayMode.value, activeAccountId.value)
+            val selectedStocks = historyStocks.value
+            val portfolioKey = buildPortfolioKey(historyStocks.value, homeDisplayMode.value, activeAccountId.value)
             if (selectedStocks.isEmpty()) {
                 val mode = HomeDisplayMode.normalize(homeDisplayMode.first())
                 val message = when (mode) {
@@ -499,10 +511,9 @@ class HoldingsViewModel(
         return HomeHistoryStateInternal.Success(range, portfolioKey, alignedRawPoints, availableRawPoints)
     }
 
-    private fun buildPortfolioKey(state: HoldingsUiState, mode: String, accountId: Int): String {
-        val codes = state.holdings
-            .filter { StockMarket.isTw(it.stock.market) || StockMarket.isUs(it.stock.market) }
-            .map { "${StockMarket.normalize(it.stock.market)}:${it.stock.code}" }
+    private fun buildPortfolioKey(stocks: List<Stock>, mode: String, accountId: Int): String {
+        val codes = stocks
+            .map { "${StockMarket.normalize(it.market)}:${it.code}" }
             .sorted()
         return "$accountId|${HomeDisplayMode.normalize(mode)}|${codes.joinToString(",")}"
     }

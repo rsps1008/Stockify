@@ -11,6 +11,7 @@ import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.ReturnRateMode
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.StockHistoryPoint
+import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.CashFlow
 import com.rsps1008.stockify.data.HoldingCalculationSupport
 import com.rsps1008.stockify.data.MarginCalculationSupport
@@ -25,6 +26,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
@@ -96,6 +98,10 @@ class StockDetailViewModel(
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
+    private val historyStock: StateFlow<Stock?> = stockDao.getStockByCodeFlow(stockCode)
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
+
     val realtimeStockInfo = realtimeStockDataService.realtimeStockInfo
 
     private val _showDeleteConfirmDialog = MutableStateFlow(false)
@@ -120,8 +126,8 @@ class StockDetailViewModel(
         _historyStateInternal,
         transactions,
         settingsCombined,
-        holdingInfo
-    ) { historyInternal, txList, settings, holding ->
+        historyStock
+    ) { historyInternal, txList, settings, stock ->
         if (historyInternal is DetailHistoryStateInternal.Success) {
             val stockTransactions = txList.map { it.transaction }
                 .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime }.thenBy { it.id })
@@ -138,8 +144,8 @@ class StockDetailViewModel(
             val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).apply {
                 timeZone = java.util.TimeZone.getTimeZone("Asia/Taipei")
             }
-            val stockType = holding?.stock?.stockType ?: ""
-            val market = holding?.stock?.market ?: StockMarket.inferFromCode(stockCode)
+            val stockType = stock?.stockType ?: ""
+            val market = stock?.market ?: StockMarket.inferFromCode(stockCode)
 
             val rawPoints = historyInternal.rawPoints.toMutableList()
             var previousXirrGuessRate: Double? = null
@@ -205,7 +211,7 @@ class StockDetailViewModel(
                 HistoryRange.SIX_MONTHS -> 6
                 HistoryRange.ONE_YEAR -> 12
             }
-            val market = holdingInfo.value?.stock?.market ?: StockMarket.inferFromCode(stockCode)
+            val market = historyStock.value?.market ?: StockMarket.inferFromCode(stockCode)
 
             val cachedPoints = twseStockHistoryService.getCachedHistory(stockCode, rangeMonths)
             val hasCompleteCachedHistory = HistoryChartCalculationSupport.hasHistoryCoverage(cachedPoints, rangeMonths)
