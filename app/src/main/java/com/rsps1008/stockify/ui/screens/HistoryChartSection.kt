@@ -114,6 +114,11 @@ fun HistoryChartSectionContent(
                     rangeLoadRequested = false
                 }
             }
+            is HistoryState.Empty -> {
+                if (state.range == selectedRange) {
+                    rangeLoadRequested = false
+                }
+            }
             is HistoryState.Error -> rangeLoadRequested = false
             else -> Unit
         }
@@ -246,6 +251,25 @@ fun HistoryChartSectionContent(
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Button(onClick = { onRangeSelected(selectedRange) }) {
                                     Text("重試")
+                                }
+                            }
+                        }
+                        is HistoryState.Empty -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(146.dp),
+                                verticalArrangement = Arrangement.Center,
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = state.message,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Button(onClick = { onRangeSelected(selectedRange) }) {
+                                    Text("重新載入")
                                 }
                             }
                         }

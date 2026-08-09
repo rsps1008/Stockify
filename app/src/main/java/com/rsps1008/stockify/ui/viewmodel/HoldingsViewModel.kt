@@ -248,6 +248,12 @@ class HoldingsViewModel(
                         .thenBy { it.id }
                 )
             }
+            if (twTxs.isEmpty()) {
+                return@combine HistoryState.Empty(
+                    range = historyInternal.range,
+                    message = "所選期間沒有可用的持股歷史股價。"
+                )
+            }
 
             val firstTxTime = twTxs.minOfOrNull { it.date }
             var previousPortfolioXirrGuessRate: Double? = null
@@ -350,11 +356,9 @@ class HoldingsViewModel(
             }
 
             if (personalPoints.isEmpty()) {
-                HistoryState.Success(
-                    historyInternal.range,
-                    historyInternal.rawPoints.map {
-                        PersonalHistoryPoint(it.date, it.price, 0.0, 0.0, 0.0, 0.0)
-                    }
+                HistoryState.Empty(
+                    range = historyInternal.range,
+                    message = "所選期間沒有可用的持股歷史股價。"
                 )
             } else {
                 HistoryState.Success(historyInternal.range, personalPoints)

@@ -49,6 +49,7 @@ sealed interface HistoryState {
     object Idle : HistoryState
     data class Loading(val progress: Float, val statusText: String) : HistoryState
     data class Success(val range: HistoryRange, val points: List<PersonalHistoryPoint>) : HistoryState
+    data class Empty(val range: HistoryRange, val message: String) : HistoryState
     data class Error(val message: String) : HistoryState
 }
 
@@ -124,6 +125,12 @@ class StockDetailViewModel(
         if (historyInternal is DetailHistoryStateInternal.Success) {
             val stockTransactions = txList.map { it.transaction }
                 .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime }.thenBy { it.id })
+            if (stockTransactions.isEmpty()) {
+                return@combine HistoryState.Empty(
+                    range = historyInternal.range,
+                    message = "此股票在所選期間沒有可用的歷史股價。"
+                )
+            }
             val firstTxTime = stockTransactions.minOfOrNull { it.date }
             val minFee = settings.minFeeRegular.toDouble()
 
@@ -164,11 +171,9 @@ class StockDetailViewModel(
             }
 
             if (personalPoints.isEmpty()) {
-                HistoryState.Success(
-                    historyInternal.range,
-                    rawPoints.map {
-                        PersonalHistoryPoint(it.date, it.price, 0.0, 0.0, 0.0, 0.0)
-                    }
+                HistoryState.Empty(
+                    range = historyInternal.range,
+                    message = "此股票在所選期間沒有可用的歷史股價。"
                 )
             } else {
                 HistoryState.Success(historyInternal.range, personalPoints)
