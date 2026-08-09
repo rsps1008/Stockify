@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -22,6 +23,7 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -559,6 +561,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         modifier = Modifier
             .statusBarsPadding()
             .padding(16.dp)
+            .imePadding()
             .verticalScroll(rememberScrollState())
     ) {
         Text(text = "選擇帳戶", style = MaterialTheme.typography.titleMedium)
@@ -726,21 +729,21 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         Text(text = "交易類型", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(4.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-            Button(onClick = { selectTransactionType("買進") }, enabled = transactionType != "買進", shape = AddTransactionButtonShape) { Text("買進") }
-            Button(onClick = { selectTransactionType("賣出") }, enabled = transactionType != "賣出", shape = AddTransactionButtonShape) { Text("賣出") }
-            Button(onClick = { selectTransactionType("配息") }, enabled = transactionType != "配息", shape = AddTransactionButtonShape) { Text("配息") }
-            Button(onClick = { selectTransactionType("配股") }, enabled = transactionType != "配股", shape = AddTransactionButtonShape) { Text("配股") }
-            Button(onClick = { selectTransactionType("減資") }, enabled = transactionType != "減資", shape = AddTransactionButtonShape) { Text("減資") }
-            Button(onClick = { selectTransactionType("分割") }, enabled = transactionType != "分割", shape = AddTransactionButtonShape) { Text("分割") }
+            TransactionTypeChip("買進", transactionType == "買進") { selectTransactionType("買進") }
+            TransactionTypeChip("賣出", transactionType == "賣出") { selectTransactionType("賣出") }
+            TransactionTypeChip("配息", transactionType == "配息") { selectTransactionType("配息") }
+            TransactionTypeChip("配股", transactionType == "配股") { selectTransactionType("配股") }
+            TransactionTypeChip("減資", transactionType == "減資") { selectTransactionType("減資") }
+            TransactionTypeChip("分割", transactionType == "分割") { selectTransactionType("分割") }
         }
         if (marginFeatureEnabled && !isUsStock) {
             Spacer(modifier = Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                Button(onClick = { selectTransactionType("融資買進") }, enabled = transactionType != "融資買進", shape = AddTransactionButtonShape) { Text("融資買進") }
-                Button(onClick = { selectTransactionType("融資還款") }, enabled = transactionType != "融資還款", shape = AddTransactionButtonShape) { Text("還融資") }
-                Button(onClick = { selectTransactionType("融券賣出") }, enabled = transactionType != "融券賣出", shape = AddTransactionButtonShape) { Text("融券賣出") }
-                Button(onClick = { selectTransactionType("買券還券") }, enabled = transactionType != "買券還券", shape = AddTransactionButtonShape) { Text("買券還券") }
-                Button(onClick = { selectTransactionType("融券補償") }, enabled = transactionType != "融券補償", shape = AddTransactionButtonShape) { Text("融券補償") }
+                TransactionTypeChip("融資買進", transactionType == "融資買進") { selectTransactionType("融資買進") }
+                TransactionTypeChip("還融資", transactionType == "融資還款") { selectTransactionType("融資還款") }
+                TransactionTypeChip("融券賣出", transactionType == "融券賣出") { selectTransactionType("融券賣出") }
+                TransactionTypeChip("買券還券", transactionType == "買券還券") { selectTransactionType("買券還券") }
+                TransactionTypeChip("融券補償", transactionType == "融券補償") { selectTransactionType("融券補償") }
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
@@ -1502,6 +1505,20 @@ private fun formatDividendAmountInput(amount: Double, market: String?): String {
     } else {
         amount.roundToInt().toString()
     }
+}
+
+@Composable
+private fun TransactionTypeChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label) },
+        shape = AddTransactionButtonShape
+    )
 }
 
 @Composable
