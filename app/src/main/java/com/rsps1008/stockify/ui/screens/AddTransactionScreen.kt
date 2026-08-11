@@ -61,6 +61,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
+import com.rsps1008.stockify.ui.navigation.Screen
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
 import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.StockMarket
@@ -75,7 +76,12 @@ private val AddTransactionButtonShape: Shape = androidx.compose.foundation.shape
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddTransactionScreen(navController: NavController, transactionId: Int?, prefillStockCode: String? = null) {
+fun AddTransactionScreen(
+    navController: NavController,
+    transactionId: Int?,
+    prefillStockCode: String? = null,
+    prefillDate: Long? = null
+) {
     val application = LocalContext.current.applicationContext as StockifyApplication
     val locale = LocalConfiguration.current.locales[0]
     val viewModel: AddTransactionViewModel = viewModel(
@@ -214,9 +220,14 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         }
     }
 
-    LaunchedEffect(prefillStockCode) {
-        if (transactionId == null && prefillStockCode != null) {
-            val stock = viewModel.getStockByCode(prefillStockCode)
+    LaunchedEffect(prefillStockCode, prefillDate) {
+        if (transactionId == null) {
+            prefillDate?.let { date = normalizeTransactionDateMillis(it) }
+            val stock = if (prefillStockCode != null) {
+                viewModel.getStockByCode(prefillStockCode)
+            } else {
+                null
+            }
             if (stock != null) {
                 selectedStock = stock
                 stockName = stock.name
@@ -1387,8 +1398,8 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             onValueChange = { note = it }
         )
         Spacer(modifier = Modifier.height(32.dp))
-        Button(
-            onClick = {
+        TransactionSubmitButtons(
+            onSubmit = { addNext ->
                 coroutineScope.launch {
                     val validationError = viewModel.addOrUpdateTransaction(
                         stockName = stockName,
@@ -1439,15 +1450,53 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                     val message = if (transactionId == null) "新增成功" else "更新成功"
                     Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                     viewModel.resetForm()
-                    navController.popBackStack()
+                    if (addNext && transactionId == null) {
+                        navController.navigate(
+                            Screen.AddTransaction.createRoute(
+                                stockCode = stockCode,
+                                date = date
+                            )
+                        ) {
+                            popUpTo(Screen.AddTransaction.route) {
+                                inclusive = true
+                            }
+                        }
+                    } else {
+                        navController.popBackStack()
+                    }
                 }
             },
+            isFormValid = isFormValid,
+            isNewTransaction = transactionId == null
+        )
+    }
+}
+
+@Composable
+private fun TransactionSubmitButtons(
+    onSubmit: (addNext: Boolean) -> Unit,
+    isFormValid: Boolean,
+    isNewTransaction: Boolean
+) {
+    Column {
+        Button(
+            onClick = { onSubmit(false) },
             enabled = isFormValid,
             modifier = Modifier.fillMaxWidth(),
             shape = AddTransactionButtonShape
         ) {
-            val buttonText = if (transactionId == null) "新增交易" else "更新交易"
-            Text(buttonText)
+            Text(if (isNewTransaction) "新增交易" else "更新交易")
+        }
+        if (isNewTransaction) {
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = { onSubmit(true) },
+                enabled = isFormValid,
+                modifier = Modifier.fillMaxWidth(),
+                shape = AddTransactionButtonShape
+            ) {
+                Text("新增下一筆")
+            }
         }
     }
 }

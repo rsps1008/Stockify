@@ -118,6 +118,10 @@ fun NavGraph(
                 navArgument("stockCode") {
                     type = NavType.StringType
                     nullable = true
+                },
+                navArgument("date") {
+                    type = NavType.StringType
+                    nullable = true
                 }
             )
         ) { backStackEntry ->
@@ -126,15 +130,17 @@ fun NavGraph(
             val transactionId = transactionIdArg?.toIntOrNull()
 
             val prefillStockCode = backStackEntry.arguments?.getString("stockCode")
+            val prefillDate = backStackEntry.arguments?.getString("date")?.toLongOrNull()
             LogScreenEntry(
                 "AddTransactionScreen",
-                "transactionId=${transactionId ?: "null"}, stockCode=${prefillStockCode ?: "null"}"
+                "transactionId=${transactionId ?: "null"}, stockCode=${prefillStockCode ?: "null"}, date=${prefillDate ?: "null"}"
             )
 
             AddTransactionScreen(
                 navController = navController,
                 transactionId = transactionId,
-                prefillStockCode = prefillStockCode
+                prefillStockCode = prefillStockCode,
+                prefillDate = prefillDate
             )
         }
     }

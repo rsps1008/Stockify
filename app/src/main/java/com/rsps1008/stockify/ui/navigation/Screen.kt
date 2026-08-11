@@ -16,14 +16,16 @@ sealed class Screen(val route: String) {
     }
 
     object AddTransaction :
-        Screen("add_transaction?transactionId={transactionId}&stockCode={stockCode}") {
+        Screen("add_transaction?transactionId={transactionId}&stockCode={stockCode}&date={date}") {
         fun createRoute(
             transactionId: Int? = null,
-            stockCode: String? = null
+            stockCode: String? = null,
+            date: Long? = null
         ): String {
             val params = mutableListOf<String>()
             transactionId?.let { params.add("transactionId=$it") }
             stockCode?.let { params.add("stockCode=${Uri.encode(it)}") }
+            date?.let { params.add("date=$it") }
             
             return if (params.isEmpty()) {
                 "add_transaction"
