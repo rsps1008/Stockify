@@ -30,7 +30,8 @@ class TwseStockHistoryServiceTest {
         override suspend fun updateAccount(account: Account) {}
         override fun getAllAccountsFlow(): Flow<List<Account>> = flowOf(emptyList())
         override suspend fun getAccountById(accountId: Int): Account? = null
-        override fun getAllStocks(): Flow<List<Stock>> = flowOf(emptyList())
+        override suspend fun getStocksByCodes(codes: List<String>): List<Stock> = emptyList()
+        override fun searchStocks(query: String, likeQuery: String, limit: Int): Flow<List<Stock>> = flowOf(emptyList())
         override fun getHeldStocks(): Flow<List<Stock>> = flowOf(emptyList())
         override fun getTransactionsForStock(stockCode: String): Flow<List<StockTransaction>> = flowOf(emptyList())
         override fun getAllTransactions(): Flow<List<StockTransaction>> = flowOf(emptyList())

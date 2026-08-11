@@ -1028,7 +1028,8 @@ class SettingsViewModel(
     private suspend fun buildPdfImportPreview(
         extraction: com.rsps1008.stockify.data.PdfHoldingExtractionResult
     ): PdfStockImportPreview {
-        val allStocksByCode = stockDao.getAllStocks().first().associateBy { it.code }
+        val requestedStockCodes = extraction.holdings.map { it.stockCode }.distinct()
+        val allStocksByCode = stockDao.getStocksByCodes(requestedStockCodes).associateBy { it.code }
         val priceRequestLimit = Semaphore(3)
 
         val items = coroutineScope {

@@ -12,15 +12,19 @@ import com.rsps1008.stockify.data.HoldingCalculationSupport
 import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.Account
-import com.rsps1008.stockify.data.TransactionListRepository
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -99,6 +103,13 @@ internal fun dividendDateToTransactionDateMillis(
     }.getOrNull()
 }
 
+internal fun escapeStockSearchLikePattern(query: String): String = buildString(query.length) {
+    query.forEach { character ->
+        if (character == '\\' || character == '%' || character == '_') append('\\')
+        append(character)
+    }
+}
+
 internal fun transactionsWithCandidateForValidation(
     existingTransactions: List<StockTransaction>,
     candidate: StockTransaction
@@ -134,8 +145,7 @@ class AddTransactionViewModel(
     private val settingsDataStore: SettingsDataStore,
     private val transactionId: Int?,
     private val realtimeStockDataService: RealtimeStockDataService,
-    private val dividendRepository: YahooDividendRepository,
-    private val transactionListRepository: TransactionListRepository
+    private val dividendRepository: YahooDividendRepository
 ) : ViewModel() {
     val taxRateNormalListedStock: StateFlow<Double> =
         settingsDataStore.taxRateNormalListedStockFlow
@@ -383,13 +393,34 @@ class AddTransactionViewModel(
     private fun String.toTransactionDateMillis(): Long? = dividendDateToTransactionDateMillis(this)
 
 
-    val stocks: StateFlow<List<Stock>> = transactionListRepository.snapshot
-        .map { it.stocks }
+    private val stockSearchQuery = MutableStateFlow("")
+
+    @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
+    val stockSearchResults: StateFlow<List<Stock>> = stockSearchQuery
+        .debounce(150L)
+        .flatMapLatest { rawQuery ->
+            val query = rawQuery.trim()
+            if (query.isBlank()) {
+                flowOf(emptyList())
+            } else {
+                stockDao.searchStocks(
+                    query = query,
+                    likeQuery = escapeStockSearchLikePattern(query),
+                    limit = 5
+                )
+            }
+        }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000L),
-            initialValue = transactionListRepository.snapshot.value.stocks
+            initialValue = emptyList()
         )
+
+    fun updateStockSearchQuery(query: String) {
+        stockSearchQuery.value = query
+    }
+
+    suspend fun getStockByCode(code: String): Stock? = stockDao.getStockByCode(code)
 
     val feeSettings = combine(
         settingsDataStore.feeDiscountFlow,

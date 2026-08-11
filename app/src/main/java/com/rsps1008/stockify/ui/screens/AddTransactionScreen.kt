@@ -86,12 +86,11 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             application = application,
             realtimeStockDataService = application.realtimeStockDataService,
             dividendRepository = YahooDividendRepository(application.httpClient),
-            exchangeRateService = application.exchangeRateService,
-            transactionListRepository = application.transactionListRepository
+            exchangeRateService = application.exchangeRateService
         )
     )
     val context = LocalContext.current
-    val allStocks by viewModel.stocks.collectAsState()
+    val stockSearchResults by viewModel.stockSearchResults.collectAsState()
     val transactionToEdit by viewModel.transactionToEdit.collectAsState()
     val fee by viewModel.fee.collectAsState()
     val tax by viewModel.tax.collectAsState()
@@ -116,6 +115,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
 
     var stockName by remember { mutableStateOf("") }
     var stockCode by remember { mutableStateOf("") }
+    var selectedStock by remember { mutableStateOf<Stock?>(null) }
     var date by remember { mutableStateOf(normalizeTransactionDateMillis(System.currentTimeMillis())) }
     var transactionType by remember { mutableStateOf("買進") }
     var previousTransactionType by remember { mutableStateOf("買進") }
@@ -191,8 +191,6 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         }
     }
 
-    val stocksByCode = remember(allStocks) { allStocks.associateBy { it.code } }
-    val selectedStock = stocksByCode[stockCode]
     val transactionMarket = StockMarket.inferFromCode(stockCode)
     val isUsStock = StockMarket.isUs(transactionMarket)
     val isTwStock = StockMarket.isTw(transactionMarket)
@@ -216,10 +214,11 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         }
     }
 
-    LaunchedEffect(prefillStockCode, allStocks) {
+    LaunchedEffect(prefillStockCode) {
         if (transactionId == null && prefillStockCode != null) {
-            val stock = stocksByCode[prefillStockCode]
+            val stock = viewModel.getStockByCode(prefillStockCode)
             if (stock != null) {
+                selectedStock = stock
                 stockName = stock.name
                 stockCode = stock.code
                 expanded = false
@@ -259,12 +258,11 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             }
             "賣出", "融券賣出" -> {
                 if (tradePrice > 0.0 && tradeShares > 0.0) {
-                    val stock = stocksByCode[stockCode]
                     viewModel.calculateSellCosts(
                         tradePrice,
                         tradeShares,
                         transactionMarket,
-                        stock?.stockType ?: "",
+                        selectedStock?.stockType ?: "",
                         isDayTrading = transactionType == "賣出" && isDayTrading,
                         isBondEtf = stockCode.endsWith("B", ignoreCase = true)
                     )
@@ -298,14 +296,16 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
     }
 
     LaunchedEffect(stockName) {
+        viewModel.updateStockSearchQuery(stockName)
         expanded = stockName.isNotBlank() && stockCode.isBlank()
     }
 
     // Load data when editing an existing transaction
-    LaunchedEffect(transactionToEdit, allStocks) {
-        if (!hasInitializedEditState && transactionToEdit != null && allStocks.isNotEmpty()) {
+    LaunchedEffect(transactionToEdit) {
+        if (!hasInitializedEditState && transactionToEdit != null) {
             val it = transactionToEdit!!
-            val stock = allStocks.find { s -> s.code == it.stockCode }
+            val stock = viewModel.getStockByCode(it.stockCode)
+            selectedStock = stock
             stockName = stock?.name ?: ""
             stockCode = stock?.code ?: ""
             date = normalizeTransactionDateMillis(it.date)
@@ -555,10 +555,6 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
         else -> false
     }
 
-    val filteredStocks = remember(allStocks, stockName) {
-        prioritizeStockSearchResults(allStocks, stockName)
-    }
-
     Column(
         modifier = Modifier
             .statusBarsPadding()
@@ -623,6 +619,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                     value = stockName,
                     onValueChange = {
                         stockName = it
+                        selectedStock = null
                         marginRepaymentLotId = ""
                         shortLotId = ""
                         stockCode = ""
@@ -642,7 +639,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                     modifier = Modifier.fillMaxWidth(),
                     properties = PopupProperties(focusable = false)  // ✅ 讓選單不要搶焦點
                 ) {
-                    filteredStocks.take(5).forEach { selectionOption ->
+                    stockSearchResults.forEach { selectionOption ->
                         DropdownMenuItem(
                             text = {
                                 Column {
@@ -672,6 +669,7 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
                                 }
                                 stockName = selectionOption.name
                                 stockCode = selectionOption.code
+                                selectedStock = selectionOption
                                 hasUserEditedTradeInputs = true
                                 expanded = false
                             }
@@ -682,15 +680,14 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             Spacer(modifier = Modifier.height(8.dp))
             LabeledOutlinedTextField(
                 label = "股票代號",
-                value = formatStockCodeLabel(allStocks.find { it.code == stockCode }),
+                value = formatStockCodeLabel(selectedStock),
                 onValueChange = {},
                 readOnly = true
             )
         } else {
-            val stock = allStocks.find { it.code == stockCode }
             LabeledOutlinedTextField(
                 label = "股票",
-                value = formatStockDisplayLabel(stock, stockCode, stockName),
+                value = formatStockDisplayLabel(selectedStock, stockCode, stockName),
                 onValueChange = {},
                 readOnly = true
             )
@@ -1452,42 +1449,6 @@ fun AddTransactionScreen(navController: NavController, transactionId: Int?, pref
             val buttonText = if (transactionId == null) "新增交易" else "更新交易"
             Text(buttonText)
         }
-    }
-}
-
-private fun prioritizeStockSearchResults(stocks: List<Stock>, query: String): List<Stock> {
-    val normalizedQuery = query.trim().lowercase(Locale.ROOT)
-    if (normalizedQuery.isBlank()) return stocks
-
-    return stocks
-        .mapNotNull { stock ->
-            val rank = stockSearchRank(stock, normalizedQuery)
-            if (rank == Int.MAX_VALUE) {
-                null
-            } else {
-                stock to rank
-            }
-        }
-        .sortedWith(
-            compareBy<Pair<Stock, Int>> { it.second }
-                .thenBy { it.first.code.length }
-                .thenBy { it.first.code }
-                .thenBy { it.first.name }
-        )
-        .map { it.first }
-}
-
-private fun stockSearchRank(stock: Stock, normalizedQuery: String): Int {
-    val code = stock.code.lowercase(Locale.ROOT)
-    val name = stock.name.lowercase(Locale.ROOT)
-
-    return when {
-        code == normalizedQuery -> 0
-        code.startsWith(normalizedQuery) -> 1
-        code.contains(normalizedQuery) -> 2
-        name.startsWith(normalizedQuery) -> 3
-        name.contains(normalizedQuery) -> 4
-        else -> Int.MAX_VALUE
     }
 }
 

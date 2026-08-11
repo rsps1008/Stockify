@@ -69,15 +69,13 @@ class ViewModelFactory(
                 requireNotNull(settingsDataStore) { "settingsDataStore is required for AddTransactionViewModel" }
                 requireNotNull(realtimeStockDataService) { "realtimeStockDataService is required for AddTransactionViewModel" }
                 requireNotNull(dividendRepository) { "dividendRepository is required for AddTransactionViewModel" }
-                requireNotNull(transactionListRepository) { "transactionListRepository is required for AddTransactionViewModel" }
                 @Suppress("UNCHECKED_CAST")
                 AddTransactionViewModel(
                     stockDao = stockDao,
                     settingsDataStore = settingsDataStore,
                     transactionId = transactionId,
                     realtimeStockDataService = realtimeStockDataService,
-                    dividendRepository = dividendRepository,
-                    transactionListRepository = transactionListRepository
+                    dividendRepository = dividendRepository
                 ) as T
             }
             modelClass.isAssignableFrom(TransactionsViewModel::class.java) -> {

@@ -39,8 +39,28 @@ interface StockDao {
     @Query("DELETE FROM stocks")
     suspend fun deleteAllStocks()
 
-    @Query("SELECT * FROM stocks")
-    fun getAllStocks(): Flow<List<Stock>>
+    @Query("SELECT * FROM stocks WHERE code IN (:codes)")
+    suspend fun getStocksByCodes(codes: List<String>): List<Stock>
+
+    @Query(
+        """
+        SELECT * FROM stocks
+        WHERE code COLLATE NOCASE LIKE '%' || :likeQuery || '%' ESCAPE '\'
+           OR name COLLATE NOCASE LIKE '%' || :likeQuery || '%' ESCAPE '\'
+        ORDER BY CASE
+            WHEN code = :query COLLATE NOCASE THEN 0
+            WHEN code COLLATE NOCASE LIKE :likeQuery || '%' ESCAPE '\' THEN 1
+            WHEN code COLLATE NOCASE LIKE '%' || :likeQuery || '%' ESCAPE '\' THEN 2
+            WHEN name COLLATE NOCASE LIKE :likeQuery || '%' ESCAPE '\' THEN 3
+            ELSE 4
+        END,
+        LENGTH(code),
+        code,
+        name
+        LIMIT :limit
+        """
+    )
+    fun searchStocks(query: String, likeQuery: String, limit: Int): Flow<List<Stock>>
 
     @Query("SELECT DISTINCT s.* FROM stocks s JOIN stock_transactions st ON s.code = st.股號")
     fun getHeldStocks(): Flow<List<Stock>>

@@ -21,7 +21,7 @@ class TransactionListRepository(
     applicationScope: CoroutineScope
 ) {
     val snapshot: StateFlow<TransactionListSnapshot> = combine(
-        stockDao.getAllStocks(),
+        stockDao.getHeldStocks(),
         stockDao.getAllTransactions()
     ) { stocks, transactions ->
         TransactionListSnapshot(stocks = stocks, transactions = transactions)
