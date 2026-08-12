@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.material3.HorizontalDivider
@@ -45,6 +47,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -64,6 +67,8 @@ import com.rsps1008.stockify.R
 import com.rsps1008.stockify.ui.navigation.Screen
 import com.rsps1008.stockify.ui.theme.StockifyAppTheme
 import com.rsps1008.stockify.ui.viewmodel.StockDetailViewModel
+import com.rsps1008.stockify.ui.viewmodel.DeleteTransactionsScope
+import com.rsps1008.stockify.ui.viewmodel.DeleteTransactionsState
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import com.rsps1008.stockify.data.formatMarketAmount
 import com.rsps1008.stockify.data.formatShareCount
@@ -88,23 +93,70 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
     )
     val holdingInfo by viewModel.holdingInfo.collectAsState()
     val transactions by viewModel.transactions.collectAsState()
-    val showDeleteConfirmDialog by viewModel.showDeleteConfirmDialog.collectAsState()
+    val deleteTransactionsState by viewModel.deleteTransactionsState.collectAsState()
 
-    if (showDeleteConfirmDialog) {
+    LaunchedEffect(deleteTransactionsState) {
+        if (deleteTransactionsState is DeleteTransactionsState.Success) {
+            navController.popBackStack()
+        }
+    }
+
+    val deleteScope = when (val state = deleteTransactionsState) {
+        is DeleteTransactionsState.Confirming -> state.scope
+        is DeleteTransactionsState.Deleting -> state.scope
+        is DeleteTransactionsState.Error -> state.scope
+        else -> null
+    }
+    if (deleteScope != null) {
+        val scope = deleteScope
+        val isDeleting = deleteTransactionsState is DeleteTransactionsState.Deleting
+        val errorMessage = (deleteTransactionsState as? DeleteTransactionsState.Error)?.message
+        val stockName = holdingInfo?.stock?.name ?: stockCode
+        val isAllAccounts = scope is DeleteTransactionsScope.AllAccounts
+
         AlertDialog(
             onDismissRequest = { viewModel.onDeleteTransactionsCancelled() },
-            title = { Text("刪除此股票全部交易") },
-            text = { Text("確定要刪除 ${holdingInfo?.stock?.name} 的所有交易紀錄嗎？此動作無法復原。") },
+            title = {
+                Text(if (isAllAccounts) "刪除此股票全部帳戶交易" else "刪除此股票目前帳戶交易")
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        if (isAllAccounts) {
+                            "確定要刪除 $stockName 在所有帳戶的交易紀錄嗎？此動作無法復原。"
+                        } else {
+                            "確定要刪除 $stockName 在目前帳戶的所有交易紀錄嗎？此動作無法復原。"
+                        }
+                    )
+                    errorMessage?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
             confirmButton = {
-                Button(onClick = { 
-                    viewModel.onDeleteTransactionsConfirmed()
-                    navController.popBackStack()
-                }) {
-                    Text("確定")
+                Button(
+                    onClick = { viewModel.onDeleteTransactionsConfirmed() },
+                    enabled = !isDeleting
+                ) {
+                    if (isDeleting) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("刪除中...")
+                        }
+                    } else {
+                        Text(if (errorMessage == null) "確定" else "重試")
+                    }
                 }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.onDeleteTransactionsCancelled() }) {
+                TextButton(
+                    onClick = { viewModel.onDeleteTransactionsCancelled() },
+                    enabled = !isDeleting
+                ) {
                     Text("取消")
                 }
             }

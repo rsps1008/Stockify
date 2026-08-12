@@ -21,6 +21,7 @@ import com.rsps1008.stockify.data.HistoryChartCalculationSupport
 import com.rsps1008.stockify.ui.screens.HoldingInfo
 import com.rsps1008.stockify.ui.screens.TransactionUiState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -60,6 +61,19 @@ sealed interface DetailHistoryStateInternal {
     data class Loading(val progress: Float, val statusText: String) : DetailHistoryStateInternal
     data class Success(val range: HistoryRange, val rawPoints: List<StockHistoryPoint>) : DetailHistoryStateInternal
     data class Error(val message: String) : DetailHistoryStateInternal
+}
+
+sealed interface DeleteTransactionsScope {
+    object AllAccounts : DeleteTransactionsScope
+    data class ActiveAccount(val accountId: Int) : DeleteTransactionsScope
+}
+
+sealed interface DeleteTransactionsState {
+    object Hidden : DeleteTransactionsState
+    data class Confirming(val scope: DeleteTransactionsScope) : DeleteTransactionsState
+    data class Deleting(val scope: DeleteTransactionsScope) : DeleteTransactionsState
+    data class Error(val scope: DeleteTransactionsScope, val message: String) : DeleteTransactionsState
+    object Success : DeleteTransactionsState
 }
 
 private data class DetailSettingsBundle(
@@ -104,8 +118,8 @@ class StockDetailViewModel(
 
     val realtimeStockInfo = realtimeStockDataService.realtimeStockInfo
 
-    private val _showDeleteConfirmDialog = MutableStateFlow(false)
-    val showDeleteConfirmDialog: StateFlow<Boolean> = _showDeleteConfirmDialog.asStateFlow()
+    private val _deleteTransactionsState = MutableStateFlow<DeleteTransactionsState>(DeleteTransactionsState.Hidden)
+    val deleteTransactionsState: StateFlow<DeleteTransactionsState> = _deleteTransactionsState.asStateFlow()
 
     private val _historyStateInternal = MutableStateFlow<DetailHistoryStateInternal>(DetailHistoryStateInternal.Idle)
 
@@ -398,23 +412,47 @@ class StockDetailViewModel(
     }
 
     fun onDeleteTransactionsClicked() {
-        _showDeleteConfirmDialog.value = true
+        val scope = activeAccountId.value.takeIf { it != 0 }
+            ?.let(DeleteTransactionsScope::ActiveAccount)
+            ?: DeleteTransactionsScope.AllAccounts
+        _deleteTransactionsState.value = DeleteTransactionsState.Confirming(scope)
     }
 
     fun onDeleteTransactionsConfirmed() {
+        val state = _deleteTransactionsState.value
+        val scope = when (state) {
+            is DeleteTransactionsState.Confirming -> state.scope
+            is DeleteTransactionsState.Error -> state.scope
+            else -> return
+        }
+
+        _deleteTransactionsState.value = DeleteTransactionsState.Deleting(scope)
         viewModelScope.launch {
-            val accountId = activeAccountId.value
-            if (accountId == 0) {
-                stockDao.deleteTransactionsByStockCode(stockCode)
-            } else {
-                stockDao.deleteTransactionsByStockCodeAndAccountId(stockCode, accountId)
+            try {
+                when (scope) {
+                    DeleteTransactionsScope.AllAccounts -> {
+                        stockDao.deleteTransactionsByStockCode(stockCode)
+                    }
+                    is DeleteTransactionsScope.ActiveAccount -> {
+                        stockDao.deleteTransactionsByStockCodeAndAccountId(stockCode, scope.accountId)
+                    }
+                }
+                _deleteTransactionsState.value = DeleteTransactionsState.Success
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _deleteTransactionsState.value = DeleteTransactionsState.Error(
+                    scope = scope,
+                    message = "刪除交易失敗，請稍後再試。"
+                )
             }
         }
-        _showDeleteConfirmDialog.value = false
     }
 
     fun onDeleteTransactionsCancelled() {
-        _showDeleteConfirmDialog.value = false
+        if (_deleteTransactionsState.value !is DeleteTransactionsState.Deleting) {
+            _deleteTransactionsState.value = DeleteTransactionsState.Hidden
+        }
     }
 
     fun setDetailHistoryChartExpanded(expanded: Boolean) {
