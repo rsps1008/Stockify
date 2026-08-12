@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
@@ -568,10 +569,11 @@ fun AddTransactionScreen(
 
     Column(
         modifier = Modifier
+            .fillMaxSize()
             .statusBarsPadding()
-            .padding(16.dp)
             .imePadding()
             .verticalScroll(rememberScrollState())
+            .padding(16.dp)
     ) {
         Text(text = "選擇帳戶", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(4.dp))
