@@ -4,9 +4,11 @@ import com.rsps1008.stockify.ui.screens.HoldingInfo
 import com.rsps1008.stockify.ui.screens.AssetStockValue
 import com.rsps1008.stockify.ui.screens.HoldingsUiState
 import com.rsps1008.stockify.ui.screens.TransactionUiState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 
 class OfflineStockRepository(
@@ -47,11 +49,10 @@ class OfflineStockRepository(
             }
 
             val currentDateMillis = System.currentTimeMillis()
+            val transactionsByStock = transactions.groupBy { it.stockCode }
             val mode = HomeDisplayMode.normalize(homeDisplayMode)
             val transactedStocks = stocks.filter { stock ->
-                transactions.any {
-                    it.stockCode == stock.code && it.date <= currentDateMillis
-                }
+                transactionsByStock[stock.code]?.any { it.date <= currentDateMillis } == true
             }
 
             val filteredStocks = when (mode) {
@@ -62,7 +63,7 @@ class OfflineStockRepository(
 
             suspend fun calculateHoldingInfoFor(stock: Stock): HoldingInfo {
                 val realtime = realTimeData[stock.code]
-                val stockTransactions = transactions.filter { it.stockCode == stock.code }
+                val stockTransactions = transactionsByStock[stock.code].orEmpty()
                 val currentPrice = realTimeData[stock.code]?.currentPrice ?: 0.0
                 val dailyChange = realTimeData[stock.code]?.change ?: 0.0
                 val dailyChangePercentage = realTimeData[stock.code]?.changePercent ?: 0.0
@@ -133,7 +134,7 @@ class OfflineStockRepository(
                 ReturnRateMode.CUMULATIVE_INVESTMENT -> if (totalInvestment > 0) (cumulativePL / totalInvestment) * 100 else 0.0
                 ReturnRateMode.XIRR -> {
                     val portfolioCashFlows = filteredStocks.flatMap { stock ->
-                        val stockTransactions = transactions.filter { it.stockCode == stock.code }
+                        val stockTransactions = transactionsByStock[stock.code].orEmpty()
                         val currentPrice = realTimeData[stock.code]?.currentPrice ?: 0.0
                         val shares = holdingInfos.firstOrNull { it.stock.code == stock.code }?.shares ?: 0.0
                         val rate = if (summaryIsCombined && StockMarket.isUs(stock.market)) usdToTwdRate else 1.0
@@ -163,7 +164,7 @@ class OfflineStockRepository(
                 assetStockValues = assetStockValues,
                 dailyPL = dailyPL
             )
-        }
+        }.flowOn(Dispatchers.Default)
     }
 
     override fun getHoldingInfo(stockCode: String, accountId: Int): Flow<HoldingInfo?> {
