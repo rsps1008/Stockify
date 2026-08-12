@@ -32,7 +32,7 @@
 - JSON 必須安全檢查型別與 null；數值不可直接強制 cast。TLS 憑證錯誤可觸發既有 fallback，但不可使用 trust-all 或弱化憑證驗證。
 - Yahoo 價格解析前需移除千分位逗號。TWSE 上市／上櫃每批最多 5 檔；興櫃即時價只走 Yahoo，歷史價走 TPEx 月資料。
 - `Ktor` 版本只由 `gradle/libs.versions.toml` 管理，不可在 module 另寫不同版本。
-- 台股與美股清單啟動時若距上次成功更新超過 7 天才同步；失敗或空清單保留原資料。台股同步 TWSE；美股直接抓取 Nasdaq Trader 的 `nasdaqlisted.txt` 與 `otherlisted.txt`，過濾測試商品與檔尾 `File Creation Time` 記錄後，只重建 `market = US`。
+- 台股與美股清單啟動時若距上次成功更新超過 7 天才同步；失敗或空清單保留原資料。台股同步 TWSE，上市、上櫃、興櫃任一板別取得失敗或解析為空時取消整次更新，不寫入資料庫或更新成功時間；美股直接抓取 Nasdaq Trader 的 `nasdaqlisted.txt` 與 `otherlisted.txt`，過濾測試商品與檔尾 `File Creation Time` 記錄後，只重建 `market = US`。
 - Bundled `stocks.json` / `us_stocks.json` 依 checksum 同步 seed；台股已有手動更新紀錄時不可用 seed 覆蓋。`stocks.json` 損壞可刪除後由 asset 重建。
 - USD/TWD 匯率啟動時抓取一次，之後每 24 小時更新並保留最後可用快取；首頁與個股共用同一份匯率。
 
