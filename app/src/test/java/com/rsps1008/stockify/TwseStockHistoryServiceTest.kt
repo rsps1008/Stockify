@@ -19,7 +19,7 @@ class TwseStockHistoryServiceTest {
         }
         override suspend fun updateStock(stock: Stock) {}
         override suspend fun insertTransaction(transaction: StockTransaction) {}
-        override suspend fun updateTransaction(transaction: StockTransaction) {}
+        override suspend fun updateTransaction(transaction: StockTransaction): Int = 1
         override suspend fun deleteTransaction(transaction: StockTransaction) {}
         override suspend fun deleteAllTransactions() {}
         override suspend fun deleteAllStocks() {}

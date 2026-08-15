@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -50,6 +52,7 @@ class DividendInfoViewModel(
     private var latestTaiwanStocks: List<TaiwanStockRef> = emptyList()
     private var latestAccountId: Int = 0
     private var refreshJob: Job? = null
+    private val yahooRequestSemaphore = Semaphore(permits = 3)
 
     init {
         observeHoldingsAndRefresh()
@@ -137,8 +140,11 @@ class DividendInfoViewModel(
             val localStockDate = lastStockTx?.transaction?.date?.let { sdf.format(Date(it)) }
 
             // 2. Fetch Yahoo Dividends
-            val cashResult = dividendRepository.fetchLatestCashDividend(stock.stockCode)
-            val stockResult = dividendRepository.fetchLatestStockDividend(stock.stockCode)
+            val yahooDividends = yahooRequestSemaphore.withPermit {
+                dividendRepository.fetchLatestDividends(stock.stockCode)
+            }
+            val cashResult = yahooDividends.cashDividend
+            val stockResult = yahooDividends.stockDividend
 
             settingsDataStore.setDividendInfoCacheEntry(
                 stockCode = stock.stockCode,

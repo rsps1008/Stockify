@@ -28,7 +28,7 @@ interface StockDao {
     suspend fun insertTransaction(transaction: StockTransaction)
 
     @Update
-    suspend fun updateTransaction(transaction: StockTransaction)
+    suspend fun updateTransaction(transaction: StockTransaction): Int
 
     @Delete
     suspend fun deleteTransaction(transaction: StockTransaction)

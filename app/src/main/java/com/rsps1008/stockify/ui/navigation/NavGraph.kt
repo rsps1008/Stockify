@@ -128,19 +128,21 @@ fun NavGraph(
 
             val transactionIdArg = backStackEntry.arguments?.getString("transactionId")
             val transactionId = transactionIdArg?.toIntOrNull()
+            val hasInvalidTransactionId = transactionIdArg != null && transactionId == null
 
             val prefillStockCode = backStackEntry.arguments?.getString("stockCode")
             val prefillDate = backStackEntry.arguments?.getString("date")?.toLongOrNull()
             LogScreenEntry(
                 "AddTransactionScreen",
-                "transactionId=${transactionId ?: "null"}, stockCode=${prefillStockCode ?: "null"}, date=${prefillDate ?: "null"}"
+                "transactionId=${transactionId ?: "null"}, invalidTransactionId=$hasInvalidTransactionId, stockCode=${prefillStockCode ?: "null"}, date=${prefillDate ?: "null"}"
             )
 
             AddTransactionScreen(
                 navController = navController,
                 transactionId = transactionId,
                 prefillStockCode = prefillStockCode,
-                prefillDate = prefillDate
+                prefillDate = prefillDate,
+                hasInvalidTransactionId = hasInvalidTransactionId
             )
         }
     }

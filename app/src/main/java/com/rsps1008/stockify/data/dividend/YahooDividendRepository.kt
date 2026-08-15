@@ -1,14 +1,14 @@
 package com.rsps1008.stockify.data.dividend
 
 import android.annotation.SuppressLint
-import android.util.Log
-import android.widget.Toast
-import androidx.compose.ui.platform.LocalContext
-import io.ktor.client.*
-import io.ktor.client.call.*
-import io.ktor.client.request.*
+import com.rsps1008.stockify.data.retryOnTransientNetworkFailure
+import io.ktor.client.HttpClient
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.statement.bodyAsText
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
+import org.jsoup.Jsoup
+import java.io.IOException
 
 @SuppressLint("UnsafeOptInUsageError")
 @Serializable
@@ -24,76 +24,82 @@ data class DividendResult(
     val date: String
 )
 
+data class YahooDividendSummary(
+    val cashDividend: DividendResult?,
+    val stockDividend: DividendResult?
+)
+
+internal fun parseYahooDividendPage(html: String): YahooDividendSummary {
+    var cashDividend: DividendResult? = null
+    var stockDividend: DividendResult? = null
+
+    val rows = Jsoup.parse(html).select(".table-body ul > li")
+    for (li in rows) {
+        val cols = li.select("div")
+        if (cols.size < 9) continue
+
+        if (cols[3].text().trim().isEmpty()) continue
+
+        val rawDate = cols[8].text().trim()
+        if (cashDividend == null) {
+            val value = cols[4].text().trim().replace(",", "").toDoubleOrNull()
+            if (value != null) {
+                cashDividend = DividendResult(value, rawDate)
+            }
+        }
+        if (stockDividend == null) {
+            val value = cols[5].text().trim().replace(",", "").toDoubleOrNull()
+            if (value != null) {
+                stockDividend = DividendResult(value, rawDate)
+            }
+        }
+
+        if (cashDividend != null && stockDividend != null) break
+    }
+
+    return YahooDividendSummary(
+        cashDividend = cashDividend,
+        stockDividend = stockDividend
+    )
+}
+
 class YahooDividendRepository(
     private val client: HttpClient
 ) {
 
     companion object {
-        private const val IDX_DATE = 0
-        private const val IDX_CODE = 1
-        private const val IDX_NAME = 2
-        private const val IDX_DIVIDEND = 5   // 權值+息值
-        private const val IDX_TYPE = 6       // 權 / 息
+        private const val TAG = "YahooDividendRepository"
+        private const val USER_AGENT = "Mozilla/5.0"
+    }
+
+    private suspend fun fetchLatestDividendsFromYahoo(stockCode: String): YahooDividendSummary {
+        val url = "https://tw.stock.yahoo.com/quote/${stockCode}/dividend"
+        val html = retryOnTransientNetworkFailure(TAG, stockCode) {
+            client.get(url) {
+                header("User-Agent", USER_AGENT)
+            }.bodyAsText()
+        } ?: throw IOException("Yahoo 股利資料請求失敗: $stockCode")
+
+        return parseYahooDividendPage(html)
+    }
+
+    /**
+     * 一次取得同一個 Yahoo 頁面的現金股利與股票股利。
+     */
+    suspend fun fetchLatestDividends(stockCode: String): YahooDividendSummary {
+        return fetchLatestDividendsFromYahoo(stockCode)
     }
 
     /**
      * 取得「最新一筆現金股利（息）」
      */
-    suspend fun fetchLatestCashDividend(
-        stockCode: String
-    ): DividendResult? {
-
-        val url = "https://tw.stock.yahoo.com/quote/${stockCode}/dividend"
-        val html: String = client.get(url).body()
-        val doc = org.jsoup.Jsoup.parse(html)
-
-        val rows = doc.select(".table-body ul > li")
-
-        for (li in rows) {
-            val cols = li.select("div")
-            if (cols.size < 9) continue
-
-            val belong = cols[3].text().trim()
-            if (belong.isEmpty()) continue
-
-            val cashText = cols[4].text().trim()
-            val rawDate = cols[8].text().trim()   // ★ 取得日期，如 2025/10/23
-
-            val value = cashText.replace(",", "").toDoubleOrNull()
-            if (value != null) {
-                return DividendResult(value, rawDate)
-            }
-        }
-        return null
-    }
+    suspend fun fetchLatestCashDividend(stockCode: String): DividendResult? =
+        fetchLatestDividends(stockCode).cashDividend
 
     /**
      * 從 Yahoo 取得最新一筆「有所屬期間」的股票股利
      */
-    suspend fun fetchLatestStockDividend(stockCode: String): DividendResult? {
-
-        val url = "https://tw.stock.yahoo.com/quote/${stockCode}/dividend"
-        val html: String = client.get(url).body()
-        val doc = org.jsoup.Jsoup.parse(html)
-
-        val rows = doc.select(".table-body ul > li")
-
-        for (li in rows) {
-            val cols = li.select("div")
-            if (cols.size < 9) continue
-
-            val belong = cols[3].text().trim()
-            if (belong.isEmpty()) continue
-
-            val stockText = cols[5].text().trim()
-            val rawDate = cols[8].text().trim() // ★ 加上日期
-
-            val value = stockText.replace(",", "").toDoubleOrNull()
-            if (value != null) {
-                return DividendResult(value, rawDate)
-            }
-        }
-        return null
-    }
+    suspend fun fetchLatestStockDividend(stockCode: String): DividendResult? =
+        fetchLatestDividends(stockCode).stockDividend
 
 }

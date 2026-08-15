@@ -28,12 +28,35 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.math.max
 import kotlin.math.roundToInt
 import java.util.UUID
+
+internal const val TRANSACTION_SUBMISSION_IN_PROGRESS = "__transaction_submission_in_progress__"
+internal const val EDIT_TRANSACTION_MISSING = "這筆交易已不存在，無法更新"
+
+sealed interface EditTransactionState {
+    data object NotEditing : EditTransactionState
+    data object Loading : EditTransactionState
+    data class Ready(val transaction: StockTransaction) : EditTransactionState
+    data object Missing : EditTransactionState
+}
+
+internal fun resolvedEditTransactionState(
+    transactionId: Int?,
+    transaction: StockTransaction?
+): EditTransactionState = when {
+    transactionId == null -> EditTransactionState.NotEditing
+    transaction == null -> EditTransactionState.Missing
+    else -> EditTransactionState.Ready(transaction)
+}
+
+internal fun editTransactionUpdateError(updatedRows: Int): String? =
+    if (updatedRows > 0) null else EDIT_TRANSACTION_MISSING
 
 data class MarginLotOption(
     val lotId: String,
@@ -163,6 +186,11 @@ class AddTransactionViewModel(
         settingsDataStore.taxRateDayTradingFlow
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 0.0015)
 
+    private val _editTransactionState = MutableStateFlow<EditTransactionState>(
+        if (transactionId == null) EditTransactionState.NotEditing else EditTransactionState.Loading
+    )
+    val editTransactionState = _editTransactionState.asStateFlow()
+
     private val _transactionToEdit = MutableStateFlow<StockTransaction?>(null)
     val transactionToEdit = _transactionToEdit.asStateFlow()
 
@@ -180,6 +208,7 @@ class AddTransactionViewModel(
 
     private val _income = MutableStateFlow(0.0)
     val income = _income.asStateFlow()
+    private val submissionMutex = Mutex()
 
     val calculationRoundingMode: StateFlow<String> = settingsDataStore.calculationRoundingModeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), CalculationRoundingMode.ROUND)
@@ -281,20 +310,26 @@ class AddTransactionViewModel(
 
     init {
         viewModelScope.launch {
+            val txId = transactionId
+            if (txId != null) {
+                val transaction = stockDao.getTransactionById(txId).firstOrNull()
+                if (transaction == null) {
+                    _editTransactionState.value = EditTransactionState.Missing
+                    return@launch
+                }
+
+                _transactionToEdit.value = transaction
+                _fee.value = transaction.fee
+                _tax.value = transaction.tax
+                _expense.value = transaction.expense
+                _income.value = transaction.income
+                _selectedAccountId.value = transaction.accountId
+                _editTransactionState.value = resolvedEditTransactionState(txId, transaction)
+                return@launch
+            }
+
             val activeId = settingsDataStore.activeAccountIdFlow.firstOrNull() ?: 0
             _selectedAccountId.value = if (activeId == 0) 1 else activeId
-
-            transactionId?.let { txId ->
-                val transaction = stockDao.getTransactionById(txId).firstOrNull()
-                _transactionToEdit.value = transaction
-                transaction?.let { tx ->
-                    _fee.value = tx.fee
-                    _tax.value = tx.tax
-                    _expense.value = tx.expense
-                    _income.value = tx.income
-                    _selectedAccountId.value = tx.accountId
-                }
-            }
         }
     }
 
@@ -527,6 +562,11 @@ class AddTransactionViewModel(
         shortCompensationLotId: String = "",
         shortCompensation: Double = 0.0
     ): String? {
+        if (!submissionMutex.tryLock()) {
+            return TRANSACTION_SUBMISSION_IN_PROGRESS
+        }
+
+        try {
         val finalFee = transactionFeeForType(type, _fee.value, dividendFee)
         val finalSupplementaryHealthInsurancePremium = if (type == "配息") {
             supplementaryHealthInsurancePremium.coerceAtLeast(0.0)
@@ -576,6 +616,9 @@ class AddTransactionViewModel(
                 stockSplitRatio, sharesBeforeSplit, sharesAfterSplit,
                 marginPrincipal, marginAnnualRate, marginLotId, marginRepaymentLotId, marginRepayment, marginSelfFunded, marginSelfFundedOverridden, marginActualInterest, shortBorrowPrincipal, shortBorrowAnnualRate, shortLotId, shortCoverLotId, shortCoverShares, shortCompensationLotId, shortCompensation
             )
+        }
+        } finally {
+            submissionMutex.unlock()
         }
     }
 
@@ -704,57 +747,66 @@ class AddTransactionViewModel(
         ,marginRepaymentLotId: String
         ,marginRepayment: Double, marginSelfFunded: Double, marginSelfFundedOverridden: Boolean, marginActualInterest: Double, shortBorrowPrincipal: Double, shortBorrowAnnualRate: Double, shortLotId: String, shortCoverLotId: String, shortCoverShares: Double, shortCompensationLotId: String, shortCompensation: Double
     ): String? {
-        return _transactionToEdit.value?.let {
-            val targetStock = stockDao.getStockByCode(stockCode)
-                ?: return "找不到股票資料，無法更新交易"
-            val normalizedTargetStock = targetStock.copy(market = StockMarket.inferFromCode(stockCode))
-            val resolvedMarginLotId = resolveMarginOpeningLotId(type, marginLotId)
-            val resolvedShortLotId = resolveShortOpeningLotId(type, shortLotId)
-            val updatedTransaction = it.copy(
-                stockCode = stockCode,
-                accountId = _selectedAccountId.value,
-                date = date,
-                type = type,
-                buyPrice = if (type == "買進" || type == "融資買進" || type == "買券還券") price else 0.0,
-                buyShares = if (type == "買進" || type == "融資買進" || type == "買券還券") shares else 0.0,
-                sellPrice = if (type == "賣出" || type == "融券賣出") price else 0.0,
-                sellShares = if (type == "賣出" || type == "融券賣出") shares else 0.0,
-                fee = fee,
-                tax = tax,
-                income = income,
-                expense = expense,
-                cashDividend = cashDividend,
-                exDividendShares = exDividendShares,
-                stockDividend = stockDividend,
-                dividendShares = dividendShares,
-                exRightsShares = exRightsShares,
-                note = note,
-                dividendIncome = dividendIncome,
-                supplementaryHealthInsurancePremium = supplementaryHealthInsurancePremium,
-                capitalReductionRatio = capitalReductionRatio,
-                sharesBeforeReduction = sharesBeforeReduction,
-                sharesAfterReduction = sharesAfterReduction,
-                cashReturned = cashReturned,
-                stockSplitRatio = stockSplitRatio,
-                sharesBeforeSplit = sharesBeforeSplit,
-                sharesAfterSplit = sharesAfterSplit,
-                marginPrincipal = marginPrincipal,
-                marginAnnualRate = marginAnnualRate,
-                marginLotId = resolvedMarginLotId,
-                marginRepaymentLotId = marginRepaymentLotId,
-                marginRepayment = marginRepayment, marginSelfFunded = marginSelfFunded, marginSelfFundedOverridden = marginSelfFundedOverridden, marginActualInterest = marginActualInterest, shortBorrowPrincipal = shortBorrowPrincipal, shortBorrowAnnualRate = shortBorrowAnnualRate, shortLotId = resolvedShortLotId, shortCoverLotId = shortCoverLotId, shortCoverShares = shortCoverShares, shortCompensationLotId = shortCompensationLotId, shortCompensation = shortCompensation
-            )
-            validateLotBalances(updatedTransaction)?.let { return it }
-            if (it.stockCode != updatedTransaction.stockCode || it.accountId != updatedTransaction.accountId) {
-                validateLotBalancesAfterRemoving(it)?.let { error -> return error }
-            }
-            if (normalizedTargetStock != targetStock) {
-                stockDao.updateStock(normalizedTargetStock)
-            }
-            stockDao.updateTransaction(updatedTransaction)
-            realtimeStockDataService.refreshStock(stockCode)
-            null
-        } ?: "找不到要更新的交易"
+        val targetTransactionId = transactionId ?: return EDIT_TRANSACTION_MISSING
+        val originalTransaction = stockDao.getTransactionById(targetTransactionId).firstOrNull()
+            ?: return markEditTransactionMissing()
+        val targetStock = stockDao.getStockByCode(stockCode)
+            ?: return "找不到股票資料，無法更新交易"
+        val normalizedTargetStock = targetStock.copy(market = StockMarket.inferFromCode(stockCode))
+        val resolvedMarginLotId = resolveMarginOpeningLotId(type, marginLotId)
+        val resolvedShortLotId = resolveShortOpeningLotId(type, shortLotId)
+        val updatedTransaction = originalTransaction.copy(
+            stockCode = stockCode,
+            accountId = _selectedAccountId.value,
+            date = date,
+            type = type,
+            buyPrice = if (type == "買進" || type == "融資買進" || type == "買券還券") price else 0.0,
+            buyShares = if (type == "買進" || type == "融資買進" || type == "買券還券") shares else 0.0,
+            sellPrice = if (type == "賣出" || type == "融券賣出") price else 0.0,
+            sellShares = if (type == "賣出" || type == "融券賣出") shares else 0.0,
+            fee = fee,
+            tax = tax,
+            income = income,
+            expense = expense,
+            cashDividend = cashDividend,
+            exDividendShares = exDividendShares,
+            stockDividend = stockDividend,
+            dividendShares = dividendShares,
+            exRightsShares = exRightsShares,
+            note = note,
+            dividendIncome = dividendIncome,
+            supplementaryHealthInsurancePremium = supplementaryHealthInsurancePremium,
+            capitalReductionRatio = capitalReductionRatio,
+            sharesBeforeReduction = sharesBeforeReduction,
+            sharesAfterReduction = sharesAfterReduction,
+            cashReturned = cashReturned,
+            stockSplitRatio = stockSplitRatio,
+            sharesBeforeSplit = sharesBeforeSplit,
+            sharesAfterSplit = sharesAfterSplit,
+            marginPrincipal = marginPrincipal,
+            marginAnnualRate = marginAnnualRate,
+            marginLotId = resolvedMarginLotId,
+            marginRepaymentLotId = marginRepaymentLotId,
+            marginRepayment = marginRepayment, marginSelfFunded = marginSelfFunded, marginSelfFundedOverridden = marginSelfFundedOverridden, marginActualInterest = marginActualInterest, shortBorrowPrincipal = shortBorrowPrincipal, shortBorrowAnnualRate = shortBorrowAnnualRate, shortLotId = resolvedShortLotId, shortCoverLotId = shortCoverLotId, shortCoverShares = shortCoverShares, shortCompensationLotId = shortCompensationLotId, shortCompensation = shortCompensation
+        )
+        validateLotBalances(updatedTransaction)?.let { return it }
+        if (originalTransaction.stockCode != updatedTransaction.stockCode || originalTransaction.accountId != updatedTransaction.accountId) {
+            validateLotBalancesAfterRemoving(originalTransaction)?.let { error -> return error }
+        }
+        editTransactionUpdateError(stockDao.updateTransaction(updatedTransaction))?.let {
+            return markEditTransactionMissing()
+        }
+        if (normalizedTargetStock != targetStock) {
+            stockDao.updateStock(normalizedTargetStock)
+        }
+        realtimeStockDataService.refreshStock(stockCode)
+        return null
+    }
+
+    private fun markEditTransactionMissing(): String {
+        _transactionToEdit.value = null
+        _editTransactionState.value = EditTransactionState.Missing
+        return EDIT_TRANSACTION_MISSING
     }
 
     private suspend fun validateLotBalances(candidate: StockTransaction): String? {
@@ -806,15 +858,6 @@ class AddTransactionViewModel(
         _expense.value = 0.0
         _income.value = 0.0
         _taxRate.value = 0.0
-    }
-
-    fun resetEditState() {
-        _transactionToEdit.value = null
-    }
-
-    fun resetForm() {
-        resetEditState()
-        resetCalculatedValues()
     }
 
     fun updateFee(

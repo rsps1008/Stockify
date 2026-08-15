@@ -7,7 +7,11 @@ import com.rsps1008.stockify.ui.viewmodel.resolveShortOpeningLotId
 import com.rsps1008.stockify.ui.viewmodel.transactionFeeForType
 import com.rsps1008.stockify.ui.viewmodel.calculateSupplementaryHealthInsurancePremium
 import com.rsps1008.stockify.ui.viewmodel.dividendDateToTransactionDateMillis
+import com.rsps1008.stockify.ui.viewmodel.EditTransactionState
+import com.rsps1008.stockify.ui.viewmodel.EDIT_TRANSACTION_MISSING
+import com.rsps1008.stockify.ui.viewmodel.editTransactionUpdateError
 import com.rsps1008.stockify.ui.viewmodel.holdingSharesAtDate
+import com.rsps1008.stockify.ui.viewmodel.resolvedEditTransactionState
 import com.rsps1008.stockify.ui.viewmodel.transactionsBeforeCandidateForLotSelection
 import com.rsps1008.stockify.ui.viewmodel.transactionsWithCandidateForValidation
 import org.junit.Assert.assertEquals
@@ -18,6 +22,38 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 class AddTransactionLotIdSupportTest {
+    @Test
+    fun editTransactionStateDistinguishesNewAndLoadedResultFromMissingTarget() {
+        val transaction = StockTransaction(
+            id = 42,
+            stockCode = "2330",
+            accountId = 1,
+            date = 1_000L,
+            recordTime = 1_000L,
+            type = "買進"
+        )
+
+        assertEquals(
+            EditTransactionState.NotEditing,
+            resolvedEditTransactionState(transactionId = null, transaction = null)
+        )
+        assertEquals(
+            EditTransactionState.Missing,
+            resolvedEditTransactionState(transactionId = transaction.id, transaction = null)
+        )
+        assertEquals(
+            EditTransactionState.Ready(transaction),
+            resolvedEditTransactionState(transactionId = transaction.id, transaction = transaction)
+        )
+    }
+
+    @Test
+    fun editTransactionRequiresAnUpdatedRow() {
+        assertNull(editTransactionUpdateError(1))
+        assertNull(editTransactionUpdateError(2))
+        assertEquals(EDIT_TRANSACTION_MISSING, editTransactionUpdateError(0))
+    }
+
     @Test
     fun supplementaryHealthInsurancePremium_appliesOnlyToTaiwanDividendsAboveThreshold() {
         assertEquals(0.0, calculateSupplementaryHealthInsurancePremium(20_000.0, "TW"), 0.0)

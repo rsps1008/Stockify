@@ -52,16 +52,19 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontWeight
 import com.rsps1008.stockify.ui.viewmodel.AddTransactionViewModel
+import com.rsps1008.stockify.ui.viewmodel.EditTransactionState
 import com.rsps1008.stockify.ui.viewmodel.calculateSupplementaryHealthInsurancePremium
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
+import com.rsps1008.stockify.ui.viewmodel.TRANSACTION_SUBMISSION_IN_PROGRESS
 import com.rsps1008.stockify.ui.navigation.Screen
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
 import com.rsps1008.stockify.data.Stock
@@ -81,8 +84,16 @@ fun AddTransactionScreen(
     navController: NavController,
     transactionId: Int?,
     prefillStockCode: String? = null,
-    prefillDate: Long? = null
+    prefillDate: Long? = null,
+    hasInvalidTransactionId: Boolean = false
 ) {
+    if (hasInvalidTransactionId) {
+        EditTransactionMissingContent(
+            onBack = { popBackStackOrNavigateToTransactions(navController) }
+        )
+        return
+    }
+
     val application = LocalContext.current.applicationContext as StockifyApplication
     val locale = LocalConfiguration.current.locales[0]
     val viewModel: AddTransactionViewModel = viewModel(
@@ -99,6 +110,24 @@ fun AddTransactionScreen(
     val context = LocalContext.current
     val stockSearchResults by viewModel.stockSearchResults.collectAsState()
     val transactionToEdit by viewModel.transactionToEdit.collectAsState()
+    val editTransactionState by viewModel.editTransactionState.collectAsState()
+
+    if (transactionId != null) {
+        when (editTransactionState) {
+            EditTransactionState.Loading -> {
+                EditTransactionLoadingContent()
+                return
+            }
+            EditTransactionState.Missing -> {
+                EditTransactionMissingContent(
+                    onBack = { popBackStackOrNavigateToTransactions(navController) }
+                )
+                return
+            }
+            else -> Unit
+        }
+    }
+
     val fee by viewModel.fee.collectAsState()
     val tax by viewModel.tax.collectAsState()
     val taxRate by viewModel.taxRate.collectAsState()
@@ -145,6 +174,7 @@ fun AddTransactionScreen(
 
     var showDatePicker by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf(false) }
+    var isSubmitting by remember(transactionId) { mutableStateOf(false) }
 
     // Optional fields for dividend calculation
     var cashDividend by remember { mutableStateOf("") }
@@ -508,7 +538,8 @@ fun AddTransactionScreen(
         }
     }
 
-    val isFormValid = when (transactionType) {
+    val isEditTargetReady = transactionId == null || editTransactionState is EditTransactionState.Ready
+    val isFormValid = isEditTargetReady && when (transactionType) {
         "買進", "融資買進", "賣出", "融券賣出" ->
             stockName.isNotBlank() &&
             stockCode.isNotBlank() &&
@@ -1401,76 +1432,135 @@ fun AddTransactionScreen(
         )
         Spacer(modifier = Modifier.height(32.dp))
         TransactionSubmitButtons(
-            onSubmit = { addNext ->
+            onSubmit = submit@{ addNext ->
+                if (isSubmitting) return@submit
+                isSubmitting = true
                 coroutineScope.launch {
-                    val validationError = viewModel.addOrUpdateTransaction(
-                        stockName = stockName,
-                        stockCode = stockCode,
-                        date = date,
-                        type = transactionType,
-                        price = price.toDoubleOrNull() ?: 0.0,
-                        shares = shares.toDoubleOrNull() ?: 0.0,
-                        cashDividend = cashDividend.toDoubleOrNull() ?: 0.0,
-                        exDividendShares = exDividendShares.toDoubleOrNull() ?: 0.0,
-                        stockDividend = stockDividendRate.toDoubleOrNull() ?: 0.0,
-                        exRightsShares = exRightsShares.toDoubleOrNull() ?: 0.0,
-                        dividendFee = dividendFee.toDoubleOrNull() ?: 0.0,
-                        note = note,
-                        capitalReductionRatio = capitalReductionRatio.toDoubleOrNull() ?: 0.0,
-                        sharesBeforeReduction = sharesBeforeReduction.toDoubleOrNull() ?: 0.0,
-                        sharesAfterReduction = sharesAfterReduction.toDoubleOrNull() ?: 0.0,
-                        cashReturned = cashReturned.toDoubleOrNull() ?: 0.0,
-                        stockSplitRatio = stockSplitRatio.toDoubleOrNull() ?: 0.0,
-                        sharesBeforeSplit = sharesBeforeSplit.toDoubleOrNull() ?: 0.0,
-                        sharesAfterSplit = sharesAfterSplit.toDoubleOrNull() ?: 0.0,
-                        dividendIncome = dividendIncome.toDoubleOrNull(),
-                        supplementaryHealthInsurancePremium = supplementaryHealthInsurancePremium.toDoubleOrNull() ?: 0.0,
-                        marginPrincipal = if (transactionType == "融資買進") marginPrincipal.toDoubleOrNull() ?: 0.0 else 0.0,
-                        marginAnnualRate = if (transactionType == "融資買進") marginAnnualRate.toDoubleOrNull() ?: 0.0 else 0.0,
-                        marginLotId = if (transactionType == "融資買進") transactionToEdit?.marginLotId.orEmpty() else "",
-                        marginRepaymentLotId = if (transactionType == "融資還款" || (transactionType == "賣出" && sellRepaysMargin)) marginRepaymentLotId else "",
-                        marginRepayment = if (transactionType == "融資還款") {
-                            marginRepayment.toDoubleOrNull() ?: 0.0
-                        } else if (transactionType == "賣出" && sellRepaysMargin) {
-                            resolveSellMarginRepayment(marginRepayment, income) ?: 0.0
-                        } else 0.0,
-                        marginSelfFunded = if (transactionType == "融資買進") marginSelfFunded.toDoubleOrNull() ?: 0.0 else 0.0,
-                        marginSelfFundedOverridden = transactionType == "融資買進" && marginSelfFundedOverridden,
-                        marginActualInterest = if (transactionType == "融資還款" || (transactionType == "賣出" && sellRepaysMargin)) marginActualInterest.toDoubleOrNull() ?: 0.0 else 0.0,
-                        shortBorrowPrincipal = if (transactionType == "融券賣出") (price.toDoubleOrNull() ?: 0.0) * (shares.toDoubleOrNull() ?: 0.0) else 0.0,
-                        shortBorrowAnnualRate = if (transactionType == "融券賣出") shortBorrowAnnualRate.toDoubleOrNull() ?: 0.0 else 0.0,
-                        shortLotId = if (transactionType == "融券賣出") transactionToEdit?.shortLotId.orEmpty() else "",
-                        shortCoverLotId = if (transactionType == "買券還券") shortLotId else "",
-                        shortCoverShares = if (transactionType == "買券還券") shares.toDoubleOrNull() ?: 0.0 else 0.0,
-                        shortCompensationLotId = if (transactionType == "融券補償") shortLotId else "",
-                        shortCompensation = if (transactionType == "融券補償") shortCompensation.toDoubleOrNull() ?: 0.0 else 0.0
-                    )
-                    if (validationError != null) {
-                        Toast.makeText(context, validationError, Toast.LENGTH_LONG).show()
-                        return@launch
-                    }
-                    val message = if (transactionId == null) "新增成功" else "更新成功"
-                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                    viewModel.resetForm()
-                    if (addNext && transactionId == null) {
-                        navController.navigate(
-                            Screen.AddTransaction.createRoute(
-                                stockCode = stockCode,
-                                date = date
-                            )
-                        ) {
-                            popUpTo(Screen.AddTransaction.route) {
-                                inclusive = true
-                            }
+                    var submissionSucceeded = false
+                    var keepSubmittingDisabled = false
+                    try {
+                        val validationError = viewModel.addOrUpdateTransaction(
+                            stockName = stockName,
+                            stockCode = stockCode,
+                            date = date,
+                            type = transactionType,
+                            price = price.toDoubleOrNull() ?: 0.0,
+                            shares = shares.toDoubleOrNull() ?: 0.0,
+                            cashDividend = cashDividend.toDoubleOrNull() ?: 0.0,
+                            exDividendShares = exDividendShares.toDoubleOrNull() ?: 0.0,
+                            stockDividend = stockDividendRate.toDoubleOrNull() ?: 0.0,
+                            exRightsShares = exRightsShares.toDoubleOrNull() ?: 0.0,
+                            dividendFee = dividendFee.toDoubleOrNull() ?: 0.0,
+                            note = note,
+                            capitalReductionRatio = capitalReductionRatio.toDoubleOrNull() ?: 0.0,
+                            sharesBeforeReduction = sharesBeforeReduction.toDoubleOrNull() ?: 0.0,
+                            sharesAfterReduction = sharesAfterReduction.toDoubleOrNull() ?: 0.0,
+                            cashReturned = cashReturned.toDoubleOrNull() ?: 0.0,
+                            stockSplitRatio = stockSplitRatio.toDoubleOrNull() ?: 0.0,
+                            sharesBeforeSplit = sharesBeforeSplit.toDoubleOrNull() ?: 0.0,
+                            sharesAfterSplit = sharesAfterSplit.toDoubleOrNull() ?: 0.0,
+                            dividendIncome = dividendIncome.toDoubleOrNull(),
+                            supplementaryHealthInsurancePremium = supplementaryHealthInsurancePremium.toDoubleOrNull() ?: 0.0,
+                            marginPrincipal = if (transactionType == "融資買進") marginPrincipal.toDoubleOrNull() ?: 0.0 else 0.0,
+                            marginAnnualRate = if (transactionType == "融資買進") marginAnnualRate.toDoubleOrNull() ?: 0.0 else 0.0,
+                            marginLotId = if (transactionType == "融資買進") transactionToEdit?.marginLotId.orEmpty() else "",
+                            marginRepaymentLotId = if (transactionType == "融資還款" || (transactionType == "賣出" && sellRepaysMargin)) marginRepaymentLotId else "",
+                            marginRepayment = if (transactionType == "融資還款") {
+                                marginRepayment.toDoubleOrNull() ?: 0.0
+                            } else if (transactionType == "賣出" && sellRepaysMargin) {
+                                resolveSellMarginRepayment(marginRepayment, income) ?: 0.0
+                            } else 0.0,
+                            marginSelfFunded = if (transactionType == "融資買進") marginSelfFunded.toDoubleOrNull() ?: 0.0 else 0.0,
+                            marginSelfFundedOverridden = transactionType == "融資買進" && marginSelfFundedOverridden,
+                            marginActualInterest = if (transactionType == "融資還款" || (transactionType == "賣出" && sellRepaysMargin)) marginActualInterest.toDoubleOrNull() ?: 0.0 else 0.0,
+                            shortBorrowPrincipal = if (transactionType == "融券賣出") (price.toDoubleOrNull() ?: 0.0) * (shares.toDoubleOrNull() ?: 0.0) else 0.0,
+                            shortBorrowAnnualRate = if (transactionType == "融券賣出") shortBorrowAnnualRate.toDoubleOrNull() ?: 0.0 else 0.0,
+                            shortLotId = if (transactionType == "融券賣出") transactionToEdit?.shortLotId.orEmpty() else "",
+                            shortCoverLotId = if (transactionType == "買券還券") shortLotId else "",
+                            shortCoverShares = if (transactionType == "買券還券") shares.toDoubleOrNull() ?: 0.0 else 0.0,
+                            shortCompensationLotId = if (transactionType == "融券補償") shortLotId else "",
+                            shortCompensation = if (transactionType == "融券補償") shortCompensation.toDoubleOrNull() ?: 0.0 else 0.0
+                        )
+                        if (validationError == TRANSACTION_SUBMISSION_IN_PROGRESS) {
+                            keepSubmittingDisabled = true
+                            return@launch
                         }
-                    } else {
-                        navController.popBackStack()
+                        if (validationError != null) {
+                            Toast.makeText(context, validationError, Toast.LENGTH_LONG).show()
+                            return@launch
+                        }
+                        submissionSucceeded = true
+                        val message = if (transactionId == null) "新增成功" else "更新成功"
+                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                        if (addNext && transactionId == null) {
+                            navController.navigate(
+                                Screen.AddTransaction.createRoute(
+                                    stockCode = stockCode,
+                                    date = date
+                                )
+                            ) {
+                                popUpTo(Screen.AddTransaction.route) {
+                                    inclusive = true
+                                }
+                            }
+                        } else {
+                            popBackStackOrNavigateToTransactions(navController)
+                        }
+                    } finally {
+                        if (!submissionSucceeded && !keepSubmittingDisabled) {
+                            isSubmitting = false
+                        }
                     }
                 }
             },
             isFormValid = isFormValid,
-            isNewTransaction = transactionId == null
+            isNewTransaction = transactionId == null,
+            isSubmitting = isSubmitting
         )
+    }
+}
+
+@Composable
+private fun EditTransactionLoadingContent() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        CircularProgressIndicator()
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("載入交易資料中…")
+    }
+}
+
+@Composable
+private fun EditTransactionMissingContent(onBack: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("找不到這筆交易", style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("這筆交易可能已被刪除，或已由還原作業取代。")
+        Spacer(modifier = Modifier.height(24.dp))
+        Button(onClick = onBack, shape = AddTransactionButtonShape) {
+            Text("返回")
+        }
+    }
+}
+
+private fun popBackStackOrNavigateToTransactions(navController: NavController) {
+    if (!navController.popBackStack()) {
+        navController.navigate(Screen.Transactions.route) {
+            launchSingleTop = true
+        }
     }
 }
 
@@ -1478,22 +1568,23 @@ fun AddTransactionScreen(
 private fun TransactionSubmitButtons(
     onSubmit: (addNext: Boolean) -> Unit,
     isFormValid: Boolean,
-    isNewTransaction: Boolean
+    isNewTransaction: Boolean,
+    isSubmitting: Boolean
 ) {
     Column {
         Button(
             onClick = { onSubmit(false) },
-            enabled = isFormValid,
+            enabled = isFormValid && !isSubmitting,
             modifier = Modifier.fillMaxWidth(),
             shape = AddTransactionButtonShape
         ) {
-            Text(if (isNewTransaction) "新增交易" else "更新交易")
+            Text(if (isSubmitting) "處理中..." else if (isNewTransaction) "新增交易" else "更新交易")
         }
         if (isNewTransaction) {
             Spacer(modifier = Modifier.height(12.dp))
             OutlinedButton(
                 onClick = { onSubmit(true) },
-                enabled = isFormValid,
+                enabled = isFormValid && !isSubmitting,
                 modifier = Modifier.fillMaxWidth(),
                 shape = AddTransactionButtonShape
             ) {
