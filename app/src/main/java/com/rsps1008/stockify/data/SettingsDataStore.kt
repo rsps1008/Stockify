@@ -15,14 +15,49 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.util.concurrent.atomic.AtomicLong
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
-class SettingsDataStore(val context: Context) {
+class SettingsDataStore private constructor(
+    val context: Context?,
+    private val dataStoreInstance: DataStore<Preferences>
+) {
+    constructor(context: Context) : this(context, context.dataStore)
+    constructor(dataStore: DataStore<Preferences>) : this(null, dataStore)
 
+    companion object {
+        private val dividendCacheMutex = Mutex()
+        private val sequenceGenerator = AtomicLong(System.currentTimeMillis())
+
+        fun syncSequenceWithPersisted(persistedSequence: Long) {
+            sequenceGenerator.updateAndGet { current ->
+                maxOf(current, persistedSequence)
+            }
+        }
+
+        fun nextSequence(): Long {
+            while (true) {
+                val current = sequenceGenerator.get()
+                val now = System.currentTimeMillis()
+                val next = if (now > current) now else current + 1
+                if (sequenceGenerator.compareAndSet(current, next)) {
+                    return next
+                }
+            }
+        }
+
+        internal fun resetSequenceForTesting(value: Long) {
+            sequenceGenerator.set(value)
+        }
+    }
+
+    private val json = Json { ignoreUnknownKeys = true }
     private val fetchIntervalKey = intPreferencesKey("refresh_interval")
     private val lastStockListUpdateTimeKey = longPreferencesKey("last_stock_list_update_time")
     private val lastUsStockListUpdateTimeKey = longPreferencesKey("last_us_stock_list_update_time")
@@ -75,46 +110,46 @@ class SettingsDataStore(val context: Context) {
     private val appLockPinHashKey = stringPreferencesKey("app_lock_pin_hash")
     private val appLockBiometricEnabledKey = booleanPreferencesKey("app_lock_biometric_enabled")
 
-    val fetchIntervalFlow: Flow<Int> = context.dataStore.data
+    val fetchIntervalFlow: Flow<Int> = dataStoreInstance.data
         .map { preferences ->
             preferences[fetchIntervalKey] ?: 10
         }
 
-    val lastStockListUpdateTimeFlow: Flow<Long?> = context.dataStore.data
+    val lastStockListUpdateTimeFlow: Flow<Long?> = dataStoreInstance.data
         .map { preferences ->
             preferences[lastStockListUpdateTimeKey]
         }
 
-    val lastUsStockListUpdateTimeFlow: Flow<Long?> = context.dataStore.data
+    val lastUsStockListUpdateTimeFlow: Flow<Long?> = dataStoreInstance.data
         .map { preferences ->
             preferences[lastUsStockListUpdateTimeKey]
         }
 
-    val feeDiscountFlow: Flow<Double> = context.dataStore.data
+    val feeDiscountFlow: Flow<Double> = dataStoreInstance.data
         .map { preferences ->
             preferences[feeDiscountKey] ?: 0.28
         }
 
-    val minFeeRegularFlow: Flow<Int> = context.dataStore.data
+    val minFeeRegularFlow: Flow<Int> = dataStoreInstance.data
         .map { preferences ->
             preferences[minFeeRegularKey] ?: 1
         }
 
-    val minFeeOddLotFlow: Flow<Int> = context.dataStore.data
+    val minFeeOddLotFlow: Flow<Int> = dataStoreInstance.data
         .map { preferences ->
             preferences[minFeeOddLotKey] ?: 1
         }
-    val dividendFeeFlow: Flow<Int> = context.dataStore.data
+    val dividendFeeFlow: Flow<Int> = dataStoreInstance.data
         .map { preferences ->
             preferences[dividendFeeKey] ?: 10
         }
     
-    val preDeductSellFeesFlow: Flow<Boolean> = context.dataStore.data
+    val preDeductSellFeesFlow: Flow<Boolean> = dataStoreInstance.data
         .map { preferences ->
             preferences[preDeductSellFeesKey] ?: true
         }
 
-    val returnRateModeFlow: Flow<ReturnRateMode> = context.dataStore.data
+    val returnRateModeFlow: Flow<ReturnRateMode> = dataStoreInstance.data
         .map { preferences ->
             val rawMode = preferences[returnRateModeKey]
             if (rawMode != null) {
@@ -129,102 +164,108 @@ class SettingsDataStore(val context: Context) {
     val useCumulativeReturnRateFlow: Flow<Boolean> = returnRateModeFlow
         .map { it == ReturnRateMode.CUMULATIVE_INVESTMENT }
 
-    val calculationRoundingModeFlow: Flow<String> = context.dataStore.data
+    val calculationRoundingModeFlow: Flow<String> = dataStoreInstance.data
         .map { preferences ->
             CalculationRoundingMode.normalize(preferences[calculationRoundingModeKey])
         }
 
-    val realtimeStockInfoCacheFlow: Flow<Map<String, RealtimeStockInfo>> = context.dataStore.data
+    val realtimeStockInfoCacheFlow: Flow<Map<String, RealtimeStockInfo>> = dataStoreInstance.data
         .map { preferences ->
             preferences[realtimeStockInfoCacheKey]?.let {
                 Json.decodeFromString<Map<String, RealtimeStockInfo>>(it)
             } ?: emptyMap()
         }
     
-    val themeFlow: Flow<String> = context.dataStore.data
+    val themeFlow: Flow<String> = dataStoreInstance.data
         .map { preferences ->
             preferences[themeKey] ?: "System"
         }
 
-    val textSizeModeFlow: Flow<String> = context.dataStore.data
+    val textSizeModeFlow: Flow<String> = dataStoreInstance.data
         .map { preferences ->
             preferences[textSizeModeKey] ?: TextSizeMode.DEFAULT
         }
 
-    val stockDataSourceFlow: Flow<String> = context.dataStore.data
+    val stockDataSourceFlow: Flow<String> = dataStoreInstance.data
         .map { preferences ->
             preferences[stockDataSourceKey] ?: "TWSE"
         }
 
-    val usStockDataSourceFlow: Flow<String> = context.dataStore.data
+    val usStockDataSourceFlow: Flow<String> = dataStoreInstance.data
         .map { preferences ->
             preferences[usStockDataSourceKey] ?: "Nasdaq"
         }
 
-    val fallbackNoticeEnabledFlow: Flow<Boolean> = context.dataStore.data
+    val fallbackNoticeEnabledFlow: Flow<Boolean> = dataStoreInstance.data
         .map { preferences ->
             preferences[fallbackNoticeEnabledKey] ?: false
         }
 
-    val taxRateNormalListedStockFlow: Flow<Double> = context.dataStore.data
+    val taxRateNormalListedStockFlow: Flow<Double> = dataStoreInstance.data
         .map { preferences ->
             preferences[taxRateNormalListedStockKey] ?: 0.003
         }
 
-    val taxRateDomesticStockEtfFlow: Flow<Double> = context.dataStore.data
+    val taxRateDomesticStockEtfFlow: Flow<Double> = dataStoreInstance.data
         .map { preferences ->
             preferences[taxRateDomesticStockEtfKey] ?: 0.001
         }
 
-    val taxRateBondEtfFlow: Flow<Double> = context.dataStore.data
+    val taxRateBondEtfFlow: Flow<Double> = dataStoreInstance.data
         .map { preferences ->
             preferences[taxRateBondEtfKey] ?: 0.0
         }
 
-    val taxRateDayTradingFlow: Flow<Double> = context.dataStore.data
+    val taxRateDayTradingFlow: Flow<Double> = dataStoreInstance.data
         .map { preferences ->
             preferences[taxRateDayTradingKey] ?: 0.0015
         }
 
-    val skipPdfImportTutorialFlow: Flow<Boolean> = context.dataStore.data
+    val skipPdfImportTutorialFlow: Flow<Boolean> = dataStoreInstance.data
         .map { preferences ->
             preferences[skipPdfImportTutorialKey] ?: false
         }
 
-    val usdToTwdRateFlow: Flow<Double> = context.dataStore.data
+    val usdToTwdRateFlow: Flow<Double> = dataStoreInstance.data
         .map { preferences ->
             preferences[usdToTwdRateKey] ?: 32.0
         }
 
-    val usdToTwdRateUpdatedAtFlow: Flow<Long?> = context.dataStore.data
+    val usdToTwdRateUpdatedAtFlow: Flow<Long?> = dataStoreInstance.data
         .map { preferences ->
             preferences[usdToTwdRateUpdatedAtKey]
         }
 
-    val taiwanWeightedIndexCacheFlow: Flow<TaiwanWeightedIndexInfo?> = context.dataStore.data
+    val taiwanWeightedIndexCacheFlow: Flow<TaiwanWeightedIndexInfo?> = dataStoreInstance.data
         .map { preferences ->
             preferences[taiwanWeightedIndexCacheKey]?.let {
                 Json.decodeFromString<TaiwanWeightedIndexInfo>(it)
             }
         }
 
-    val dividendInfoCacheFlow: Flow<Map<String, DividendInfoCacheEntry>> = context.dataStore.data
+    val dividendInfoCacheFlow: Flow<Map<String, DividendInfoCacheEntry>> = dataStoreInstance.data
         .map { preferences ->
             preferences[dividendInfoCacheKey]
                 ?.let { raw ->
                     runCatching {
-                        Json.decodeFromString<Map<String, DividendInfoCacheEntry>>(raw)
+                        json.decodeFromString<Map<String, DividendInfoCacheEntry>>(raw)
                     }.getOrDefault(emptyMap())
+                }
+                ?.also { cache ->
+                    val maxPersistedSeq = cache.values.maxOfOrNull {
+                        it.requestSequence ?: it.lastFetchedTimeMillis ?: 0L
+                    } ?: 0L
+                    syncSequenceWithPersisted(maxPersistedSeq)
                 }
                 ?: emptyMap()
         }
 
-    val homeDisplayModeFlow: Flow<String> = context.dataStore.data
+    val homeDisplayModeFlow: Flow<String> = dataStoreInstance.data
         .map { preferences ->
             preferences[homeDisplayModeKey] ?: HomeDisplayMode.COMBINED
         }
 
-    val holdingsOrderFlow: Flow<List<String>> = context.dataStore.data
+    val holdingsOrderFlow: Flow<List<String>> = dataStoreInstance.data
         .map { preferences ->
             preferences[holdingsOrderKey]
                 ?.split("|")
@@ -232,7 +273,7 @@ class SettingsDataStore(val context: Context) {
                 ?: emptyList()
         }
 
-    val realizedHoldingsOrderFlow: Flow<List<String>> = context.dataStore.data
+    val realizedHoldingsOrderFlow: Flow<List<String>> = dataStoreInstance.data
         .map { preferences ->
             preferences[realizedHoldingsOrderKey]
                 ?.split("|")
@@ -240,82 +281,82 @@ class SettingsDataStore(val context: Context) {
                 ?: emptyList()
         }
 
-    val holdingsReorderHintShownFlow: Flow<Boolean> = context.dataStore.data
+    val holdingsReorderHintShownFlow: Flow<Boolean> = dataStoreInstance.data
         .map { preferences ->
             preferences[holdingsReorderHintShownKey] ?: false
         }
 
-    val homeHoldingsSortModeFlow: Flow<String> = context.dataStore.data
+    val homeHoldingsSortModeFlow: Flow<String> = dataStoreInstance.data
         .map { preferences ->
             preferences[homeHoldingsSortModeKey] ?: "MANUAL"
         }
 
-    val homeHoldingsSortColumnFlow: Flow<String> = context.dataStore.data
+    val homeHoldingsSortColumnFlow: Flow<String> = dataStoreInstance.data
         .map { preferences ->
             preferences[homeHoldingsSortColumnKey] ?: "NONE"
         }
 
-    val homeHoldingsSortAscendingFlow: Flow<Boolean> = context.dataStore.data
+    val homeHoldingsSortAscendingFlow: Flow<Boolean> = dataStoreInstance.data
         .map { preferences ->
             preferences[homeHoldingsSortAscendingKey] ?: true
         }
 
-    val localCsvRestoreFeeHintShownFlow: Flow<Boolean> = context.dataStore.data
+    val localCsvRestoreFeeHintShownFlow: Flow<Boolean> = dataStoreInstance.data
         .map { preferences ->
             preferences[localCsvRestoreFeeHintShownKey] ?: false
         }
 
-    val activeAccountIdFlow: Flow<Int> = context.dataStore.data
+    val activeAccountIdFlow: Flow<Int> = dataStoreInstance.data
         .map { preferences ->
             preferences[activeAccountIdKey] ?: 0
         }
 
-    val showTaiwanWeightedIndexFlow: Flow<Boolean> = context.dataStore.data
+    val showTaiwanWeightedIndexFlow: Flow<Boolean> = dataStoreInstance.data
         .map { preferences ->
             preferences[showTaiwanWeightedIndexKey] ?: true
         }
 
-    val showTaiwanPortfolioChartFlow: Flow<Boolean> = context.dataStore.data
+    val showTaiwanPortfolioChartFlow: Flow<Boolean> = dataStoreInstance.data
         .map { preferences ->
             preferences[showTaiwanPortfolioChartKey] ?: true
         }
 
-    val homeHistoryChartExpandedFlow: Flow<Boolean> = context.dataStore.data
+    val homeHistoryChartExpandedFlow: Flow<Boolean> = dataStoreInstance.data
         .map { preferences ->
             preferences[homeHistoryChartExpandedKey] ?: true
         }
 
-    val detailHistoryChartExpandedFlow: Flow<Boolean> = context.dataStore.data
+    val detailHistoryChartExpandedFlow: Flow<Boolean> = dataStoreInstance.data
         .map { preferences ->
             preferences[detailHistoryChartExpandedKey] ?: true
         }
 
-    val cloudDataBackupUpdatedAtFlow: Flow<Long?> = context.dataStore.data
+    val cloudDataBackupUpdatedAtFlow: Flow<Long?> = dataStoreInstance.data
         .map { preferences ->
             preferences[cloudDataBackupUpdatedAtKey]
         }
 
-    val marginFeatureEnabledFlow: Flow<Boolean> = context.dataStore.data
+    val marginFeatureEnabledFlow: Flow<Boolean> = dataStoreInstance.data
         .map { preferences -> preferences[marginFeatureEnabledKey] ?: false }
 
-    val marginDayCountFlow: Flow<Int> = context.dataStore.data
+    val marginDayCountFlow: Flow<Int> = dataStoreInstance.data
         .map { preferences -> if (preferences[marginDayCountKey] == 360) 360 else 365 }
 
-    val defaultMarginAnnualRateFlow: Flow<Double> = context.dataStore.data
+    val defaultMarginAnnualRateFlow: Flow<Double> = dataStoreInstance.data
         .map { preferences ->
             preferences[defaultMarginAnnualRateKey]
                 ?.takeIf { it.isFinite() && it >= 0.0 }
                 ?: DEFAULT_MARGIN_ANNUAL_RATE
         }
 
-    val defaultShortBorrowAnnualRateFlow: Flow<Double> = context.dataStore.data
+    val defaultShortBorrowAnnualRateFlow: Flow<Double> = dataStoreInstance.data
         .map { preferences ->
             preferences[defaultShortBorrowAnnualRateKey]
                 ?.takeIf { it.isFinite() && it >= 0.0 }
                 ?: DEFAULT_SHORT_BORROW_ANNUAL_RATE
         }
 
-    val bankDepositsFlow: Flow<List<BankDeposit>> = context.dataStore.data
+    val bankDepositsFlow: Flow<List<BankDeposit>> = dataStoreInstance.data
         .map { preferences ->
             preferences[bankDepositsKey]
                 ?.let { raw ->
@@ -325,7 +366,7 @@ class SettingsDataStore(val context: Context) {
                 ?: emptyList()
         }
 
-    val loansFlow: Flow<List<Loan>> = context.dataStore.data
+    val loansFlow: Flow<List<Loan>> = dataStoreInstance.data
         .map { preferences ->
             preferences[loansKey]
                 ?.let { raw ->
@@ -335,14 +376,14 @@ class SettingsDataStore(val context: Context) {
                 ?: emptyList()
         }
 
-    val appLockEnabledFlow: Flow<Boolean> = context.dataStore.data
+    val appLockEnabledFlow: Flow<Boolean> = dataStoreInstance.data
         .map { preferences ->
             preferences[appLockEnabledKey] == true &&
                 !preferences[appLockPinSaltKey].isNullOrBlank() &&
                 !preferences[appLockPinHashKey].isNullOrBlank()
         }
 
-    val appLockBiometricEnabledFlow: Flow<Boolean> = context.dataStore.data
+    val appLockBiometricEnabledFlow: Flow<Boolean> = dataStoreInstance.data
         .map { preferences ->
             preferences[appLockEnabledKey] == true &&
                 preferences[appLockBiometricEnabledKey] == true
@@ -350,55 +391,55 @@ class SettingsDataStore(val context: Context) {
 
 
     suspend fun setFetchInterval(interval: Int) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[fetchIntervalKey] = interval
         }
     }
 
     suspend fun setLastStockListUpdateTime(time: Long) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[lastStockListUpdateTimeKey] = time
         }
     }
 
     suspend fun setLastUsStockListUpdateTime(time: Long) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[lastUsStockListUpdateTimeKey] = time
         }
     }
 
     suspend fun setFeeDiscount(discount: Double) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[feeDiscountKey] = discount
         }
     }
 
     suspend fun setMinFeeRegular(fee: Int) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[minFeeRegularKey] = fee
         }
     }
 
     suspend fun setMinFeeOddLot(fee: Int) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[minFeeOddLotKey] = fee
         }
     }
     
     suspend fun setDividendFee(fee: Int) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[dividendFeeKey] = fee
         }
     }
 
     suspend fun setPreDeductSellFees(preDeduct: Boolean) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[preDeductSellFeesKey] = preDeduct
         }
     }
 
     suspend fun setReturnRateMode(mode: ReturnRateMode) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[returnRateModeKey] = mode.key
             it[useCumulativeReturnRateKey] = mode == ReturnRateMode.CUMULATIVE_INVESTMENT
         }
@@ -409,92 +450,92 @@ class SettingsDataStore(val context: Context) {
     }
 
     suspend fun setCalculationRoundingMode(mode: String) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[calculationRoundingModeKey] = CalculationRoundingMode.normalize(mode)
         }
     }
 
     suspend fun setRealtimeStockInfoCache(cache: Map<String, RealtimeStockInfo>) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[realtimeStockInfoCacheKey] = Json.encodeToString(cache)
         }
     }
 
     suspend fun clearRealtimeStockInfoCache() {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it.remove(realtimeStockInfoCacheKey)
         }
     }
 
     suspend fun setTheme(theme: String) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[themeKey] = theme
         }
     }
 
     suspend fun setTextSizeMode(mode: String) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[textSizeModeKey] = TextSizeMode.normalize(mode)
         }
     }
 
     suspend fun setStockDataSource(source: String) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[stockDataSourceKey] = source
         }
     }
 
     suspend fun setUsStockDataSource(source: String) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[usStockDataSourceKey] = source
         }
     }
 
     suspend fun setFallbackNoticeEnabled(enabled: Boolean) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[fallbackNoticeEnabledKey] = enabled
         }
     }
 
     suspend fun setTaxRateNormalListedStock(rate: Double) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[taxRateNormalListedStockKey] = rate
         }
     }
 
     suspend fun setTaxRateDomesticStockEtf(rate: Double) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[taxRateDomesticStockEtfKey] = rate
         }
     }
 
     suspend fun setTaxRateBondEtf(rate: Double) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[taxRateBondEtfKey] = rate
         }
     }
 
     suspend fun setTaxRateDayTrading(rate: Double) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[taxRateDayTradingKey] = rate
         }
     }
 
     suspend fun setSkipPdfImportTutorial(skip: Boolean) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[skipPdfImportTutorialKey] = skip
         }
     }
 
     suspend fun setUsdToTwdRate(rate: Double, updatedAt: Long = System.currentTimeMillis()) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[usdToTwdRateKey] = rate
             it[usdToTwdRateUpdatedAtKey] = updatedAt
         }
     }
 
     suspend fun setTaiwanWeightedIndexCache(info: TaiwanWeightedIndexInfo) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[taiwanWeightedIndexCacheKey] = Json.encodeToString(info)
         }
     }
@@ -503,46 +544,58 @@ class SettingsDataStore(val context: Context) {
         stockCode: String,
         entry: DividendInfoCacheEntry
     ) {
-        context.dataStore.edit { preferences ->
-            val currentCache = preferences[dividendInfoCacheKey]
-                ?.let { raw ->
-                    runCatching {
-                        Json.decodeFromString<Map<String, DividendInfoCacheEntry>>(raw)
-                    }.getOrDefault(emptyMap())
+        dividendCacheMutex.withLock {
+            dataStoreInstance.edit { preferences ->
+                val currentCache = preferences[dividendInfoCacheKey]
+                    ?.let { raw ->
+                        runCatching {
+                            json.decodeFromString<Map<String, DividendInfoCacheEntry>>(raw)
+                        }.getOrDefault(emptyMap())
+                    }
+                    .orEmpty()
+                    .toMutableMap()
+
+                val existing = currentCache[stockCode]
+                val existingSequence = existing?.requestSequence ?: existing?.lastFetchedTimeMillis ?: 0L
+                val incomingSequence = entry.requestSequence ?: entry.lastFetchedTimeMillis ?: 0L
+
+                if (existing == null || incomingSequence > existingSequence) {
+                    currentCache[stockCode] = entry
+                    preferences[dividendInfoCacheKey] = json.encodeToString(currentCache)
                 }
-                .orEmpty()
-                .toMutableMap()
-            currentCache[stockCode] = entry
-            preferences[dividendInfoCacheKey] = Json.encodeToString(currentCache)
+
+                val maxSeq = maxOf(existingSequence, incomingSequence)
+                syncSequenceWithPersisted(maxSeq)
+            }
         }
     }
 
     suspend fun setHomeDisplayMode(mode: String) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[homeDisplayModeKey] = HomeDisplayMode.normalize(mode)
         }
     }
 
     suspend fun setHoldingsOrder(order: List<String>) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[holdingsOrderKey] = order.joinToString("|")
         }
     }
 
     suspend fun setRealizedHoldingsOrder(order: List<String>) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[realizedHoldingsOrderKey] = order.joinToString("|")
         }
     }
 
     suspend fun setHoldingsReorderHintShown(shown: Boolean) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[holdingsReorderHintShownKey] = shown
         }
     }
 
     suspend fun setHomeHoldingsSortMode(mode: String) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[homeHoldingsSortModeKey] = mode
         }
     }
@@ -552,7 +605,7 @@ class SettingsDataStore(val context: Context) {
         column: String,
         ascending: Boolean
     ) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[homeHoldingsSortModeKey] = mode
             it[homeHoldingsSortColumnKey] = column
             it[homeHoldingsSortAscendingKey] = ascending
@@ -560,80 +613,80 @@ class SettingsDataStore(val context: Context) {
     }
 
     suspend fun setLocalCsvRestoreFeeHintShown(shown: Boolean) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[localCsvRestoreFeeHintShownKey] = shown
         }
     }
 
     suspend fun setShowTaiwanWeightedIndex(show: Boolean) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[showTaiwanWeightedIndexKey] = show
         }
     }
 
     suspend fun setShowTaiwanPortfolioChart(show: Boolean) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[showTaiwanPortfolioChartKey] = show
         }
     }
 
     suspend fun setHomeHistoryChartExpanded(expanded: Boolean) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[homeHistoryChartExpandedKey] = expanded
         }
     }
 
     suspend fun setDetailHistoryChartExpanded(expanded: Boolean) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[detailHistoryChartExpandedKey] = expanded
         }
     }
 
     suspend fun setCloudDataBackupUpdatedAt(timeMillis: Long) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[cloudDataBackupUpdatedAtKey] = timeMillis
         }
     }
 
     suspend fun setActiveAccountId(accountId: Int) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[activeAccountIdKey] = accountId
         }
     }
 
     suspend fun setMarginFeatureEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[marginFeatureEnabledKey] = enabled }
+        dataStoreInstance.edit { it[marginFeatureEnabledKey] = enabled }
     }
 
     suspend fun setMarginDayCount(dayCount: Int) {
-        context.dataStore.edit { it[marginDayCountKey] = if (dayCount == 360) 360 else 365 }
+        dataStoreInstance.edit { it[marginDayCountKey] = if (dayCount == 360) 360 else 365 }
     }
 
     suspend fun setDefaultMarginAnnualRate(rate: Double) {
         if (!rate.isFinite() || rate < 0.0) return
-        context.dataStore.edit { it[defaultMarginAnnualRateKey] = rate }
+        dataStoreInstance.edit { it[defaultMarginAnnualRateKey] = rate }
     }
 
     suspend fun setDefaultShortBorrowAnnualRate(rate: Double) {
         if (!rate.isFinite() || rate < 0.0) return
-        context.dataStore.edit { it[defaultShortBorrowAnnualRateKey] = rate }
+        dataStoreInstance.edit { it[defaultShortBorrowAnnualRateKey] = rate }
     }
 
     suspend fun setBankDeposits(deposits: List<BankDeposit>) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[bankDepositsKey] = Json.encodeToString(deposits)
         }
     }
 
     suspend fun setLoans(loans: List<Loan>) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[loansKey] = Json.encodeToString(loans)
         }
     }
 
     suspend fun enableAppLock(pin: String) {
         val pinHash = withContext(Dispatchers.Default) { hashAppLockPin(pin) }
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[appLockPinSaltKey] = pinHash.salt
             it[appLockPinHashKey] = pinHash.hash
             it[appLockBiometricEnabledKey] = false
@@ -642,7 +695,7 @@ class SettingsDataStore(val context: Context) {
     }
 
     suspend fun verifyAppLockPin(pin: String): Boolean {
-        val preferences = context.dataStore.data.first()
+        val preferences = dataStoreInstance.data.first()
         val salt = preferences[appLockPinSaltKey] ?: return false
         val hash = preferences[appLockPinHashKey] ?: return false
         return withContext(Dispatchers.Default) { verifyAppLockPin(pin, salt, hash) }
@@ -651,7 +704,7 @@ class SettingsDataStore(val context: Context) {
     suspend fun changeAppLockPin(currentPin: String, newPin: String): Boolean {
         if (!verifyAppLockPin(currentPin) || !isValidAppLockPin(newPin)) return false
         val pinHash = withContext(Dispatchers.Default) { hashAppLockPin(newPin) }
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it[appLockPinSaltKey] = pinHash.salt
             it[appLockPinHashKey] = pinHash.hash
         }
@@ -660,7 +713,7 @@ class SettingsDataStore(val context: Context) {
 
     suspend fun disableAppLock(pin: String): Boolean {
         if (!verifyAppLockPin(pin)) return false
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             it.remove(appLockEnabledKey)
             it.remove(appLockPinSaltKey)
             it.remove(appLockPinHashKey)
@@ -670,7 +723,7 @@ class SettingsDataStore(val context: Context) {
     }
 
     suspend fun setAppLockBiometricEnabled(enabled: Boolean) {
-        context.dataStore.edit {
+        dataStoreInstance.edit {
             if (it[appLockEnabledKey] == true) {
                 it[appLockBiometricEnabledKey] = enabled
             } else {

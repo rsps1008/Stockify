@@ -5,10 +5,14 @@ import androidx.lifecycle.viewModelScope
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.StockRepository
 import com.rsps1008.stockify.data.StockMarket
+import com.rsps1008.stockify.data.StockTransaction
+import com.rsps1008.stockify.data.TransactionListRepository
 import com.rsps1008.stockify.data.dividend.DividendInfoCacheEntry
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +23,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -40,6 +46,40 @@ data class DividendItemUiState(
     val errorMessage: String? = null
 )
 
+internal data class LocalDividendSummary(
+    val lastCashDividend: Double? = null,
+    val lastCashDividendDate: String? = null,
+    val lastStockDividend: Double? = null,
+    val lastStockDividendDate: String? = null
+)
+
+internal data class TransactionRevisionKey(
+    val id: Int,
+    val stockCode: String,
+    val date: Long,
+    val recordTime: Long,
+    val type: String,
+    val cashDividend: Double?,
+    val stockDividend: Double?
+)
+
+internal fun buildTransactionRevisionSignature(
+    transactions: List<StockTransaction>,
+    taiwanStockCodes: Set<String>
+): List<TransactionRevisionKey> = transactions
+    .filter { it.stockCode in taiwanStockCodes }
+    .map {
+        TransactionRevisionKey(
+            id = it.id,
+            stockCode = it.stockCode,
+            date = it.date,
+            recordTime = it.recordTime,
+            type = it.type,
+            cashDividend = it.cashDividend,
+            stockDividend = it.stockDividend
+        )
+    }
+
 internal fun getDividendFetchDateString(timeMillis: Long = System.currentTimeMillis()): String {
     val sdf = SimpleDateFormat("yyyy/MM/dd", Locale.US)
     return sdf.format(Date(timeMillis))
@@ -47,6 +87,7 @@ internal fun getDividendFetchDateString(timeMillis: Long = System.currentTimeMil
 
 class DividendInfoViewModel(
     private val stockRepository: StockRepository,
+    private val transactionListRepository: TransactionListRepository,
     private val dividendRepository: YahooDividendRepository,
     private val settingsDataStore: SettingsDataStore,
     private val currentDateProvider: () -> String = { getDividendFetchDateString() }
@@ -57,8 +98,11 @@ class DividendInfoViewModel(
 
     private var latestTaiwanStocks: List<TaiwanStockRef> = emptyList()
     private var latestAccountId: Int = 0
+    private var currentGeneration: Long = 0L
     private var refreshJob: Job? = null
     private val yahooRequestSemaphore = Semaphore(permits = 3)
+    private val cacheCommitMutex = Mutex()
+    private val latestCommittedGenerations = mutableMapOf<String, Long>()
 
     init {
         observeHoldingsAndRefresh()
@@ -72,176 +116,191 @@ class DividendInfoViewModel(
                         .filter { holding -> StockMarket.isTw(holding.stock.market) }
                         .map { holding -> TaiwanStockRef(holding.stock.code, holding.stock.name) }
                         .distinctBy { it.stockCode }
-                },
-                settingsDataStore.activeAccountIdFlow
-            ) { stocks, accountId ->
-                DividendRefreshScope(stocks, accountId)
+                }.distinctUntilChanged(),
+                settingsDataStore.activeAccountIdFlow.distinctUntilChanged(),
+                transactionListRepository.snapshot.map { it.transactions }
+            ) { stocks, accountId, allTransactions ->
+                val activeTransactions = if (accountId == 0) {
+                    allTransactions
+                } else {
+                    allTransactions.filter { it.accountId == accountId }
+                }
+                val taiwanCodes = stocks.map { it.stockCode }.toSet()
+                val revisionSignature = buildTransactionRevisionSignature(activeTransactions, taiwanCodes)
+                DividendRefreshScope(stocks, accountId, revisionSignature)
             }
                 .distinctUntilChanged()
                 .collect { scope ->
-                    val stocks = scope.stocks
-                    latestTaiwanStocks = stocks
+                    latestTaiwanStocks = scope.stocks
                     latestAccountId = scope.accountId
                     refreshJob?.cancel()
 
-                    if (stocks.isEmpty()) {
-                        _dividendList.value = emptyList()
+                    // Invalidate the previous account/transaction snapshot immediately;
+                    // the next load will repopulate it from the current Room and cache data.
+                    _dividendList.value = scope.stocks.map { stock ->
+                        DividendItemUiState(
+                            stockCode = stock.stockCode,
+                            stockName = stock.stockName
+                        )
+                    }
+
+                    if (scope.stocks.isEmpty()) {
+                        ++currentGeneration
                         return@collect
                     }
 
-                    showCachedResultsAndAutoRefresh(stocks, scope.accountId)
+                    val generation = ++currentGeneration
+                    refreshJob = viewModelScope.launch {
+                        loadAndRefreshScope(scope.stocks, scope.accountId, generation)
+                    }
                 }
         }
     }
 
-    private suspend fun showCachedResultsAndAutoRefresh(stocks: List<TaiwanStockRef>, accountId: Int) {
-        val today = currentDateProvider()
-        val cache = settingsDataStore.dividendInfoCacheFlow.first()
-        val items = stocks.map { stock ->
-            val cached = cache[stock.stockCode]
-            val localCacheMatchesAccount = cached?.lastLocalAccountId == accountId
-            val isFreshToday = cached?.lastFetchedDate == today
-            DividendItemUiState(
-                stockCode = stock.stockCode,
-                stockName = stock.stockName,
-                cashDividend = cached?.cashDividend,
-                cashDividendDate = cached?.cashDividendDate,
-                stockDividend = cached?.stockDividend,
-                stockDividendDate = cached?.stockDividendDate,
-                lastLocalCashDividend = cached?.lastLocalCashDividend.takeIf { localCacheMatchesAccount },
-                lastLocalCashDividendDate = cached?.lastLocalCashDividendDate.takeIf { localCacheMatchesAccount },
-                lastLocalStockDividend = cached?.lastLocalStockDividend.takeIf { localCacheMatchesAccount },
-                lastLocalStockDividendDate = cached?.lastLocalStockDividendDate.takeIf { localCacheMatchesAccount },
-                isLoading = !isFreshToday,
-                errorMessage = null
+    private suspend fun fetchLocalDividends(stockCode: String, accountId: Int): Result<LocalDividendSummary> {
+        return try {
+            val transactions = stockRepository.getTransactionsForStock(stockCode, accountId).first()
+            val lastCashTx = transactions
+                .filter { it.transaction.type == "配息" }
+                .maxByOrNull { it.transaction.date }
+            val lastStockTx = transactions
+                .filter { it.transaction.type == "配股" }
+                .maxByOrNull { it.transaction.date }
+
+            val sdf = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault())
+            val localCashDate = lastCashTx?.transaction?.date?.let { sdf.format(Date(it)) }
+            val localStockDate = lastStockTx?.transaction?.date?.let { sdf.format(Date(it)) }
+
+            Result.success(
+                LocalDividendSummary(
+                    lastCashDividend = lastCashTx?.transaction?.cashDividend,
+                    lastCashDividendDate = localCashDate,
+                    lastStockDividend = lastStockTx?.transaction?.stockDividend,
+                    lastStockDividendDate = localStockDate
+                )
             )
-        }
-        _dividendList.value = sortItems(items)
-
-        // Stocks that haven't been fetched today need network refresh
-        val stocksToRefresh = stocks.filter { stock ->
-            cache[stock.stockCode]?.lastFetchedDate != today
-        }
-
-        // Stocks that are fresh today but account changed might need local Room transactions refreshed
-        val stocksNeedLocalOnly = stocks.filter { stock ->
-            val cached = cache[stock.stockCode]
-            cached?.lastFetchedDate == today && cached.lastLocalAccountId != accountId
-        }
-
-        if (stocksNeedLocalOnly.isNotEmpty()) {
-            viewModelScope.launch {
-                stocksNeedLocalOnly.forEach { stock ->
-                    updateLocalDividendsOnly(stock, accountId, cache[stock.stockCode])
-                }
-            }
-        }
-
-        if (stocksToRefresh.isNotEmpty()) {
-            startRefresh(stocksToRefresh, accountId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
-    private suspend fun updateLocalDividendsOnly(
-        stock: TaiwanStockRef,
+    private suspend fun loadAndRefreshScope(
+        stocks: List<TaiwanStockRef>,
         accountId: Int,
-        cached: DividendInfoCacheEntry?
+        generation: Long
     ) {
         try {
-            val transactions = stockRepository.getTransactionsForStock(stock.stockCode, accountId).first()
-            val lastCashTx = transactions
-                .filter { it.transaction.type == "配息" }
-                .maxByOrNull { it.transaction.date }
-            val lastStockTx = transactions
-                .filter { it.transaction.type == "配股" }
-                .maxByOrNull { it.transaction.date }
+            val today = currentDateProvider()
+            val cache = settingsDataStore.dividendInfoCacheFlow.first()
 
-            val sdf = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault())
-            val localCashDate = lastCashTx?.transaction?.date?.let { sdf.format(Date(it)) }
-            val localStockDate = lastStockTx?.transaction?.date?.let { sdf.format(Date(it)) }
+            if (generation != currentGeneration || accountId != latestAccountId) return
 
-            val updatedEntry = (cached ?: DividendInfoCacheEntry()).copy(
-                lastLocalCashDividend = lastCashTx?.transaction?.cashDividend,
-                lastLocalCashDividendDate = localCashDate,
-                lastLocalStockDividend = lastStockTx?.transaction?.stockDividend,
-                lastLocalStockDividendDate = localStockDate,
-                lastLocalAccountId = accountId
-            )
-            settingsDataStore.setDividendInfoCacheEntry(stock.stockCode, updatedEntry)
+            // 1. Query latest local Room dividend transactions for each stock in parallel with error isolation
+            val localDividends = coroutineScope {
+                stocks.map { stock ->
+                    async { stock.stockCode to fetchLocalDividends(stock.stockCode, accountId) }
+                }.awaitAll().toMap()
+            }
 
-            _dividendList.update { list ->
-                sortItems(
-                    list.map { item ->
-                        if (item.stockCode == stock.stockCode) {
-                            item.copy(
-                                lastLocalCashDividend = lastCashTx?.transaction?.cashDividend,
-                                lastLocalCashDividendDate = localCashDate,
-                                lastLocalStockDividend = lastStockTx?.transaction?.stockDividend,
-                                lastLocalStockDividendDate = localStockDate
-                            )
-                        } else {
-                            item
-                        }
-                    }
+            if (generation != currentGeneration || accountId != latestAccountId) return
+
+            // 2. Build initial UI items with fresh local Room data + cached Yahoo market data
+            val items = stocks.map { stock ->
+                val cached = cache[stock.stockCode]
+                val localResult = localDividends[stock.stockCode]
+                val local = localResult?.getOrNull()
+                val localError = localResult?.exceptionOrNull()?.message
+                val isYahooFreshToday = cached?.lastFetchedDate == today
+                DividendItemUiState(
+                    stockCode = stock.stockCode,
+                    stockName = stock.stockName,
+                    cashDividend = cached?.cashDividend,
+                    cashDividendDate = cached?.cashDividendDate,
+                    stockDividend = cached?.stockDividend,
+                    stockDividendDate = cached?.stockDividendDate,
+                    lastLocalCashDividend = local?.lastCashDividend,
+                    lastLocalCashDividendDate = local?.lastCashDividendDate,
+                    lastLocalStockDividend = local?.lastStockDividend,
+                    lastLocalStockDividendDate = local?.lastStockDividendDate,
+                    isLoading = !isYahooFreshToday,
+                    errorMessage = localError
                 )
             }
-        } catch (_: Exception) {
-        }
-    }
+            _dividendList.value = sortItems(items)
 
-    private fun startRefresh(stocks: List<TaiwanStockRef>, accountId: Int) {
-        refreshJob = viewModelScope.launch {
-            coroutineScope {
-                stocks.forEach { stock ->
-                    launch {
-                        fetchDividendForStock(stock, accountId)
+            // 3. Only trigger Yahoo network fetch for stocks that haven't been fetched today
+            val stocksToRefresh = stocks.filter { stock ->
+                cache[stock.stockCode]?.lastFetchedDate != today
+            }
+
+            if (stocksToRefresh.isNotEmpty()) {
+                coroutineScope {
+                    stocksToRefresh.forEach { stock ->
+                        launch {
+                            fetchDividendForStock(stock, accountId, generation)
+                        }
                     }
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (generation != currentGeneration || accountId != latestAccountId) return
+            _dividendList.update { list ->
+                if (generation != currentGeneration || accountId != latestAccountId) return@update list
+                list.map { it.copy(isLoading = false, errorMessage = it.errorMessage ?: e.message) }
+            }
         }
     }
 
-    private suspend fun fetchDividendForStock(stock: TaiwanStockRef, accountId: Int) {
+    private suspend fun fetchDividendForStock(
+        stock: TaiwanStockRef,
+        accountId: Int,
+        generation: Long
+    ) {
+        val localResult = fetchLocalDividends(stock.stockCode, accountId)
+        val local = localResult.getOrNull()
         try {
-            // 1. Fetch Local Dividends
-            val transactions = stockRepository.getTransactionsForStock(stock.stockCode, accountId).first()
-            val lastCashTx = transactions
-                .filter { it.transaction.type == "配息" }
-                .maxByOrNull { it.transaction.date }
-            val lastStockTx = transactions
-                .filter { it.transaction.type == "配股" }
-                .maxByOrNull { it.transaction.date }
+            if (generation != currentGeneration || accountId != latestAccountId) return
 
-            val sdf = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault())
-            val localCashDate = lastCashTx?.transaction?.date?.let { sdf.format(Date(it)) }
-            val localStockDate = lastStockTx?.transaction?.date?.let { sdf.format(Date(it)) }
+            // Record strictly monotonic request sequence BEFORE issuing network request
+            val requestSequence = SettingsDataStore.nextSequence()
+            val requestStartTime = System.currentTimeMillis()
 
-            // 2. Fetch Yahoo Dividends
+            // Yahoo Dividends (Network)
             val yahooDividends = yahooRequestSemaphore.withPermit {
                 dividendRepository.fetchLatestDividends(stock.stockCode)
             }
             val cashResult = yahooDividends.cashDividend
             val stockResult = yahooDividends.stockDividend
-
             val today = currentDateProvider()
 
-            settingsDataStore.setDividendInfoCacheEntry(
-                stockCode = stock.stockCode,
-                entry = DividendInfoCacheEntry(
-                    cashDividend = cashResult?.amount,
-                    cashDividendDate = cashResult?.date,
-                    stockDividend = stockResult?.amount,
-                    stockDividendDate = stockResult?.date,
-                    lastLocalCashDividend = lastCashTx?.transaction?.cashDividend,
-                    lastLocalCashDividendDate = localCashDate,
-                    lastLocalStockDividend = lastStockTx?.transaction?.stockDividend,
-                    lastLocalStockDividendDate = localStockDate,
-                    lastLocalAccountId = accountId,
-                    lastFetchedDate = today
-                )
-            )
+            // Atomically guard and serialize cache commit
+            cacheCommitMutex.withLock {
+                val lastCommitted = latestCommittedGenerations[stock.stockCode] ?: 0L
+                if (generation >= lastCommitted && generation == currentGeneration) {
+                    latestCommittedGenerations[stock.stockCode] = generation
+                    settingsDataStore.setDividendInfoCacheEntry(
+                        stockCode = stock.stockCode,
+                        entry = DividendInfoCacheEntry(
+                            cashDividend = cashResult?.amount,
+                            cashDividendDate = cashResult?.date,
+                            stockDividend = stockResult?.amount,
+                            stockDividendDate = stockResult?.date,
+                            lastFetchedDate = today,
+                            lastFetchedTimeMillis = requestStartTime,
+                            requestSequence = requestSequence
+                        )
+                    )
+                }
+            }
+
+            if (generation != currentGeneration || accountId != latestAccountId) return
 
             _dividendList.update { list ->
+                if (generation != currentGeneration || accountId != latestAccountId) return@update list
                 sortItems(
                     list.map { item ->
                         if (item.stockCode == stock.stockCode) {
@@ -250,12 +309,12 @@ class DividendInfoViewModel(
                                 cashDividendDate = cashResult?.date,
                                 stockDividend = stockResult?.amount,
                                 stockDividendDate = stockResult?.date,
-                                lastLocalCashDividend = lastCashTx?.transaction?.cashDividend,
-                                lastLocalCashDividendDate = localCashDate,
-                                lastLocalStockDividend = lastStockTx?.transaction?.stockDividend,
-                                lastLocalStockDividendDate = localStockDate,
+                                lastLocalCashDividend = local?.lastCashDividend,
+                                lastLocalCashDividendDate = local?.lastCashDividendDate,
+                                lastLocalStockDividend = local?.lastStockDividend,
+                                lastLocalStockDividendDate = local?.lastStockDividendDate,
                                 isLoading = false,
-                                errorMessage = null
+                                errorMessage = localResult.exceptionOrNull()?.message
                             )
                         } else {
                             item
@@ -266,10 +325,16 @@ class DividendInfoViewModel(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            if (generation != currentGeneration || accountId != latestAccountId) return
             _dividendList.update { list ->
+                if (generation != currentGeneration || accountId != latestAccountId) return@update list
                 list.map { item ->
                     if (item.stockCode == stock.stockCode) {
                         item.copy(
+                            lastLocalCashDividend = local?.lastCashDividend,
+                            lastLocalCashDividendDate = local?.lastCashDividendDate,
+                            lastLocalStockDividend = local?.lastStockDividend,
+                            lastLocalStockDividendDate = local?.lastStockDividendDate,
                             isLoading = false,
                             errorMessage = e.message
                         )
@@ -281,9 +346,46 @@ class DividendInfoViewModel(
         }
     }
 
+    fun refresh() {
+        val stocks = latestTaiwanStocks
+        val accountId = latestAccountId
+        if (stocks.isEmpty()) return
+
+        refreshJob?.cancel()
+        val generation = ++currentGeneration
+
+        _dividendList.update { items ->
+            items.map { it.copy(isLoading = true, errorMessage = null) }
+        }
+
+        refreshJob = viewModelScope.launch {
+            // Manual refresh bypasses loadAndRefreshScope(), so explicitly read the
+            // persisted cache first to advance the request sequence after restart
+            // or a system-clock rollback.
+            try {
+                settingsDataStore.dividendInfoCacheFlow.first()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Preserve the existing manual-refresh behavior if cache reading fails;
+                // the individual network/cache operation will report its own failure.
+            }
+
+            if (generation != currentGeneration || accountId != latestAccountId) return@launch
+
+            coroutineScope {
+                stocks.forEach { stock ->
+                    launch {
+                        fetchDividendForStock(stock, accountId, generation)
+                    }
+                }
+            }
+        }
+    }
+
     private fun getLatestDate(item: DividendItemUiState): String? {
         val dates = listOfNotNull(
-            item.cashDividendDate, 
+            item.cashDividendDate,
             item.stockDividendDate,
             item.lastLocalCashDividendDate,
             item.lastLocalStockDividendDate
@@ -303,17 +405,6 @@ class DividendInfoViewModel(
             }
         }
     }
-    
-    fun refresh() {
-        val stocks = latestTaiwanStocks
-        if (stocks.isEmpty()) return
-
-        _dividendList.update { items ->
-            items.map { it.copy(isLoading = true, errorMessage = null) }
-        }
-        refreshJob?.cancel()
-        startRefresh(stocks, latestAccountId)
-    }
 
     private data class TaiwanStockRef(
         val stockCode: String,
@@ -322,6 +413,7 @@ class DividendInfoViewModel(
 
     private data class DividendRefreshScope(
         val stocks: List<TaiwanStockRef>,
-        val accountId: Int
+        val accountId: Int,
+        val revisionSignature: List<TransactionRevisionKey>
     )
 }

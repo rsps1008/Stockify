@@ -118,6 +118,7 @@ class ViewModelFactory(
                 requireNotNull(realtimeStockDataService) { "realtimeStockDataService is required for DividendInfoViewModel" }
                 requireNotNull(settingsDataStore) { "settingsDataStore is required for DividendInfoViewModel" }
                 requireNotNull(exchangeRateService) { "exchangeRateService is required for DividendInfoViewModel" }
+                requireNotNull(transactionListRepository) { "transactionListRepository is required for DividendInfoViewModel" }
 
                 @Suppress("UNCHECKED_CAST")
                 DividendInfoViewModel(
@@ -127,6 +128,7 @@ class ViewModelFactory(
                         settingsDataStore = settingsDataStore,
                         exchangeRateService = exchangeRateService
                     ),
+                    transactionListRepository = transactionListRepository,
                     dividendRepository = dividendRepository,
                     settingsDataStore = settingsDataStore
                 ) as T

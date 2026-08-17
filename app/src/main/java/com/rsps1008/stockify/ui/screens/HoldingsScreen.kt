@@ -267,7 +267,11 @@ fun HoldingsScreen(navController: NavController) {
 
             val context = LocalContext.current
             IconButton(
-                onClick = { navController.navigate(Screen.DividendInfo.route) },
+                onClick = {
+                    navController.navigate(Screen.DividendInfo.route) {
+                        launchSingleTop = true
+                    }
+                },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .pointerInput(Unit) {
@@ -276,7 +280,9 @@ fun HoldingsScreen(navController: NavController) {
                                 Toast.makeText(context, "查詢持股最新配息配股資訊", Toast.LENGTH_SHORT).show()
                             },
                             onTap = {
-                                navController.navigate(Screen.DividendInfo.route)
+                                navController.navigate(Screen.DividendInfo.route) {
+                                    launchSingleTop = true
+                                }
                             }
                         )
                     }
