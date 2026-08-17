@@ -22,6 +22,7 @@ import com.rsps1008.stockify.ui.screens.HoldingInfo
 import com.rsps1008.stockify.ui.screens.TransactionUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -122,6 +123,8 @@ class StockDetailViewModel(
     val deleteTransactionsState: StateFlow<DeleteTransactionsState> = _deleteTransactionsState.asStateFlow()
 
     private val _historyStateInternal = MutableStateFlow<DetailHistoryStateInternal>(DetailHistoryStateInternal.Idle)
+    private var historyFetchJob: Job? = null
+    private var historyRequestVersion = 0L
 
     val detailHistoryChartExpanded: StateFlow<Boolean> = settingsDataStore.detailHistoryChartExpandedFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), true)
@@ -210,16 +213,18 @@ class StockDetailViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), HistoryState.Idle)
 
     init {
-        viewModelScope.launch {
-            val market = StockMarket.inferFromCode(stockCode)
-            if (StockMarket.isTw(market) || market == StockMarket.US) {
-                fetchStockHistory(HistoryRange.ONE_MONTH)
-            }
+        val market = StockMarket.inferFromCode(stockCode)
+        if (StockMarket.isTw(market) || market == StockMarket.US) {
+            fetchStockHistory(HistoryRange.ONE_MONTH)
         }
     }
 
     fun fetchStockHistory(range: HistoryRange) {
-        viewModelScope.launch {
+        historyFetchJob?.cancel()
+        val requestVersion = ++historyRequestVersion
+        historyFetchJob = viewModelScope.launch {
+            fun isCurrentRequest(): Boolean = requestVersion == historyRequestVersion
+
             val rangeMonths = when (range) {
                 HistoryRange.ONE_MONTH -> 1
                 HistoryRange.SIX_MONTHS -> 6
@@ -229,6 +234,8 @@ class StockDetailViewModel(
 
             val cachedPoints = twseStockHistoryService.getCachedHistory(stockCode, rangeMonths)
             val hasCompleteCachedHistory = HistoryChartCalculationSupport.hasHistoryCoverage(cachedPoints, rangeMonths)
+            if (!isCurrentRequest()) return@launch
+
             if (hasCompleteCachedHistory) {
                 _historyStateInternal.value = DetailHistoryStateInternal.Success(range, cachedPoints)
             } else {
@@ -243,11 +250,13 @@ class StockDetailViewModel(
                     } else {
                         "正在載入第 $step/$total 個月..."
                     }
-                    if (!hasCompleteCachedHistory) {
+                    if (!hasCompleteCachedHistory && isCurrentRequest()) {
                         _historyStateInternal.value = DetailHistoryStateInternal.Loading(progress, statusText)
                     }
                 }
-                
+
+                if (!isCurrentRequest()) return@launch
+
                 if (rawPoints.isEmpty()) {
                     if (!hasCompleteCachedHistory) {
                         _historyStateInternal.value = DetailHistoryStateInternal.Error("歷史股價回傳資料為空，請稍後重試。")
@@ -256,8 +265,10 @@ class StockDetailViewModel(
                 }
 
                 _historyStateInternal.value = DetailHistoryStateInternal.Success(range, rawPoints)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                if (!hasCompleteCachedHistory) {
+                if (!hasCompleteCachedHistory && isCurrentRequest()) {
                     _historyStateInternal.value = DetailHistoryStateInternal.Error("載入失敗: ${e.localizedMessage}")
                 }
             }
