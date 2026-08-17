@@ -3,10 +3,43 @@ package com.rsps1008.stockify.data
 import androidx.room.ColumnInfo
 import androidx.room.Embedded
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.Relation
 
-@Entity(tableName = "stock_transactions")
+@Entity(
+    tableName = "stock_transactions",
+    indices = [
+        Index(
+            name = "idx_stock_transactions_stock_order",
+            value = ["股號", "日期", "紀錄時間", "id"]
+        ),
+        Index(
+            name = "idx_stock_transactions_date_order",
+            value = ["日期", "紀錄時間", "id"]
+        ),
+        Index(
+            name = "idx_stock_transactions_stock_account",
+            value = ["股號", "帳戶ID"]
+        ),
+        Index(
+            name = "idx_stock_transactions_account",
+            value = ["帳戶ID"]
+        ),
+        Index(
+            name = "idx_stock_transactions_margin_repayment",
+            value = ["沖抵融資批次ID", "股號", "帳戶ID"]
+        ),
+        Index(
+            name = "idx_stock_transactions_short_cover",
+            value = ["沖抵融券批次ID", "股號", "帳戶ID"]
+        ),
+        Index(
+            name = "idx_stock_transactions_short_compensation",
+            value = ["融券補償批次ID", "股號", "帳戶ID"]
+        )
+    ]
+)
 data class StockTransaction(
     @PrimaryKey(autoGenerate = true)
     @ColumnInfo(name = "id")

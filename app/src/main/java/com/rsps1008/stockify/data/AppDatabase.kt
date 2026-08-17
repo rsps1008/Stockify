@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
 
-@Database(entities = [Stock::class, StockTransaction::class, StockHistoryPrice::class, Account::class], version = 16, exportSchema = false)
+@Database(entities = [Stock::class, StockTransaction::class, StockHistoryPrice::class, Account::class], version = 17, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun stockDao(): StockDao
@@ -30,7 +30,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "stock_database"
                 )
                 .addCallback(AppDatabaseCallback(context))
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17)
                 .build()
                 INSTANCE = instance
                 instance
@@ -228,6 +228,18 @@ abstract class AppDatabase : RoomDatabase() {
         private val MIGRATION_15_16 = object : Migration(15, 16) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE stock_transactions ADD COLUMN `補充保費` REAL NOT NULL DEFAULT 0.0")
+            }
+        }
+
+        private val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_stock_transactions_stock_order` ON `stock_transactions` (`股號`, `日期`, `紀錄時間`, `id`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_stock_transactions_date_order` ON `stock_transactions` (`日期`, `紀錄時間`, `id`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_stock_transactions_stock_account` ON `stock_transactions` (`股號`, `帳戶ID`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_stock_transactions_account` ON `stock_transactions` (`帳戶ID`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_stock_transactions_margin_repayment` ON `stock_transactions` (`沖抵融資批次ID`, `股號`, `帳戶ID`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_stock_transactions_short_cover` ON `stock_transactions` (`沖抵融券批次ID`, `股號`, `帳戶ID`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_stock_transactions_short_compensation` ON `stock_transactions` (`融券補償批次ID`, `股號`, `帳戶ID`)")
             }
         }
     }
