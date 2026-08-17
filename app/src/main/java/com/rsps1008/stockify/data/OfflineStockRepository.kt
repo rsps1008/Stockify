@@ -206,7 +206,7 @@ class OfflineStockRepository(
                     marginDayCount = marginDayCount
                 )
             }
-        }
+        }.flowOn(Dispatchers.Default)
     }
 
     override fun getTransactionsForStock(stockCode: String, accountId: Int): Flow<List<TransactionUiState>> {
