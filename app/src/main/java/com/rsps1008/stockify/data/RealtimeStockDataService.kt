@@ -25,6 +25,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.Json
 import java.time.LocalDate
 import java.time.LocalTime
@@ -100,6 +102,11 @@ class RealtimeStockDataService(
         val certificateFailure: Boolean = false
     )
 
+    private data class TwseBatchFetchOutcome(
+        val infos: Map<String, RealtimeStockInfo>,
+        val certificateFailure: Boolean
+    )
+
     private fun getTwFetchers(): Pair<StockInfoFetcher, StockInfoFetcher> {
         val preferredSource = preferredStockDataSource.value
         return if (preferredSource == "TWSE") {
@@ -120,30 +127,70 @@ class RealtimeStockDataService(
     fun startFetching() {
         fetchJob?.cancel()
         fetchJob = scope.launch {
-
-            val cachedData = settingsDataStore.realtimeStockInfoCacheFlow.first()
-            if (cachedData.isNotEmpty()) {
-                _realtimeStockInfo.value = cachedData
-            }
-
-            // App 啟動時先強制抓一次最新資料，避免只看到過期快取。
-            fetchAllStockInfo(
-                isContinuous = false,
-                refreshRegardlessOfMarketOpen = true
-            )
-            refreshTaiwanWeightedIndex(refreshRegardlessOfMarketOpen = true)
-
-            settingsDataStore.fetchIntervalFlow.collectLatest { interval ->
-                while (true) {
-                    if (!isAnyMarketOpen()) {
-                        delay(30_000L)
-                        continue
-                    }
-                    fetchAllStockInfo(isContinuous = true)
-                    refreshTaiwanWeightedIndex()
-                    delay(delayUntilNextAlignedFetch(interval))
+            while (isActive) {
+                try {
+                    startFetchingLoop()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.e(
+                        "RealtimeStockDataService",
+                        "Background quote loop failed; retrying later",
+                        e
+                    )
+                    delay(30_000L)
                 }
             }
+        }
+    }
+
+    private suspend fun startFetchingLoop() {
+        val cachedData = settingsDataStore.realtimeStockInfoCacheFlow.first()
+        if (cachedData.isNotEmpty()) {
+            _realtimeStockInfo.value = cachedData
+        }
+
+        // App 啟動時先強制抓一次最新資料，避免只看到過期快取。
+        refreshQuotesSafely(
+            isContinuous = false,
+            refreshRegardlessOfMarketOpen = true
+        )
+
+        settingsDataStore.fetchIntervalFlow.collectLatest { interval ->
+            while (currentCoroutineContext().isActive) {
+                if (!isAnyMarketOpen()) {
+                    delay(30_000L)
+                    continue
+                }
+                refreshQuotesSafely(isContinuous = true)
+                delay(delayUntilNextAlignedFetch(interval))
+            }
+        }
+    }
+
+    private suspend fun refreshQuotesSafely(
+        isContinuous: Boolean,
+        forceSave: Boolean = false,
+        refreshRegardlessOfMarketOpen: Boolean = false
+    ) {
+        try {
+            fetchAllStockInfo(
+                isContinuous = isContinuous,
+                forceSave = forceSave,
+                refreshRegardlessOfMarketOpen = refreshRegardlessOfMarketOpen
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e("RealtimeStockDataService", "Quote refresh failed; keeping previous data", e)
+        }
+
+        try {
+            refreshTaiwanWeightedIndex(refreshRegardlessOfMarketOpen = refreshRegardlessOfMarketOpen)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e("RealtimeStockDataService", "Taiwan weighted index refresh failed", e)
         }
     }
 
@@ -181,7 +228,8 @@ class RealtimeStockDataService(
                         !StockExchange.isEmerging(exchange) &&
                         preferredStockDataSource.value == "TWSE"
                     ) {
-                        val twseInfos = twseFetcher.fetchStockInfoListByExchange(marketStocks)
+                        val batchOutcome = fetchTwseBatchSafely(marketStocks)
+                        val twseInfos = batchOutcome.infos
                         marketStocks.map { stock ->
                             async(Dispatchers.IO) {
                                 val twseInfo = twseInfos[stock.code]
@@ -189,7 +237,10 @@ class RealtimeStockDataService(
                                     FetchOutcome(info = twseInfo, fallbackUsed = false)
                                 } else {
                                     val fallback = fetchWithFetcher(yahooFetcher, stock.code, stock.stockType)
-                                    fallback.copy(fallbackUsed = true)
+                                    fallback.copy(
+                                        fallbackUsed = true,
+                                        certificateFailure = fallback.certificateFailure || batchOutcome.certificateFailure
+                                    )
                                 }
                                 FetchResult(stock.code, outcome.info, outcome.fallbackUsed, outcome.certificateFailure)
                             }
@@ -238,9 +289,8 @@ class RealtimeStockDataService(
             }
         }
 
-        if (certificateFailureCount > 0 && !hasNotifiedAboutCertificateFailure) {
-            postQuoteCertificateFailureToast()
-            hasNotifiedAboutCertificateFailure = true
+        if (certificateFailureCount > 0) {
+            notifyCertificateFailureIfNeeded()
         }
 
         _realtimeStockInfo.value = updatedInfos
@@ -263,12 +313,11 @@ class RealtimeStockDataService(
     }
 
     suspend fun refreshAllHeldStockInfo() {
-        fetchAllStockInfo(
+        refreshQuotesSafely(
             isContinuous = false,
             forceSave = true,
             refreshRegardlessOfMarketOpen = true
         )
-        refreshTaiwanWeightedIndex(refreshRegardlessOfMarketOpen = true)
     }
 
     suspend fun refreshStocks(stockCodes: Collection<String>) {
@@ -284,19 +333,23 @@ class RealtimeStockDataService(
             StockMarket.isTw(it.market) && !StockExchange.isEmerging(it.exchange)
         }
         val updatedInfos = _realtimeStockInfo.value.toMutableMap()
+        var certificateFailure = false
 
         if (batchableTaiwanStocks.isNotEmpty() && preferredStockDataSource.value == "TWSE") {
-            val twseInfos = twseFetcher.fetchStockInfoListByExchange(batchableTaiwanStocks)
+            val batchOutcome = fetchTwseBatchSafely(batchableTaiwanStocks)
+            val twseInfos = batchOutcome.infos
             updatedInfos.putAll(twseInfos)
+            certificateFailure = batchOutcome.certificateFailure
 
             val missingStocks = batchableTaiwanStocks.filter { it.code !in twseInfos }
             coroutineScope {
                 missingStocks.map { stock ->
                     async(Dispatchers.IO) {
-                        stock.code to fetchWithFetcher(yahooFetcher, stock.code, stock.stockType).info
+                        stock.code to fetchWithFetcher(yahooFetcher, stock.code, stock.stockType)
                     }
-                }.awaitAll().forEach { (code, info) ->
-                    info?.let { updatedInfos[code] = it }
+                }.awaitAll().forEach { (code, outcome) ->
+                    certificateFailure = certificateFailure || outcome.certificateFailure
+                    outcome.info?.let { updatedInfos[code] = it }
                 }
             }
         }
@@ -310,15 +363,45 @@ class RealtimeStockDataService(
                         StockMarket.normalize(stock.market),
                         StockExchange.normalize(stock.exchange),
                         stock.stockType
-                    ).info
+                    )
                 }
-            }.awaitAll().forEach { (code, info) ->
-                info?.let { updatedInfos[code] = it }
+            }.awaitAll().forEach { (code, outcome) ->
+                certificateFailure = certificateFailure || outcome.certificateFailure
+                outcome.info?.let { updatedInfos[code] = it }
             }
+        }
+
+        if (certificateFailure) {
+            notifyCertificateFailureIfNeeded()
         }
 
         _realtimeStockInfo.value = updatedInfos
         settingsDataStore.setRealtimeStockInfoCache(updatedInfos)
+    }
+
+    private suspend fun fetchTwseBatchSafely(stocks: List<Stock>): TwseBatchFetchOutcome {
+        return try {
+            TwseBatchFetchOutcome(
+                infos = twseFetcher.fetchStockInfoListByExchange(stocks),
+                certificateFailure = false
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: CertificateValidationException) {
+            Log.e(
+                "RealtimeStockDataService",
+                "TWSE batch certificate validation failed; falling back per stock",
+                e
+            )
+            TwseBatchFetchOutcome(emptyMap(), certificateFailure = true)
+        } catch (e: Exception) {
+            Log.e(
+                "RealtimeStockDataService",
+                "TWSE batch failed; falling back per stock",
+                e
+            )
+            TwseBatchFetchOutcome(emptyMap(), certificateFailure = false)
+        }
     }
 
     private suspend fun refreshStockInternal(stockCode: String) {
@@ -331,9 +414,8 @@ class RealtimeStockDataService(
                 stock?.stockType.orEmpty()
             )
 
-        if (outcome.certificateFailure && !hasNotifiedAboutCertificateFailure) {
-            postQuoteCertificateFailureToast()
-            hasNotifiedAboutCertificateFailure = true
+        if (outcome.certificateFailure) {
+            notifyCertificateFailureIfNeeded()
         }
 
         outcome.info?.let {
@@ -613,6 +695,13 @@ class RealtimeStockDataService(
                 "抓取報價憑證失效",
                 Toast.LENGTH_SHORT
             ).show()
+        }
+    }
+
+    private fun notifyCertificateFailureIfNeeded() {
+        if (!hasNotifiedAboutCertificateFailure) {
+            postQuoteCertificateFailureToast()
+            hasNotifiedAboutCertificateFailure = true
         }
     }
 
