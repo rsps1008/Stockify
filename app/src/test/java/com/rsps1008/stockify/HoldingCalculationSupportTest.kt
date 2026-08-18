@@ -394,4 +394,101 @@ class HoldingCalculationSupportTest {
         assertNotNull(HoldingCalculationSupport.validateLongPositionBalances(sellBeforeBuy))
         assertNull(HoldingCalculationSupport.validateLongPositionBalances(separateAccounts))
     }
+
+    @Test
+    fun validateLongPositionBalancesRequiresCompanyActionBeforeSharesToMatchReplay() {
+        val buy = StockTransaction(
+            stockCode = "2330",
+            accountId = 1,
+            date = 1L,
+            recordTime = 1L,
+            type = "買進",
+            buyShares = 100.0
+        )
+        val split = StockTransaction(
+            stockCode = "2330",
+            accountId = 1,
+            date = 2L,
+            recordTime = 2L,
+            type = "分割",
+            stockSplitRatio = 2.0,
+            sharesBeforeSplit = 99.0,
+            sharesAfterSplit = 198.0
+        )
+
+        assertNotNull(HoldingCalculationSupport.validateLongPositionBalances(listOf(buy, split)))
+    }
+
+    @Test
+    fun validateLongPositionBalancesRequiresCompanyActionAfterSharesToMatchRatio() {
+        val buy = StockTransaction(
+            stockCode = "2330",
+            accountId = 1,
+            date = 1L,
+            recordTime = 1L,
+            type = "買進",
+            buyShares = 100.0
+        )
+        val reduction = StockTransaction(
+            stockCode = "2330",
+            accountId = 1,
+            date = 2L,
+            recordTime = 2L,
+            type = "減資",
+            capitalReductionRatio = 20.0,
+            sharesBeforeReduction = 100.0,
+            sharesAfterReduction = 70.0
+        )
+
+        assertNotNull(HoldingCalculationSupport.validateLongPositionBalances(listOf(buy, reduction)))
+    }
+
+    @Test
+    fun validateLongPositionBalancesKeepsRatioOnlyCompanyActionCompatibility() {
+        val transactions = listOf(
+            StockTransaction(
+                stockCode = "2330",
+                accountId = 1,
+                date = 1L,
+                recordTime = 1L,
+                type = "買進",
+                buyShares = 100.0
+            ),
+            StockTransaction(
+                stockCode = "2330",
+                accountId = 1,
+                date = 2L,
+                recordTime = 2L,
+                type = "分割",
+                stockSplitRatio = 2.0
+            )
+        )
+
+        assertNull(HoldingCalculationSupport.validateLongPositionBalances(transactions))
+    }
+
+    @Test
+    fun validateLongPositionBalancesRejectsPartiallyRecordedCompanyActionShares() {
+        val transactions = listOf(
+            StockTransaction(
+                stockCode = "2330",
+                accountId = 1,
+                date = 1L,
+                recordTime = 1L,
+                type = "買進",
+                buyShares = 100.0
+            ),
+            StockTransaction(
+                stockCode = "2330",
+                accountId = 1,
+                date = 2L,
+                recordTime = 2L,
+                type = "分割",
+                stockSplitRatio = 2.0,
+                sharesAfterSplit = 200.0
+            )
+        )
+
+        assertNotNull(HoldingCalculationSupport.validateLongPositionBalances(transactions))
+    }
 }

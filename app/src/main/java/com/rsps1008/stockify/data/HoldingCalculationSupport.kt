@@ -1,5 +1,8 @@
 package com.rsps1008.stockify.data
 
+import kotlin.math.abs
+import kotlin.math.max
+
 data class PositionInvestmentBasis(
     val remaining: Double,
     val cumulative: Double
@@ -127,8 +130,26 @@ object HoldingCalculationSupport {
                     currentShares - transaction.sellShares
                 }
                 "配股" -> currentShares + transaction.dividendShares
-                "減資" -> currentShares + capitalReductionShareChange(transaction, currentShares)
-                "分割" -> currentShares + splitShareChange(transaction, currentShares)
+                "減資" -> {
+                    validateRecordedCompanyActionPosition(
+                        transaction = transaction,
+                        currentShares = currentShares,
+                        expectedAfter = transaction.sharesBeforeReduction
+                            .takeIf { it > 0.0 }
+                            ?.let { it * (1.0 - transaction.capitalReductionRatio / 100.0) }
+                    )?.let { return it }
+                    currentShares + capitalReductionShareChange(transaction, currentShares)
+                }
+                "分割" -> {
+                    validateRecordedCompanyActionPosition(
+                        transaction = transaction,
+                        currentShares = currentShares,
+                        expectedAfter = transaction.sharesBeforeSplit
+                            .takeIf { it > 0.0 }
+                            ?.let { it * transaction.stockSplitRatio }
+                    )?.let { return it }
+                    currentShares + splitShareChange(transaction, currentShares)
+                }
                 else -> currentShares
             }
 
@@ -139,6 +160,50 @@ object HoldingCalculationSupport {
         }
 
         return null
+    }
+
+    private fun validateRecordedCompanyActionPosition(
+        transaction: StockTransaction,
+        currentShares: Double,
+        expectedAfter: Double?
+    ): String? {
+        val recordedBefore = when (transaction.type) {
+            "減資" -> transaction.sharesBeforeReduction
+            "分割" -> transaction.sharesBeforeSplit
+            else -> 0.0
+        }
+        val recordedAfter = when (transaction.type) {
+            "減資" -> transaction.sharesAfterReduction
+            "分割" -> transaction.sharesAfterSplit
+            else -> 0.0
+        }
+
+        // Legacy backups may contain only the ratio and rely on the replayed
+        // position as the event's before-count.
+        if (recordedBefore < 0.0 || recordedAfter < 0.0) {
+            return "${transaction.type}前後股數不可為負數"
+        }
+        val hasRecordedBefore = recordedBefore > 0.0
+        val hasRecordedAfter = recordedAfter > 0.0
+        if (!hasRecordedBefore && !hasRecordedAfter) return null
+        if (hasRecordedBefore != hasRecordedAfter) {
+            return "${transaction.type}前後股數必須同時填寫"
+        }
+        if (!approximatelyEqual(recordedBefore, currentShares)) {
+            return "${transaction.type}前股數與交易回放持股不一致"
+        }
+        if (recordedAfter > 0.0 && expectedAfter != null &&
+            !approximatelyEqual(recordedAfter, expectedAfter)
+        ) {
+            return "${transaction.type}前後股數與比例不一致"
+        }
+        return null
+    }
+
+    private fun approximatelyEqual(left: Double, right: Double): Boolean {
+        if (!left.isFinite() || !right.isFinite()) return false
+        val tolerance = max(1e-6, max(abs(left), abs(right)) * 1e-9)
+        return abs(left - right) <= tolerance
     }
 
     /**
