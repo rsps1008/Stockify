@@ -111,6 +111,9 @@ interface StockDao {
     @Query("SELECT COUNT(*) FROM stocks WHERE market = :market")
     suspend fun getStockCountByMarket(market: String): Int
 
+    @Query("SELECT COUNT(*) FROM stocks WHERE market = :market AND exchange = :exchange")
+    suspend fun getStockCountByMarketAndExchange(market: String, exchange: String): Int
+
     @Query("SELECT * FROM stocks WHERE market = :market")
     suspend fun getStocksByMarket(market: String): List<Stock>
 

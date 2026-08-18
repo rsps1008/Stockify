@@ -53,6 +53,7 @@ class TwseStockHistoryServiceTest {
         override fun getStockByCodeFlow(code: String): Flow<Stock?> = flowOf(null)
         override suspend fun getStocksCount(): Int = 0
         override suspend fun getStockCountByMarket(market: String): Int = 0
+        override suspend fun getStockCountByMarketAndExchange(market: String, exchange: String): Int = 0
         override suspend fun getStocksByMarket(market: String): List<Stock> = emptyList()
         override suspend fun deleteStocksByMarket(market: String) {}
         override suspend fun deleteUnreferencedStocksByMarket(market: String) {}

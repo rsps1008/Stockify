@@ -60,12 +60,15 @@ abstract class AppDatabase : RoomDatabase() {
                     }
                     val settingsDataStore = SettingsDataStore(context)
                     val hasManualTwListUpdate = settingsDataStore.lastStockListUpdateTimeFlow.first() != null
-                    val bundledTwStocks = StockListRepository(context).readBundledStocks()
+                    val twStockListRepository = StockListRepository(context)
+                    val usStockListRepository = UsStockListRepository(context)
 
-                    // 舊版只有 market=TW，使用新版 bundled 清單補回上市/上櫃/興櫃分類。
-                    bundledTwStocks.forEach { stock ->
-                        if (stock.exchange.isNotBlank()) {
-                            stockDao.updateTaiwanStockExchange(stock.code, stock.exchange)
+                    // 舊版只有 market=TW；只有存在未分類資料時才讀 bundled 清單補回分類。
+                    if (stockDao.getStockCountByMarketAndExchange(StockMarket.TW, StockExchange.UNKNOWN) > 0) {
+                        twStockListRepository.readBundledStocks().forEach { stock ->
+                            if (stock.exchange.isNotBlank()) {
+                                stockDao.updateTaiwanStockExchange(stock.code, stock.exchange)
+                            }
                         }
                     }
 
@@ -76,8 +79,8 @@ abstract class AppDatabase : RoomDatabase() {
                         market = StockMarket.TW,
                         assetName = TW_STOCKS_ASSET_NAME,
                         checksumFileName = TW_STOCKS_CHECKSUM_FILE_NAME,
-                        bundledStocks = bundledTwStocks,
-                        refreshBundledCache = { StockListRepository(context).refreshBundledCacheFromAsset() },
+                        bundledStocksProvider = { twStockListRepository.readBundledStocks() },
+                        refreshBundledCache = { twStockListRepository.refreshBundledCacheFromAsset() },
                         skipIfManuallyUpdated = hasManualTwListUpdate
                     )
 
@@ -88,7 +91,7 @@ abstract class AppDatabase : RoomDatabase() {
                         market = StockMarket.US,
                         assetName = US_STOCKS_ASSET_NAME,
                         checksumFileName = US_STOCKS_CHECKSUM_FILE_NAME,
-                        bundledStocks = UsStockListRepository(context).readStocks(),
+                        bundledStocksProvider = { usStockListRepository.readStocks() },
                         refreshBundledCache = null,
                         skipIfManuallyUpdated = false
                     )
@@ -103,7 +106,7 @@ abstract class AppDatabase : RoomDatabase() {
             market: String,
             assetName: String,
             checksumFileName: String,
-            bundledStocks: List<Stock>,
+            bundledStocksProvider: () -> List<Stock>,
             refreshBundledCache: (() -> Unit)?,
             skipIfManuallyUpdated: Boolean
         ) {
@@ -116,7 +119,12 @@ abstract class AppDatabase : RoomDatabase() {
             val checksumFile = File(context.filesDir, checksumFileName)
             val storedChecksum = checksumFile.takeIf { it.exists() }?.readText()?.trim().orEmpty().ifBlank { null }
             val needsRefresh = currentCount == 0 || storedChecksum != bundledChecksum
-            if (!needsRefresh || bundledStocks.isEmpty()) {
+            if (!needsRefresh) {
+                return
+            }
+
+            val bundledStocks = bundledStocksProvider()
+            if (bundledStocks.isEmpty()) {
                 return
             }
 
