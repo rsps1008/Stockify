@@ -3,6 +3,7 @@ package com.rsps1008.stockify.ui.viewmodel
 import android.app.Application
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.rsps1008.stockify.data.AppDatabase
 import com.rsps1008.stockify.data.OfflineStockRepository
 import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.SettingsDataStore
@@ -16,6 +17,7 @@ import com.rsps1008.stockify.data.TransactionListRepository
 class ViewModelFactory(
     private val stockDao: StockDao,
     private val application: Application? = null,
+    private val appDatabase: AppDatabase? = null,
     private val realtimeStockDataService: RealtimeStockDataService? = null,
     private val settingsDataStore: SettingsDataStore? = null,
     private val stockCode: String? = null,
@@ -34,6 +36,7 @@ class ViewModelFactory(
                 requireNotNull(exchangeRateService) { "exchangeRateService is required for HoldingsViewModel" }
                 requireNotNull(taiwanWeightedIndexService) { "taiwanWeightedIndexService is required for HoldingsViewModel" }
                 requireNotNull(twseStockHistoryService) { "twseStockHistoryService is required for HoldingsViewModel" }
+                requireNotNull(appDatabase) { "appDatabase is required for HoldingsViewModel" }
                 @Suppress("UNCHECKED_CAST")
                 HoldingsViewModel(
                     settingsDataStore = settingsDataStore,
@@ -42,6 +45,7 @@ class ViewModelFactory(
                     stockDao = stockDao,
                     twseStockHistoryService = twseStockHistoryService,
                     exchangeRateService = exchangeRateService,
+                    appDatabase = appDatabase,
                     stockRepository = OfflineStockRepository(
                         stockDao = stockDao,
                         realtimeStockDataService = realtimeStockDataService,

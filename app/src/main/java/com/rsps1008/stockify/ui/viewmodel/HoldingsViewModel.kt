@@ -1,7 +1,10 @@
 package com.rsps1008.stockify.ui.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.room.withTransaction
+import com.rsps1008.stockify.data.AppDatabase
 import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.StockRepository
@@ -24,11 +27,15 @@ import com.rsps1008.stockify.data.ShortSellingCalculationSupport
 import com.rsps1008.stockify.data.Account
 import com.rsps1008.stockify.ui.screens.HoldingsUiState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -78,6 +85,7 @@ class HoldingsViewModel(
     private val stockDao: StockDao,
     private val twseStockHistoryService: TwseStockHistoryService,
     private val exchangeRateService: UsdTwdExchangeRateService,
+    private val appDatabase: AppDatabase,
     stockRepository: StockRepository
 ) : ViewModel() {
 
@@ -144,6 +152,55 @@ class HoldingsViewModel(
     fun selectAccount(accountId: Int) {
         viewModelScope.launch {
             settingsDataStore.setActiveAccountId(accountId)
+        }
+    }
+
+    private val _accountOperationError = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val accountOperationError: SharedFlow<String> = _accountOperationError.asSharedFlow()
+
+    fun addAccount(name: String) {
+        val normalizedName = name.trim()
+        if (normalizedName.isBlank()) return
+        viewModelScope.launch {
+            runAccountOperation {
+                stockDao.insertAccount(Account(name = normalizedName))
+            }
+        }
+    }
+
+    fun renameAccount(account: Account, name: String) {
+        val normalizedName = name.trim()
+        if (normalizedName.isBlank()) return
+        viewModelScope.launch {
+            runAccountOperation {
+                stockDao.updateAccount(account.copy(name = normalizedName))
+            }
+        }
+    }
+
+    fun deleteAccount(account: Account) {
+        val accountId = account.id
+        viewModelScope.launch {
+            runAccountOperation {
+                appDatabase.withTransaction {
+                    stockDao.deleteTransactionsByAccountId(accountId)
+                    stockDao.deleteAccount(account)
+                }
+                if (settingsDataStore.activeAccountIdFlow.first() == accountId) {
+                    settingsDataStore.setActiveAccountId(0)
+                }
+            }
+        }
+    }
+
+    private suspend fun runAccountOperation(operation: suspend () -> Unit) {
+        try {
+            operation()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e("HoldingsViewModel", "Account operation failed", e)
+            _accountOperationError.emit("帳戶操作失敗，請稍後再試")
         }
     }
 

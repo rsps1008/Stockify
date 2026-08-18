@@ -103,18 +103,17 @@ import java.util.Locale
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import com.rsps1008.stockify.data.Account
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 
 @OptIn(ExperimentalFoundationApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun HoldingsScreen(navController: NavController) {
     val application = LocalContext.current.applicationContext as StockifyApplication
+    val context = LocalContext.current
     val viewModel: HoldingsViewModel = viewModel(
         factory = ViewModelFactory(
             stockDao = application.database.stockDao(),
+            appDatabase = application.database,
             realtimeStockDataService = application.realtimeStockDataService,
             settingsDataStore = application.settingsDataStore,
             exchangeRateService = application.exchangeRateService,
@@ -138,6 +137,12 @@ fun HoldingsScreen(navController: NavController) {
     val usdToTwdRate by application.exchangeRateService.usdToTwdRate.collectAsState()
     val activeAccountId by viewModel.activeAccountId.collectAsState()
     val accounts by viewModel.accounts.collectAsState()
+
+    LaunchedEffect(viewModel) {
+        viewModel.accountOperationError.collect { message ->
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
     val activeHoldings = uiState.holdings.filter {
         it.shares > 1e-6 ||
             it.shortOutstandingShares > 1e-6 ||
@@ -314,31 +319,9 @@ fun HoldingsScreen(navController: NavController) {
                     activeAccountId = activeAccountId,
                     accounts = accounts,
                     onAccountSelected = viewModel::selectAccount,
-                    onAddAccount = { name ->
-                        application.database.stockDao().let { dao ->
-                            CoroutineScope(Dispatchers.IO).launch {
-                                dao.insertAccount(Account(name = name))
-                            }
-                        }
-                    },
-                    onRenameAccount = { account, name ->
-                        application.database.stockDao().let { dao ->
-                            CoroutineScope(Dispatchers.IO).launch {
-                                dao.updateAccount(account.copy(name = name))
-                            }
-                        }
-                    },
-                    onDeleteAccount = { account ->
-                        application.database.stockDao().let { dao ->
-                            CoroutineScope(Dispatchers.IO).launch {
-                                dao.deleteTransactionsByAccountId(account.id)
-                                dao.deleteAccount(account)
-                                if (activeAccountId == account.id) {
-                                    viewModel.selectAccount(0)
-                                }
-                            }
-                        }
-                    }
+                    onAddAccount = viewModel::addAccount,
+                    onRenameAccount = viewModel::renameAccount,
+                    onDeleteAccount = viewModel::deleteAccount
                 )
             }
 
