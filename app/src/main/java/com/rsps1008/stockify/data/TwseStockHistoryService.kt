@@ -29,6 +29,36 @@ data class StockHistoryPoint(
     val price: Double
 )
 
+internal class StockHistoryCache {
+    private val lock = Any()
+    private val values = mutableMapOf<String, List<StockHistoryPoint>>()
+    private var generation = 0L
+
+    fun currentGeneration(): Long = synchronized(lock) { generation }
+
+    fun get(key: String): List<StockHistoryPoint>? = synchronized(lock) {
+        values[key]
+    }
+
+    fun putIfCurrent(
+        key: String,
+        points: List<StockHistoryPoint>,
+        expectedGeneration: Long
+    ): Boolean = synchronized(lock) {
+        if (generation != expectedGeneration) {
+            false
+        } else {
+            values[key] = points
+            true
+        }
+    }
+
+    fun clear() = synchronized(lock) {
+        values.clear()
+        generation++
+    }
+}
+
 class TwseStockHistoryService(
     private val client: HttpClient,
     private val stockDao: StockDao
@@ -42,7 +72,7 @@ class TwseStockHistoryService(
     }
 
     // Cache structure: Map of "MARKET:stockCode_YYYYMM" to List<StockHistoryPoint>
-    private val cache = mutableMapOf<String, List<StockHistoryPoint>>()
+    private val cache = StockHistoryCache()
 
     fun clearCache() {
         cache.clear()
@@ -59,10 +89,11 @@ class TwseStockHistoryService(
         val latestChartDateStr = getLatestChartDateString(normalizedMarket)
         val latestChartMonthStr = latestChartDateStr.take(7).replace("-", "")
         val resultPoints = mutableListOf<StockHistoryPoint>()
+        val cacheGeneration = cache.currentGeneration()
 
         for (monthStr in targetMonths) {
             val cacheKey = historyCacheKey(normalizedMarket, normalizedCode, monthStr)
-            val cached = cache[cacheKey]
+            val cached = cache.get(cacheKey)
             if (cached != null) {
                 resultPoints.addAll(cached.filterForChart(latestChartDateStr))
                 continue
@@ -73,7 +104,7 @@ class TwseStockHistoryService(
             if (localData.isNotEmpty()) {
                 val localPoints = localData.map { StockHistoryPoint(it.date, it.price) }.filterForChart(latestChartDateStr)
                 if (shouldUseLocalMonthWithoutRefresh(monthStr, latestChartMonthStr, latestChartDateStr, localPoints)) {
-                    cache[cacheKey] = localPoints
+                    cache.putIfCurrent(cacheKey, localPoints, cacheGeneration)
                 }
                 resultPoints.addAll(localPoints)
             }
@@ -117,11 +148,12 @@ class TwseStockHistoryService(
 
         val latestChartDateStr = getLatestChartDateString(StockMarket.TW)
         val latestChartMonthStr = latestChartDateStr.take(7).replace("-", "")
+        val cacheGeneration = cache.currentGeneration()
 
         for ((index, monthStr) in targetMonths.withIndex()) {
             onProgress(index + 1, total)
             val cacheKey = historyCacheKey(market, stockCode, monthStr)
-            val cached = cache[cacheKey]
+            val cached = cache.get(cacheKey)
 
             if (cached != null) {
                 resultPoints.addAll(cached.filterForChart(latestChartDateStr))
@@ -138,7 +170,7 @@ class TwseStockHistoryService(
                 val localPoints = localData.map { StockHistoryPoint(it.date, it.price) }.filterForChart(latestChartDateStr)
                 resultPoints.addAll(localPoints)
                 if (shouldUseLocalMonthWithoutRefresh(monthStr, latestChartMonthStr, latestChartDateStr, localPoints)) {
-                    cache[cacheKey] = localPoints
+                    cache.putIfCurrent(cacheKey, localPoints, cacheGeneration)
                     continue
                 }
             }
@@ -167,7 +199,7 @@ class TwseStockHistoryService(
                         parseTwseResponse(body)
                     }.filterForChart(latestChartDateStr)
                     if (points.isNotEmpty()) {
-                        cache[cacheKey] = points
+                        cache.putIfCurrent(cacheKey, points, cacheGeneration)
                         resultPoints.addAll(points)
 
                         // Save fetched points to database
@@ -200,12 +232,13 @@ class TwseStockHistoryService(
 
         val latestChartDateStr = getLatestChartDateString(StockMarket.US)
         val latestChartMonthStr = latestChartDateStr.take(7).replace("-", "")
+        val cacheGeneration = cache.currentGeneration()
 
         val missingMonths = mutableListOf<String>()
 
         for (monthStr in targetMonths) {
             val cacheKey = historyCacheKey(market, stockCode, monthStr)
-            val cached = cache[cacheKey]
+            val cached = cache.get(cacheKey)
             if (cached != null) {
                 resultPoints.addAll(cached.filterForChart(latestChartDateStr))
                 continue
@@ -221,7 +254,7 @@ class TwseStockHistoryService(
                 val localPoints = localData.map { StockHistoryPoint(it.date, it.price) }.filterForChart(latestChartDateStr)
                 resultPoints.addAll(localPoints)
                 if (shouldUseLocalMonthWithoutRefresh(monthStr, latestChartMonthStr, latestChartDateStr, localPoints)) {
-                    cache[cacheKey] = localPoints
+                    cache.putIfCurrent(cacheKey, localPoints, cacheGeneration)
                     continue
                 }
             }
@@ -282,14 +315,20 @@ class TwseStockHistoryService(
                 // Update memory cache
                 val groupedByMonth = points.groupBy { it.date.replace("-", "").substring(0, 6) }
                 for ((mStr, mPoints) in groupedByMonth) {
-                    cache[historyCacheKey(market, stockCode, mStr)] = mPoints
+                    cache.putIfCurrent(
+                        historyCacheKey(market, stockCode, mStr),
+                        mPoints,
+                        cacheGeneration
+                    )
                 }
 
                 // Rebuild resultPoints from cache
                 resultPoints.clear()
                 for (monthStr in targetMonths) {
                     val cacheKey = "${monthStr.substring(0, 6)}"
-                    val cached = cache[historyCacheKey(market, stockCode, cacheKey)] ?: groupedByMonth[cacheKey] ?: emptyList()
+                    val cached = cache.get(historyCacheKey(market, stockCode, cacheKey))
+                        ?: groupedByMonth[cacheKey]
+                        ?: emptyList()
                     resultPoints.addAll(cached.filterForChart(latestChartDateStr))
                 }
             }
