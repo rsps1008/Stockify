@@ -8,8 +8,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.map
 
 class OfflineStockRepository(
     private val stockDao: StockDao,
@@ -19,18 +19,26 @@ class OfflineStockRepository(
 ) : StockRepository {
 
     @Suppress("UNCHECKED_CAST")
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     override fun getHoldings(): Flow<HoldingsUiState> {
+        val transactionsFlow = settingsDataStore.activeAccountIdFlow.flatMapLatest { accountId ->
+            if (accountId == 0) {
+                stockDao.getAllTransactions()
+            } else {
+                stockDao.getTransactionsForAccount(accountId)
+            }
+        }
+
         // Combine held stocks, all transactions, and real-time data to calculate holdings state
         return combine(
             stockDao.getHeldStocks(),
-            stockDao.getAllTransactions(),
+            transactionsFlow,
             realtimeStockDataService.realtimeStockInfo,
             settingsDataStore.preDeductSellFeesFlow,
             exchangeRateService.usdToTwdRate,
             settingsDataStore.homeDisplayModeFlow,
             settingsDataStore.returnRateModeFlow,
             settingsDataStore.marginDayCountFlow,
-            settingsDataStore.activeAccountIdFlow
         ) { values ->
             val stocks = values[0] as List<Stock>
             val allTransactions = values[1] as List<StockTransaction>
@@ -40,13 +48,7 @@ class OfflineStockRepository(
             val homeDisplayMode = values[5] as String
             val returnRateMode = values[6] as ReturnRateMode
             val marginDayCount = values[7] as Int
-            val activeAccountId = values[8] as Int
-
-            val transactions = if (activeAccountId == 0) {
-                allTransactions
-            } else {
-                allTransactions.filter { it.accountId == activeAccountId }
-            }
+            val transactions = allTransactions
 
             val currentDateMillis = System.currentTimeMillis()
             val transactionsByStock = transactions.groupBy { it.stockCode }
@@ -169,8 +171,10 @@ class OfflineStockRepository(
 
     override fun getHoldingInfo(stockCode: String, accountId: Int): Flow<HoldingInfo?> {
         val stockFlow = stockDao.getStockByCodeFlow(stockCode)
-        val transactionsFlow = stockDao.getTransactionsForStock(stockCode).map { transactions ->
-            if (accountId == 0) transactions else transactions.filter { it.accountId == accountId }
+        val transactionsFlow = if (accountId == 0) {
+            stockDao.getTransactionsForStock(stockCode)
+        } else {
+            stockDao.getTransactionsForStockAndAccount(stockCode, accountId)
         }
 
         return combine(
@@ -210,10 +214,12 @@ class OfflineStockRepository(
     }
 
     override fun getTransactionsForStock(stockCode: String, accountId: Int): Flow<List<TransactionUiState>> {
-        return stockDao.getTransactionsForStock(stockCode)
-            .map { transactions ->
-                if (accountId == 0) transactions else transactions.filter { it.accountId == accountId }
-            }
+        val transactionsFlow = if (accountId == 0) {
+            stockDao.getTransactionsForStock(stockCode)
+        } else {
+            stockDao.getTransactionsForStockAndAccount(stockCode, accountId)
+        }
+        return transactionsFlow
             .combine(stockDao.getStockByCodeFlow(stockCode)) { transactions, stock ->
             transactions.map { transaction ->
                 TransactionUiState(
