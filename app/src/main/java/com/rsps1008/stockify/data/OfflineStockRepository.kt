@@ -17,6 +17,8 @@ class OfflineStockRepository(
     private val exchangeRateService: UsdTwdExchangeRateService
 ) : StockRepository {
 
+    private val valuationClock = valuationClockFlow()
+
     @Suppress("UNCHECKED_CAST")
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     override fun getHoldings(): Flow<HoldingsUiState> {
@@ -40,6 +42,7 @@ class OfflineStockRepository(
             settingsDataStore.marginDayCountFlow,
             settingsDataStore.feeDiscountFlow,
             settingsDataStore.minFeeRegularFlow,
+            valuationClock,
         ) { values ->
             val stocks = values[0] as List<Stock>
             val allTransactions = values[1] as List<StockTransaction>
@@ -51,9 +54,9 @@ class OfflineStockRepository(
             val marginDayCount = values[7] as Int
             val feeDiscount = values[8] as Double
             val minFeeRegular = values[9] as Int
+            val currentDateMillis = values[10] as Long
             val transactions = allTransactions
 
-            val currentDateMillis = System.currentTimeMillis()
             val transactionsByStock = transactions.groupBy { it.stockCode }
             val mode = HomeDisplayMode.normalize(homeDisplayMode)
             val transactedStocks = stocks.filter { stock ->
@@ -191,7 +194,8 @@ class OfflineStockRepository(
             settingsDataStore.returnRateModeFlow,
             settingsDataStore.marginDayCountFlow,
             settingsDataStore.feeDiscountFlow,
-            settingsDataStore.minFeeRegularFlow
+            settingsDataStore.minFeeRegularFlow,
+            valuationClock
         ) { values ->
             val stock = values[0] as Stock?
             val transactions = values[1] as List<StockTransaction>
@@ -201,6 +205,7 @@ class OfflineStockRepository(
             val marginDayCount = values[5] as Int
             val feeDiscount = values[6] as Double
             val minFeeRegular = values[7] as Int
+            val currentDateMillis = values[8] as Long
             stock?.let {
                 val realtime = realTimeData[stock.code]
                 val currentPrice = realTimeData[it.code]?.currentPrice ?: 0.0
@@ -218,7 +223,7 @@ class OfflineStockRepository(
                     feeDiscount = feeDiscount,
                     minFeeRegular = minFeeRegular,
                     returnRateMode = returnRateMode,
-                    currentDateMillis = System.currentTimeMillis(),
+                    currentDateMillis = currentDateMillis,
                     marginDayCount = marginDayCount
                 )
             }
