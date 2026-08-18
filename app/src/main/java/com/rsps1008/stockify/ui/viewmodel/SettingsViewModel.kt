@@ -42,6 +42,7 @@ import com.rsps1008.stockify.data.StockKey
 import com.rsps1008.stockify.data.toStockKey
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.StockListRepository
+import com.rsps1008.stockify.data.StockListSyncCoordinator
 import com.rsps1008.stockify.data.TwseStockHistoryService
 import com.rsps1008.stockify.data.assignProvisionalImportIds
 import kotlinx.coroutines.Dispatchers
@@ -1457,21 +1458,26 @@ class SettingsViewModel(
             _isLoading.value = true
             _updatingStockListMarket.value = StockMarket.TW
             try {
-                val stocks = stockDataFetcher.fetchStockList()
-                val updatedStocks = stockListRepository.replaceStocksInDatabase(
-                    database = appDatabase,
-                    market = StockMarket.TW,
-                    stocks = stocks
-                )
-                try {
-                    stockListRepository.saveStocks(updatedStocks)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.w(TAG, "Taiwan stock list database updated, but local cache save failed", e)
+                val started = StockListSyncCoordinator.runIfNotRunning(StockMarket.TW) {
+                    val stocks = stockDataFetcher.fetchStockList()
+                    val updatedStocks = stockListRepository.replaceStocksInDatabase(
+                        database = appDatabase,
+                        market = StockMarket.TW,
+                        stocks = stocks
+                    )
+                    try {
+                        stockListRepository.saveStocks(updatedStocks)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Taiwan stock list database updated, but local cache save failed", e)
+                    }
+                    settingsDataStore.setLastStockListUpdateTime(System.currentTimeMillis())
+                    _message.value = "股票列表更新成功！共 ${updatedStocks.size} 筆"
                 }
-                settingsDataStore.setLastStockListUpdateTime(System.currentTimeMillis())
-                _message.value = "股票列表更新成功！共 ${updatedStocks.size} 筆"
+                if (!started) {
+                    _message.value = "台股股票列表正在更新中，請稍後再試"
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1488,17 +1494,22 @@ class SettingsViewModel(
             _isLoading.value = true
             _updatingStockListMarket.value = StockMarket.US
             try {
-                val stocks = stockDataFetcher.fetchUsStockList()
-                if (stocks.isEmpty()) {
-                    throw IllegalStateException("Nasdaq Trader 未回傳可用的美股資料")
+                val started = StockListSyncCoordinator.runIfNotRunning(StockMarket.US) {
+                    val stocks = stockDataFetcher.fetchUsStockList()
+                    if (stocks.isEmpty()) {
+                        throw IllegalStateException("Nasdaq Trader 未回傳可用的美股資料")
+                    }
+                    val updatedStocks = stockListRepository.replaceStocksInDatabase(
+                        database = appDatabase,
+                        market = StockMarket.US,
+                        stocks = stocks
+                    )
+                    settingsDataStore.setLastUsStockListUpdateTime(System.currentTimeMillis())
+                    _message.value = "美股股票列表更新成功！共 ${updatedStocks.size} 筆"
                 }
-                val updatedStocks = stockListRepository.replaceStocksInDatabase(
-                    database = appDatabase,
-                    market = StockMarket.US,
-                    stocks = stocks
-                )
-                settingsDataStore.setLastUsStockListUpdateTime(System.currentTimeMillis())
-                _message.value = "美股股票列表更新成功！共 ${updatedStocks.size} 筆"
+                if (!started) {
+                    _message.value = "美股股票列表正在更新中，請稍後再試"
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

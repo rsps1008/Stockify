@@ -110,30 +110,32 @@ abstract class AppDatabase : RoomDatabase() {
             refreshBundledCache: (() -> Unit)?,
             skipIfManuallyUpdated: Boolean
         ) {
-            val currentCount = stockDao.getStockCountByMarket(market)
-            if (currentCount > 0 && skipIfManuallyUpdated) {
-                return
-            }
+            StockListSyncCoordinator.runIfNotRunning(market) {
+                val currentCount = stockDao.getStockCountByMarket(market)
+                if (currentCount > 0 && skipIfManuallyUpdated) {
+                    return@runIfNotRunning
+                }
 
-            val bundledChecksum = readAssetChecksum(context, assetName) ?: return
-            val checksumFile = File(context.filesDir, checksumFileName)
-            val storedChecksum = checksumFile.takeIf { it.exists() }?.readText()?.trim().orEmpty().ifBlank { null }
-            val needsRefresh = currentCount == 0 || storedChecksum != bundledChecksum
-            if (!needsRefresh) {
-                return
-            }
+                val bundledChecksum = readAssetChecksum(context, assetName) ?: return@runIfNotRunning
+                val checksumFile = File(context.filesDir, checksumFileName)
+                val storedChecksum = checksumFile.takeIf { it.exists() }?.readText()?.trim().orEmpty().ifBlank { null }
+                val needsRefresh = currentCount == 0 || storedChecksum != bundledChecksum
+                if (!needsRefresh) {
+                    return@runIfNotRunning
+                }
 
-            val bundledStocks = bundledStocksProvider()
-            if (bundledStocks.isEmpty()) {
-                return
-            }
+                val bundledStocks = bundledStocksProvider()
+                if (bundledStocks.isEmpty()) {
+                    return@runIfNotRunning
+                }
 
-            database.withTransaction {
-                stockDao.deleteUnreferencedStocksByMarket(market)
-                stockDao.replaceStocks(bundledStocks)
+                database.withTransaction {
+                    stockDao.deleteUnreferencedStocksByMarket(market)
+                    stockDao.replaceStocks(bundledStocks)
+                }
+                refreshBundledCache?.invoke()
+                checksumFile.writeText(bundledChecksum)
             }
-            refreshBundledCache?.invoke()
-            checksumFile.writeText(bundledChecksum)
         }
 
         private fun readAssetChecksum(context: Context, assetName: String): String? {

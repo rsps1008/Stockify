@@ -7,6 +7,7 @@ import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.StockDataFetcher
 import com.rsps1008.stockify.data.StockListRepository
+import com.rsps1008.stockify.data.StockListSyncCoordinator
 import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.TaiwanWeightedIndexService
 import com.rsps1008.stockify.data.TransactionListRepository
@@ -59,8 +60,14 @@ class StockifyApplication : Application() {
     /**
      * Checks the Taiwan stock list once when the app opens. This deliberately does not
      * schedule background work or surface a user-facing message.
-     */
+    */
     suspend fun updateTaiwanStockListIfDue() {
+        StockListSyncCoordinator.runIfNotRunning(StockMarket.TW) {
+            updateTaiwanStockListIfDueInternal()
+        }
+    }
+
+    private suspend fun updateTaiwanStockListIfDueInternal() {
         val lastUpdatedAt = settingsDataStore.lastStockListUpdateTimeFlow.first()
         if (lastUpdatedAt != null && System.currentTimeMillis() - lastUpdatedAt < STOCK_LIST_UPDATE_INTERVAL_MILLIS) {
             return
@@ -94,8 +101,14 @@ class StockifyApplication : Application() {
     /**
      * Checks the U.S. stock list once when the app opens. This deliberately does not
      * schedule background work or surface a user-facing message.
-     */
+    */
     suspend fun updateUsStockListIfDue() {
+        StockListSyncCoordinator.runIfNotRunning(StockMarket.US) {
+            updateUsStockListIfDueInternal()
+        }
+    }
+
+    private suspend fun updateUsStockListIfDueInternal() {
         val lastUpdatedAt = settingsDataStore.lastUsStockListUpdateTimeFlow.first()
         if (lastUpdatedAt != null && System.currentTimeMillis() - lastUpdatedAt < STOCK_LIST_UPDATE_INTERVAL_MILLIS) {
             return
