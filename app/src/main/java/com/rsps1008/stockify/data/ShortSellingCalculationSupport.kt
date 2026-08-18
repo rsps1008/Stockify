@@ -33,7 +33,16 @@ object ShortSellingCalculationSupport {
         var remainingShares: Double, var accruedBorrowFee: Double, var lastAccrualDate: Long
     )
 
-    fun calculate(transactions: List<StockTransaction>, valuationDate: Long, dayCount: Int = 365): ShortSellingSummary {
+    /**
+     * Calculates short-selling state. When [transactionsAreOrdered] is true,
+     * the caller must provide ascending date, record time, and id order.
+     */
+    fun calculate(
+        transactions: List<StockTransaction>,
+        valuationDate: Long,
+        dayCount: Int = 365,
+        transactionsAreOrdered: Boolean = false
+    ): ShortSellingSummary {
         val denominator = if (dayCount == 360) 360 else 365
         val lots = linkedMapOf<LotKey, LotState>()
         var compensationExpense = 0.0
@@ -45,9 +54,16 @@ object ShortSellingCalculationSupport {
             lot.accruedBorrowFee += principal * lot.annualRate / 100.0 * days / denominator
             lot.lastAccrualDate = date
         }
-        transactions.asSequence()
+        val orderedTransactions = transactions.asSequence()
             .filter { it.date <= valuationDate }
-            .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime }.thenBy { it.id })
+            .let { sequence ->
+                if (transactionsAreOrdered) {
+                    sequence
+                } else {
+                    sequence.sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime }.thenBy { it.id })
+                }
+            }
+        orderedTransactions
             .forEach { tx ->
             lots.values.forEach { accrue(it, tx.date) }
             when (tx.type) {
@@ -104,11 +120,17 @@ object ShortSellingCalculationSupport {
         )
     }
 
+    /**
+     * Builds short-selling cash flows. When [transactionsAreOrdered] is true,
+     * the caller must provide ascending date, record time, and id order.
+     */
     fun buildXirrCashFlows(
         transactions: List<StockTransaction>,
         valuationDate: Long,
         currentPrice: Double,
-        dayCount: Int = 365
+        dayCount: Int = 365,
+        shortSummary: ShortSellingSummary? = null,
+        transactionsAreOrdered: Boolean = false
     ): List<CashFlow> {
         data class XirrLotState(
             var originalShares: Double,
@@ -119,9 +141,16 @@ object ShortSellingCalculationSupport {
 
         val lots = linkedMapOf<LotKey, XirrLotState>()
         val cashFlows = mutableListOf<CashFlow>()
-        transactions.asSequence()
+        val orderedTransactions = transactions.asSequence()
             .filter { it.date <= valuationDate }
-            .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime }.thenBy { it.id })
+            .let { sequence ->
+                if (transactionsAreOrdered) {
+                    sequence
+                } else {
+                    sequence.sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime }.thenBy { it.id })
+                }
+            }
+        orderedTransactions
             .forEach { transaction ->
                 when (transaction.type) {
                     "融券賣出" -> {
@@ -185,7 +214,13 @@ object ShortSellingCalculationSupport {
             }
         }
 
-        val accruedBorrowFee = calculate(transactions, valuationDate, dayCount).accruedBorrowFee
+        val accruedBorrowFee = shortSummary?.accruedBorrowFee
+            ?: calculate(
+                transactions = transactions,
+                valuationDate = valuationDate,
+                dayCount = dayCount,
+                transactionsAreOrdered = transactionsAreOrdered
+            ).accruedBorrowFee
         if (accruedBorrowFee > 0.0) {
             cashFlows += CashFlow(valuationDate, -accruedBorrowFee)
         }

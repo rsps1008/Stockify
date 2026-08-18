@@ -39,10 +39,15 @@ object MarginCalculationSupport {
         var lastAccrualDate: Long
     )
 
+    /**
+     * Calculates margin state. When [transactionsAreOrdered] is true, the
+     * caller must provide ascending date, record time, and id order.
+     */
     fun calculate(
         transactions: List<StockTransaction>,
         valuationDate: Long,
-        dayCount: Int = 365
+        dayCount: Int = 365,
+        transactionsAreOrdered: Boolean = false
     ): MarginSummary {
         val denominator = if (dayCount == 360) 360 else 365
         val lots = linkedMapOf<LotKey, LotState>()
@@ -56,9 +61,16 @@ object MarginCalculationSupport {
             lot.lastAccrualDate = date
         }
 
-        transactions.asSequence()
+        val orderedTransactions = transactions.asSequence()
             .filter { it.date <= valuationDate }
-            .sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime }.thenBy { it.id })
+            .let { sequence ->
+                if (transactionsAreOrdered) {
+                    sequence
+                } else {
+                    sequence.sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime }.thenBy { it.id })
+                }
+            }
+        orderedTransactions
             .forEach { tx ->
             lots.values.forEach { accrueUntil(it, tx.date) }
             when (tx.type) {

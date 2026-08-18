@@ -57,7 +57,15 @@ class OfflineStockRepository(
             val currentDateMillis = values[10] as Long
             val transactions = allTransactions
 
-            val transactionsByStock = transactions.groupBy { it.toStockKey().cacheKey() }
+            val transactionsByStock = transactions
+                .groupBy { it.toStockKey().cacheKey() }
+                .mapValues { (_, stockTransactions) ->
+                    stockTransactions.sortedWith(
+                        compareBy<StockTransaction> { it.date }
+                            .thenBy { it.recordTime }
+                            .thenBy { it.id }
+                    )
+                }
             val mode = HomeDisplayMode.normalize(homeDisplayMode)
             val transactedStocks = stocks.filter { stock ->
                 transactionsByStock[stock.toStockKey().cacheKey()]?.any { it.date <= currentDateMillis } == true
@@ -151,7 +159,15 @@ class OfflineStockRepository(
                         val currentPrice = realTimeData[stockKey]?.currentPrice ?: 0.0
                         val shares = holdingSharesByKey[stockKey] ?: 0.0
                         val rate = if (summaryIsCombined && StockMarket.isUs(stock.market)) usdToTwdRate else 1.0
-                buildCashFlowsForStock(stockTransactions, currentPrice, shares, currentDateMillis, rate, marginDayCount)
+                        buildCashFlowsForStock(
+                            transactions = stockTransactions,
+                            currentPrice = currentPrice,
+                            shares = shares,
+                            currentDateMillis = currentDateMillis,
+                            currencyRate = rate,
+                            marginDayCount = marginDayCount,
+                            transactionsAreOrdered = true
+                        )
                     }
                     ReturnRateCalculator.calculateXirrPercentage(portfolioCashFlows) ?: 0.0
                 }
@@ -273,7 +289,8 @@ class OfflineStockRepository(
         )
         val replay = HoldingCalculationSupport.replayLongPosition(
             effectiveTransactions,
-            currentDateMillis
+            currentDateMillis,
+            transactionsAreOrdered = true
         )
         val shares = replay.shares
         val totalBuyExpense = replay.totalBuyExpense
@@ -291,8 +308,18 @@ class OfflineStockRepository(
         val averageCost = if (shares > 0) costBasis / shares else 0.0
         val buyAverage = if (buySharesTotal > 0) buyCostTotal / buySharesTotal else 0.0
         val marketValue = shares * currentPrice
-        val marginSummary = MarginCalculationSupport.calculate(effectiveTransactions, currentDateMillis, marginDayCount)
-        val shortSummary = ShortSellingCalculationSupport.calculate(effectiveTransactions, currentDateMillis, marginDayCount)
+        val marginSummary = MarginCalculationSupport.calculate(
+            transactions = effectiveTransactions,
+            valuationDate = currentDateMillis,
+            dayCount = marginDayCount,
+            transactionsAreOrdered = true
+        )
+        val shortSummary = ShortSellingCalculationSupport.calculate(
+            transactions = effectiveTransactions,
+            valuationDate = currentDateMillis,
+            dayCount = marginDayCount,
+            transactionsAreOrdered = true
+        )
         val shortMarketLiability = shortSummary.outstandingShares * currentPrice
         val hasMarginPurchase = effectiveTransactions.any { it.type == "融資買進" }
         val longInvestment = if (hasMarginPurchase) {
@@ -343,7 +370,10 @@ class OfflineStockRepository(
                     currentPrice,
                     shares,
                     currentDateMillis,
-                    marginDayCount = marginDayCount
+                    marginDayCount = marginDayCount,
+                    marginSummary = marginSummary,
+                    shortSummary = shortSummary,
+                    transactionsAreOrdered = true
                 )
                 ReturnRateCalculator.calculateXirrPercentage(cashFlows) ?: 0.0
             }
@@ -381,12 +411,16 @@ class OfflineStockRepository(
         shares: Double,
         currentDateMillis: Long,
         currencyRate: Double = 1.0,
-        marginDayCount: Int = 365
+        marginDayCount: Int = 365,
+        marginSummary: MarginSummary? = null,
+        shortSummary: ShortSellingSummary? = null,
+        transactionsAreOrdered: Boolean = false
     ): List<CashFlow> {
-        val effectiveTransactions = HoldingCalculationSupport.transactionsAtOrBefore(
-            transactions,
-            currentDateMillis
-        )
+        val effectiveTransactions = if (transactionsAreOrdered) {
+            transactions.filter { it.date <= currentDateMillis }
+        } else {
+            HoldingCalculationSupport.transactionsAtOrBefore(transactions, currentDateMillis)
+        }
         val cashFlows = effectiveTransactions.mapNotNull { transaction ->
             when (transaction.type) {
                 "買進" -> CashFlow(transaction.date, -transaction.expense * currencyRate)
@@ -402,16 +436,19 @@ class OfflineStockRepository(
             }
         }.toMutableList()
 
-        val margin = MarginCalculationSupport.calculate(
-            effectiveTransactions,
-            currentDateMillis,
-            marginDayCount
+        val margin = marginSummary ?: MarginCalculationSupport.calculate(
+            transactions = effectiveTransactions,
+            valuationDate = currentDateMillis,
+            dayCount = marginDayCount,
+            transactionsAreOrdered = true
         )
         cashFlows += ShortSellingCalculationSupport.buildXirrCashFlows(
             transactions = effectiveTransactions,
             valuationDate = currentDateMillis,
             currentPrice = currentPrice,
-            dayCount = marginDayCount
+            dayCount = marginDayCount,
+            shortSummary = shortSummary,
+            transactionsAreOrdered = true
         ).map { it.copy(amount = it.amount * currencyRate) }
 
         val hasValuedPosition = shares > 0.0 && currentPrice > 0.0

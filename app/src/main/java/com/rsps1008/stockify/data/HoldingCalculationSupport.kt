@@ -41,9 +41,14 @@ object HoldingCalculationSupport {
             )
     }
 
+    /**
+     * Replays long positions. When [transactionsAreOrdered] is true, the
+     * caller must provide ascending date, record time, and id order.
+     */
     fun replayLongPosition(
         transactions: List<StockTransaction>,
-        valuationDate: Long
+        valuationDate: Long,
+        transactionsAreOrdered: Boolean = false
     ): LongPositionReplaySummary {
         val positions = mutableMapOf<PositionKey, AccountPositionState>()
         var totalBuyExpense = 0.0
@@ -53,7 +58,12 @@ object HoldingCalculationSupport {
         var totalDividendIncome = 0.0
         var buyCostTotal = 0.0
 
-        transactionsAtOrBefore(transactions, valuationDate).forEach { transaction ->
+        val orderedTransactions = if (transactionsAreOrdered) {
+            transactions.asSequence().filter { it.date <= valuationDate }
+        } else {
+            transactionsAtOrBefore(transactions, valuationDate).asSequence()
+        }
+        orderedTransactions.forEach { transaction ->
             val key = PositionKey(StockMarket.normalize(transaction.market), transaction.stockCode, transaction.accountId)
             val position = positions.getOrPut(key) { AccountPositionState() }
             when (transaction.type) {
