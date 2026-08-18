@@ -2,6 +2,10 @@ package com.rsps1008.stockify
 
 import com.rsps1008.stockify.data.HistoryChartCalculationSupport
 import com.rsps1008.stockify.data.StockHistoryPoint
+import com.rsps1008.stockify.data.StockMarket
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -9,6 +13,44 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HistoryChartCalculationSupportTest {
+
+    @Test
+    fun valuationDateEndMillisUsesEachMarketLocalClose() {
+        val date = LocalDate.of(2026, 7, 1)
+        val twEnd = HistoryChartCalculationSupport.valuationDateEndMillis(
+            date.toString(),
+            StockMarket.TW
+        )
+        val usEnd = HistoryChartCalculationSupport.valuationDateEndMillis(
+            date.toString(),
+            StockMarket.US
+        )
+
+        assertEquals(
+            date.atTime(LocalTime.of(13, 30))
+                .atZone(ZoneId.of("Asia/Taipei"))
+                .toInstant()
+                .toEpochMilli(),
+            twEnd
+        )
+        assertEquals(
+            date.atTime(LocalTime.of(16, 0))
+                .atZone(ZoneId.of("America/New_York"))
+                .toInstant()
+                .toEpochMilli(),
+            usEnd
+        )
+    }
+
+    @Test
+    fun valuationDateEndMillisRejectsInvalidDate() {
+        assertNull(
+            HistoryChartCalculationSupport.valuationDateEndMillis(
+                "2026-02-30",
+                StockMarket.TW
+            )
+        )
+    }
 
     @Test
     fun filterEmptyHistorySeries_removesStocksWithoutAnyHistoryPoints() {

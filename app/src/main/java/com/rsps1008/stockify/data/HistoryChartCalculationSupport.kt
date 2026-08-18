@@ -1,6 +1,22 @@
 package com.rsps1008.stockify.data
 
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+
 object HistoryChartCalculationSupport {
+    fun valuationDateEndMillis(date: String, market: String): Long? {
+        val localDate = runCatching {
+            LocalDate.parse(date, DateTimeFormatter.ISO_LOCAL_DATE)
+        }.getOrNull() ?: return null
+        val isUsMarket = StockMarket.isUs(market)
+        val zoneId = ZoneId.of(if (isUsMarket) "America/New_York" else "Asia/Taipei")
+        val marketClose = if (isUsMarket) LocalTime.of(16, 0) else LocalTime.of(13, 30)
+        return ZonedDateTime.of(localDate, marketClose, zoneId).toInstant().toEpochMilli()
+    }
+
     fun filterEmptyHistorySeries(
         allRawPoints: Map<String, List<StockHistoryPoint>>
     ): Map<String, List<StockHistoryPoint>> {

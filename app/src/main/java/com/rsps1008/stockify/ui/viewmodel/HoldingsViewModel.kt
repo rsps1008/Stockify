@@ -238,12 +238,14 @@ class HoldingsViewModel(
             val minFee = settings.minFeeRegular.toDouble()
             val normalizedMode = HomeDisplayMode.normalize(calculationBundle.displayMode)
             val normalizedUsdToTwdRate = calculationBundle.usdToTwdRate.takeIf { it > 0.0 } ?: 1.0
-            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).apply {
-                timeZone = java.util.TimeZone.getTimeZone("Asia/Taipei")
-            }
 
             val personalPoints = mutableListOf<PersonalHistoryPoint>()
             val selectedStocksByCode = stocks.associateBy { it.code }
+            val marketByStockCode = historyInternal.allRawPoints.keys.associateWith { stockCode ->
+                StockMarket.normalize(
+                    selectedStocksByCode[stockCode]?.market ?: StockMarket.inferFromCode(stockCode)
+                )
+            }
 
             val accountFilteredTxs = if (activeAccountId == 0) {
                 allTxs
@@ -269,20 +271,29 @@ class HoldingsViewModel(
                 )
             }
 
-            val firstTxTime = twTxs.minOfOrNull { it.date }
             var previousPortfolioXirrGuessRate: Double? = null
 
             for (pt in historyInternal.rawPoints) {
-                val dayStart = sdf.parse(pt.date)?.time ?: 0L
-                val dayEnd = dayStart + 24 * 60 * 60 * 1000L - 1L
-
-                if (firstTxTime != null && dayEnd < firstTxTime) {
-                    continue
-                }
+                val twDayEnd = HistoryChartCalculationSupport.valuationDateEndMillis(
+                    pt.date,
+                    StockMarket.TW
+                ) ?: continue
+                val usDayEnd = HistoryChartCalculationSupport.valuationDateEndMillis(
+                    pt.date,
+                    StockMarket.US
+                ) ?: continue
+                val dayEndByMarket = mapOf(
+                    StockMarket.TW to twDayEnd,
+                    StockMarket.US to usDayEnd
+                )
 
                 val stocksRequiringPrice = historicalTxsByStock
-                    .filterValues { stockTxs -> stockTxs.any { it.date <= dayEnd } }
+                    .filter { (stockCode, stockTxs) ->
+                        val dayEnd = dayEndByMarket.getValue(marketByStockCode.getValue(stockCode))
+                        stockTxs.any { it.date <= dayEnd }
+                    }
                     .keys
+                if (stocksRequiringPrice.isEmpty()) continue
                 if (!HistoryChartCalculationSupport.hasHistoryAtOrBeforeForStocks(
                         date = pt.date,
                         stockCodes = stocksRequiringPrice,
@@ -304,6 +315,8 @@ class HoldingsViewModel(
 
                     val stockTxs = historicalTxsByStock[stockCode] ?: emptyList()
                     val stockType = stocks.firstOrNull { it.code == stockCode }?.stockType ?: ""
+                    val stockMarket = marketByStockCode.getValue(stockCode)
+                    val stockDayEnd = dayEndByMarket.getValue(stockMarket)
 
                     val stats = calculateHistoricalHoldingStatsAt(
                         ptPrice = dailyPrice,
@@ -311,14 +324,14 @@ class HoldingsViewModel(
                         preDeductSellFees = settings.preDeductSellFees,
                         feeDiscount = settings.feeDiscount,
                         minFeeRegular = minFee,
-                        market = selectedStocksByCode[stockCode]?.market ?: StockMarket.inferFromCode(stockCode),
+                        market = stockMarket,
                         stockType = stockType,
-                        dayEnd = dayEnd,
+                        dayEnd = stockDayEnd,
                         marginDayCount = settings.marginDayCount
                     )
                     val currencyRate = if (
                         normalizedMode == HomeDisplayMode.COMBINED &&
-                        StockMarket.isUs(selectedStocksByCode[stockCode]?.market)
+                        StockMarket.isUs(stockMarket)
                     ) {
                         normalizedUsdToTwdRate
                     } else {
@@ -331,10 +344,10 @@ class HoldingsViewModel(
                     totalShares += stats.shares
                     if (settings.returnRateMode == ReturnRateMode.XIRR) {
                         portfolioCashFlows += buildHistoricalCashFlows(
-                            transactions = stockTxs.filter { it.date <= dayEnd },
+                            transactions = stockTxs.filter { it.date <= stockDayEnd },
                             shares = stats.shares,
                             price = dailyPrice,
-                            terminalDateMillis = dayEnd,
+                            terminalDateMillis = stockDayEnd,
                             currencyRate = currencyRate
                             ,marginDayCount = settings.marginDayCount
                         )

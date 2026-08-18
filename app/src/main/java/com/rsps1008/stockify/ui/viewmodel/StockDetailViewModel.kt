@@ -158,9 +158,6 @@ class StockDetailViewModel(
             val minFee = settings.minFeeRegular.toDouble()
 
             val personalPoints = mutableListOf<PersonalHistoryPoint>()
-            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).apply {
-                timeZone = java.util.TimeZone.getTimeZone("Asia/Taipei")
-            }
             val stockType = stock?.stockType ?: ""
             val market = stock?.market ?: StockMarket.inferFromCode(stockCode)
 
@@ -168,8 +165,8 @@ class StockDetailViewModel(
             var previousXirrGuessRate: Double? = null
 
             for (pt in rawPoints) {
-                val dayStart = sdf.parse(pt.date)?.time ?: 0L
-                val dayEnd = dayStart + 24 * 60 * 60 * 1000L - 1L
+                val dayEnd = HistoryChartCalculationSupport.valuationDateEndMillis(pt.date, market)
+                    ?: continue
 
                 if (firstTxTime != null && dayEnd < firstTxTime) {
                     continue
