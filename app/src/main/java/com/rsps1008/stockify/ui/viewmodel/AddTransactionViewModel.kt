@@ -100,10 +100,13 @@ internal fun holdingSharesAtDate(
     transactions: List<StockTransaction>,
     stockCode: String,
     accountId: Int,
-    valuationDate: Long
+    valuationDate: Long,
+    market: String = StockMarket.inferFromCode(stockCode)
 ): Double {
+    val normalizedMarket = StockMarket.normalize(market)
     val scopedTransactions = transactions.filter { transaction ->
         transaction.stockCode == stockCode &&
+            StockMarket.normalize(transaction.market) == normalizedMarket &&
             (accountId == 0 || transaction.accountId == accountId)
     }
     return HoldingCalculationSupport
@@ -243,7 +246,12 @@ class AddTransactionViewModel(
         _selectedAccountId.value = accountId
     }
 
-    fun loadMarginLots(stockCode: String, valuationDate: Long, excludeTransactionId: Int? = null) {
+    fun loadMarginLots(
+        stockCode: String,
+        valuationDate: Long,
+        excludeTransactionId: Int? = null,
+        market: String = StockMarket.inferFromCode(stockCode)
+    ) {
         val requestVersion = ++marginLotRequestVersion
         val accountId = _selectedAccountId.value
         val editedTransaction = _transactionToEdit.value
@@ -251,7 +259,10 @@ class AddTransactionViewModel(
         val candidateRecordTime = editedTransaction?.recordTime ?: System.currentTimeMillis()
         val candidateId = editedTransaction?.id ?: Int.MAX_VALUE
         viewModelScope.launch {
-            val transactions = stockDao.getTransactionsForStock(stockCode).firstOrNull().orEmpty()
+            val transactions = stockDao.getTransactionsForStock(
+                stockCode,
+                StockMarket.normalize(market)
+            ).firstOrNull().orEmpty()
                 .filter { it.accountId == accountId && it.id != excludeTransactionId }
                 .let {
                     transactionsBeforeCandidateForLotSelection(
@@ -276,7 +287,12 @@ class AddTransactionViewModel(
         }
     }
 
-    fun loadShortLots(stockCode: String, valuationDate: Long, excludeTransactionId: Int? = null) {
+    fun loadShortLots(
+        stockCode: String,
+        valuationDate: Long,
+        excludeTransactionId: Int? = null,
+        market: String = StockMarket.inferFromCode(stockCode)
+    ) {
         val requestVersion = ++shortLotRequestVersion
         val accountId = _selectedAccountId.value
         val editedTransaction = _transactionToEdit.value
@@ -284,7 +300,10 @@ class AddTransactionViewModel(
         val candidateRecordTime = editedTransaction?.recordTime ?: System.currentTimeMillis()
         val candidateId = editedTransaction?.id ?: Int.MAX_VALUE
         viewModelScope.launch {
-            val transactions = stockDao.getTransactionsForStock(stockCode).firstOrNull().orEmpty()
+            val transactions = stockDao.getTransactionsForStock(
+                stockCode,
+                StockMarket.normalize(market)
+            ).firstOrNull().orEmpty()
                 .filter { it.accountId == accountId && it.id != excludeTransactionId }
                 .let {
                     transactionsBeforeCandidateForLotSelection(
@@ -338,6 +357,7 @@ class AddTransactionViewModel(
         stockCode: String,
         accountId: Int,
         valuationDate: Long,
+        market: String = StockMarket.inferFromCode(stockCode),
         onResult: (cashDividend: Double, holdingShares: Double, dateStr: String?) -> Unit,
         onFail: () -> Unit
     ) {
@@ -353,7 +373,8 @@ class AddTransactionViewModel(
                 val holdingShares = loadHoldingSharesForDividend(
                     stockCode = stockCode,
                     accountId = accountId,
-                    valuationDate = result.date.toTransactionDateMillis() ?: valuationDate
+                    valuationDate = result.date.toTransactionDateMillis() ?: valuationDate,
+                    market = market
                 )
                 if (accountId != _selectedAccountId.value) return@launch
                 if (holdingShares <= 0) {
@@ -377,6 +398,7 @@ class AddTransactionViewModel(
         stockCode: String,
         accountId: Int,
         valuationDate: Long,
+        market: String = StockMarket.inferFromCode(stockCode),
         onResult: (rate: Double, holdingShares: Double, dateStr: String?) -> Unit,
         onFail: () -> Unit
     ) {
@@ -392,7 +414,8 @@ class AddTransactionViewModel(
                 val holdingShares = loadHoldingSharesForDividend(
                     stockCode = stockCode,
                     accountId = accountId,
-                    valuationDate = result.date.toTransactionDateMillis() ?: valuationDate
+                    valuationDate = result.date.toTransactionDateMillis() ?: valuationDate,
+                    market = market
                 )
                 if (accountId != _selectedAccountId.value) return@launch
                 if (holdingShares <= 0) {
@@ -414,14 +437,19 @@ class AddTransactionViewModel(
     private suspend fun loadHoldingSharesForDividend(
         stockCode: String,
         accountId: Int,
-        valuationDate: Long
+        valuationDate: Long,
+        market: String = StockMarket.inferFromCode(stockCode)
     ): Double {
-        val transactions = stockDao.getTransactionsForStock(stockCode).firstOrNull().orEmpty()
+        val transactions = stockDao.getTransactionsForStock(
+            stockCode,
+            StockMarket.normalize(market)
+        ).firstOrNull().orEmpty()
         return holdingSharesAtDate(
             transactions = transactions,
             stockCode = stockCode,
             accountId = accountId,
-            valuationDate = valuationDate
+            valuationDate = valuationDate,
+            market = market
         )
     }
 
@@ -455,7 +483,8 @@ class AddTransactionViewModel(
         stockSearchQuery.value = query
     }
 
-    suspend fun getStockByCode(code: String): Stock? = stockDao.getStockByCode(code)
+    suspend fun getStockByCode(code: String, market: String = StockMarket.inferFromCode(code)): Stock? =
+        stockDao.getStockByCode(code, StockMarket.normalize(market))
 
     val feeSettings = combine(
         settingsDataStore.feeDiscountFlow,
@@ -658,7 +687,7 @@ class AddTransactionViewModel(
         ,marginRepayment: Double, marginSelfFunded: Double, marginSelfFundedOverridden: Boolean, marginActualInterest: Double, shortBorrowPrincipal: Double, shortBorrowAnnualRate: Double, shortLotId: String, shortCoverLotId: String, shortCoverShares: Double, shortCompensationLotId: String, shortCompensation: Double
     ): String? {
         val inferredMarket = StockMarket.inferFromCode(stockCode)
-        val existingStock = stockDao.getStockByCode(stockCode)
+        val existingStock = stockDao.getStockByCode(stockCode, inferredMarket)
         val candidateStock = when {
             existingStock == null -> Stock(
                 name = stockName,
@@ -674,6 +703,7 @@ class AddTransactionViewModel(
         val resolvedShortLotId = resolveShortOpeningLotId(type, shortLotId)
         val transaction = StockTransaction(
                 stockCode = candidateStock.code,
+                market = candidateStock.market,
                 accountId = _selectedAccountId.value,
                 date = date,
                 recordTime = System.currentTimeMillis(),
@@ -715,7 +745,7 @@ class AddTransactionViewModel(
             stockDao.updateStock(candidateStock)
         }
         stockDao.insertTransaction(transaction)
-        realtimeStockDataService.refreshStock(stockCode)
+        realtimeStockDataService.refreshStock(stockCode, candidateStock.market)
         return null
     }
 
@@ -753,13 +783,15 @@ class AddTransactionViewModel(
         val targetTransactionId = transactionId ?: return EDIT_TRANSACTION_MISSING
         val originalTransaction = stockDao.getTransactionById(targetTransactionId).firstOrNull()
             ?: return markEditTransactionMissing()
-        val targetStock = stockDao.getStockByCode(stockCode)
+        val targetMarket = StockMarket.inferFromCode(stockCode)
+        val targetStock = stockDao.getStockByCode(stockCode, targetMarket)
             ?: return "找不到股票資料，無法更新交易"
-        val normalizedTargetStock = targetStock.copy(market = StockMarket.inferFromCode(stockCode))
+        val normalizedTargetStock = targetStock.copy(market = targetMarket)
         val resolvedMarginLotId = resolveMarginOpeningLotId(type, marginLotId)
         val resolvedShortLotId = resolveShortOpeningLotId(type, shortLotId)
         val updatedTransaction = originalTransaction.copy(
             stockCode = stockCode,
+            market = normalizedTargetStock.market,
             accountId = _selectedAccountId.value,
             date = date,
             type = type,
@@ -793,7 +825,10 @@ class AddTransactionViewModel(
             marginRepayment = marginRepayment, marginSelfFunded = marginSelfFunded, marginSelfFundedOverridden = marginSelfFundedOverridden, marginActualInterest = marginActualInterest, shortBorrowPrincipal = shortBorrowPrincipal, shortBorrowAnnualRate = shortBorrowAnnualRate, shortLotId = resolvedShortLotId, shortCoverLotId = shortCoverLotId, shortCoverShares = shortCoverShares, shortCompensationLotId = shortCompensationLotId, shortCompensation = shortCompensation
         )
         validateLotBalances(updatedTransaction)?.let { return it }
-        if (originalTransaction.stockCode != updatedTransaction.stockCode || originalTransaction.accountId != updatedTransaction.accountId) {
+        if (originalTransaction.stockCode != updatedTransaction.stockCode ||
+            originalTransaction.market != updatedTransaction.market ||
+            originalTransaction.accountId != updatedTransaction.accountId
+        ) {
             validateLotBalancesAfterRemoving(originalTransaction)?.let { error -> return error }
         }
         editTransactionUpdateError(stockDao.updateTransaction(updatedTransaction))?.let {
@@ -802,7 +837,7 @@ class AddTransactionViewModel(
         if (normalizedTargetStock != targetStock) {
             stockDao.updateStock(normalizedTargetStock)
         }
-        realtimeStockDataService.refreshStock(stockCode)
+        realtimeStockDataService.refreshStock(stockCode, normalizedTargetStock.market)
         return null
     }
 
@@ -814,9 +849,9 @@ class AddTransactionViewModel(
 
     private suspend fun validateLotBalances(candidate: StockTransaction): String? {
         com.rsps1008.stockify.data.FinancingTransactionValidationSupport
-            .validateFinancingMarket(candidate, StockMarket.inferFromCode(candidate.stockCode))
+            .validateFinancingMarket(candidate, candidate.market)
             ?.let { return it }
-        val existingTransactions = stockDao.getTransactionsForStock(candidate.stockCode)
+        val existingTransactions = stockDao.getTransactionsForStock(candidate.stockCode, candidate.market)
             .firstOrNull()
             .orEmpty()
             .filter { it.accountId == candidate.accountId && it.id != candidate.id }
@@ -841,7 +876,7 @@ class AddTransactionViewModel(
     }
 
     private suspend fun validateLotBalancesAfterRemoving(transaction: StockTransaction): String? {
-        val remainingTransactions = stockDao.getTransactionsForStock(transaction.stockCode)
+        val remainingTransactions = stockDao.getTransactionsForStock(transaction.stockCode, transaction.market)
             .firstOrNull()
             .orEmpty()
             .filter { it.accountId == transaction.accountId && it.id != transaction.id }

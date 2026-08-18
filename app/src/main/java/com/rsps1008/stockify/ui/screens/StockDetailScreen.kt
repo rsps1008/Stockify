@@ -72,6 +72,7 @@ import com.rsps1008.stockify.ui.viewmodel.DeleteTransactionsState
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import com.rsps1008.stockify.data.formatMarketAmount
 import com.rsps1008.stockify.data.formatShareCount
+import com.rsps1008.stockify.data.StockMarket
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -79,7 +80,8 @@ import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun StockDetailScreen(stockCode: String, navController: NavController) {
+fun StockDetailScreen(stockCode: String, market: String? = null, navController: NavController) {
+    val normalizedMarket = StockMarket.normalize(market ?: StockMarket.inferFromCode(stockCode))
     val application = LocalContext.current.applicationContext as StockifyApplication
     val viewModel: StockDetailViewModel = viewModel(
         factory = ViewModelFactory(
@@ -87,6 +89,7 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
             realtimeStockDataService = application.realtimeStockDataService,
             settingsDataStore = application.settingsDataStore,
             stockCode = stockCode,
+            market = normalizedMarket,
             exchangeRateService = application.exchangeRateService,
             twseStockHistoryService = application.twseStockHistoryService
         )
@@ -176,7 +179,7 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
                     // 新增交易
                     IconButton(onClick = {
                         navController.navigate(
-                            Screen.AddTransaction.createRoute(null, stockCode)
+                            Screen.AddTransaction.createRoute(null, stockCode, normalizedMarket)
                         )
                     }) {
                         Icon(Icons.Default.Add, contentDescription = "Add transaction")
@@ -224,7 +227,7 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
 
                 item {
                     Spacer(modifier = Modifier.height(8.dp))
-                    RealtimePriceRow(stockCode, viewModel)
+                            RealtimePriceRow(stockCode, normalizedMarket, viewModel)
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
@@ -388,9 +391,9 @@ private fun TransactionListHeader() {
 
 
 @Composable
-private fun RealtimePriceRow(stockCode: String, viewModel: StockDetailViewModel) {
+private fun RealtimePriceRow(stockCode: String, market: String, viewModel: StockDetailViewModel) {
     val realtimeMap by viewModel.realtimeStockInfo.collectAsState()
-    val info = realtimeMap[stockCode]
+    val info = realtimeMap[com.rsps1008.stockify.data.stockCacheKey(market, stockCode)]
 
     Row(
         modifier = Modifier

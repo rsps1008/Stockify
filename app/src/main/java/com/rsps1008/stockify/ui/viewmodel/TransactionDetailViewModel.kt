@@ -23,7 +23,7 @@ class TransactionDetailViewModel(transactionId: Int, private val stockDao: Stock
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
     val transactionUiState: StateFlow<TransactionUiState?> = transaction.filterNotNull().flatMapLatest { tx ->
-        stockDao.getStockByCodeFlow(tx.stockCode).filterNotNull().map { stock ->
+        stockDao.getStockByCodeFlow(tx.stockCode, tx.market).filterNotNull().map { stock ->
             TransactionUiState(tx, stock.name, stock.market)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
@@ -31,13 +31,13 @@ class TransactionDetailViewModel(transactionId: Int, private val stockDao: Stock
     val canModifyTransaction: StateFlow<Boolean> = transaction.filterNotNull().flatMapLatest { tx ->
         val marginDependents = tx.marginLotId.takeIf { it.isNotBlank() }
             ?.let { lotId ->
-                stockDao.getMarginRepaymentsForLot(lotId, tx.stockCode, tx.accountId)
+                stockDao.getMarginRepaymentsForLot(lotId, tx.stockCode, tx.market, tx.accountId)
                     .map { dependents -> dependents.isNotEmpty() }
             }
             ?: kotlinx.coroutines.flow.flowOf(false)
         val shortDependents = tx.shortLotId.takeIf { it.isNotBlank() }
             ?.let { lotId ->
-                stockDao.getShortDependentsForLot(lotId, tx.stockCode, tx.accountId)
+                stockDao.getShortDependentsForLot(lotId, tx.stockCode, tx.market, tx.accountId)
                     .map { dependents -> dependents.isNotEmpty() }
             }
             ?: kotlinx.coroutines.flow.flowOf(false)
@@ -51,7 +51,7 @@ class TransactionDetailViewModel(transactionId: Int, private val stockDao: Stock
                 onResult("交易資料尚未載入完成")
                 return@launch
             }
-            val remainingTransactions = stockDao.getTransactionsForStock(current.stockCode)
+            val remainingTransactions = stockDao.getTransactionsForStock(current.stockCode, current.market)
                 .first()
                 .filter { it.accountId == current.accountId && it.id != current.id }
             if (!com.rsps1008.stockify.data.MarginCalculationSupport.hasValidRepaymentBalances(remainingTransactions)) {

@@ -57,10 +57,10 @@ class OfflineStockRepository(
             val currentDateMillis = values[10] as Long
             val transactions = allTransactions
 
-            val transactionsByStock = transactions.groupBy { it.stockCode }
+            val transactionsByStock = transactions.groupBy { it.toStockKey().cacheKey() }
             val mode = HomeDisplayMode.normalize(homeDisplayMode)
             val transactedStocks = stocks.filter { stock ->
-                transactionsByStock[stock.code]?.any { it.date <= currentDateMillis } == true
+                transactionsByStock[stock.toStockKey().cacheKey()]?.any { it.date <= currentDateMillis } == true
             }
 
             val filteredStocks = when (mode) {
@@ -70,11 +70,12 @@ class OfflineStockRepository(
             }
 
             fun calculateHoldingInfoFor(stock: Stock): HoldingInfo {
-                val realtime = realTimeData[stock.code]
-                val stockTransactions = transactionsByStock[stock.code].orEmpty()
-                val currentPrice = realTimeData[stock.code]?.currentPrice ?: 0.0
-                val dailyChange = realTimeData[stock.code]?.change ?: 0.0
-                val dailyChangePercentage = realTimeData[stock.code]?.changePercent ?: 0.0
+                val stockKey = stock.toStockKey().cacheKey()
+                val realtime = realTimeData[stockKey]
+                val stockTransactions = transactionsByStock[stockKey].orEmpty()
+                val currentPrice = realTimeData[stockKey]?.currentPrice ?: 0.0
+                val dailyChange = realTimeData[stockKey]?.change ?: 0.0
+                val dailyChangePercentage = realTimeData[stockKey]?.changePercent ?: 0.0
                 val limitState = realtime?.limitState ?: LimitState.NONE
                 return calculateHoldingInfo(
                     stock = stock,
@@ -143,11 +144,12 @@ class OfflineStockRepository(
                 ReturnRateMode.REMAINING_POSITION,
                 ReturnRateMode.CUMULATIVE_INVESTMENT -> if (totalInvestment > 0) (cumulativePL / totalInvestment) * 100 else 0.0
                 ReturnRateMode.XIRR -> {
-                    val holdingSharesByCode = holdingInfos.associate { it.stock.code to it.shares }
+                    val holdingSharesByKey = holdingInfos.associate { it.stock.toStockKey().cacheKey() to it.shares }
                     val portfolioCashFlows = filteredStocks.flatMap { stock ->
-                        val stockTransactions = transactionsByStock[stock.code].orEmpty()
-                        val currentPrice = realTimeData[stock.code]?.currentPrice ?: 0.0
-                        val shares = holdingSharesByCode[stock.code] ?: 0.0
+                        val stockKey = stock.toStockKey().cacheKey()
+                        val stockTransactions = transactionsByStock[stockKey].orEmpty()
+                        val currentPrice = realTimeData[stockKey]?.currentPrice ?: 0.0
+                        val shares = holdingSharesByKey[stockKey] ?: 0.0
                         val rate = if (summaryIsCombined && StockMarket.isUs(stock.market)) usdToTwdRate else 1.0
                 buildCashFlowsForStock(stockTransactions, currentPrice, shares, currentDateMillis, rate, marginDayCount)
                     }
@@ -178,12 +180,13 @@ class OfflineStockRepository(
         }.flowOn(Dispatchers.Default)
     }
 
-    override fun getHoldingInfo(stockCode: String, accountId: Int): Flow<HoldingInfo?> {
-        val stockFlow = stockDao.getStockByCodeFlow(stockCode)
+    override fun getHoldingInfo(stockCode: String, accountId: Int, market: String): Flow<HoldingInfo?> {
+        val normalizedMarket = StockMarket.normalize(market)
+        val stockFlow = stockDao.getStockByCodeFlow(stockCode, normalizedMarket)
         val transactionsFlow = if (accountId == 0) {
-            stockDao.getTransactionsForStock(stockCode)
+            stockDao.getTransactionsForStock(stockCode, normalizedMarket)
         } else {
-            stockDao.getTransactionsForStockAndAccount(stockCode, accountId)
+            stockDao.getTransactionsForStockAndAccount(stockCode, normalizedMarket, accountId)
         }
 
         return combine(
@@ -207,10 +210,11 @@ class OfflineStockRepository(
             val minFeeRegular = values[7] as Int
             val currentDateMillis = values[8] as Long
             stock?.let {
-                val realtime = realTimeData[stock.code]
-                val currentPrice = realTimeData[it.code]?.currentPrice ?: 0.0
-                val dailyChange = realTimeData[it.code]?.change ?: 0.0
-                val dailyChangePercentage = realTimeData[it.code]?.changePercent ?: 0.0
+                val realtimeKey = it.toStockKey().cacheKey()
+                val realtime = realTimeData[realtimeKey]
+                val currentPrice = realTimeData[realtimeKey]?.currentPrice ?: 0.0
+                val dailyChange = realTimeData[realtimeKey]?.change ?: 0.0
+                val dailyChangePercentage = realTimeData[realtimeKey]?.changePercent ?: 0.0
                 val limitState = realtime?.limitState ?: LimitState.NONE
                 calculateHoldingInfo(
                     stock = it,
@@ -230,14 +234,15 @@ class OfflineStockRepository(
         }.flowOn(Dispatchers.Default)
     }
 
-    override fun getTransactionsForStock(stockCode: String, accountId: Int): Flow<List<TransactionUiState>> {
+    override fun getTransactionsForStock(stockCode: String, accountId: Int, market: String): Flow<List<TransactionUiState>> {
+        val normalizedMarket = StockMarket.normalize(market)
         val transactionsFlow = if (accountId == 0) {
-            stockDao.getTransactionsForStock(stockCode)
+            stockDao.getTransactionsForStock(stockCode, normalizedMarket)
         } else {
-            stockDao.getTransactionsForStockAndAccount(stockCode, accountId)
+            stockDao.getTransactionsForStockAndAccount(stockCode, normalizedMarket, accountId)
         }
         return transactionsFlow
-            .combine(stockDao.getStockByCodeFlow(stockCode)) { transactions, stock ->
+            .combine(stockDao.getStockByCodeFlow(stockCode, normalizedMarket)) { transactions, stock ->
             transactions.map { transaction ->
                 TransactionUiState(
                     transaction = transaction,

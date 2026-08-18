@@ -155,11 +155,12 @@ class CsvService {
             try {
                 val values = parseCsvLine(line)
                 val transaction = parseTransaction(values, headerMap)
+                val market = parseMarket(values, headerMap, transaction.stockCode)
                 CsvTransaction(
                     stockName = values[headerMap["股名"]!!].trim(),
                     stockCode = transaction.stockCode,
-                    market = parseMarket(values, headerMap, transaction.stockCode),
-                    transaction = transaction
+                    market = market,
+                    transaction = transaction.copy(market = market)
                 )
             } catch (e: Exception) {
                 val reason = e.message?.takeIf { it.isNotBlank() }?.let { "：$it" }.orEmpty()

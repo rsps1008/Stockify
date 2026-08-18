@@ -1,6 +1,7 @@
 package com.rsps1008.stockify.ui.viewmodel
 
 import com.rsps1008.stockify.data.Stock
+import com.rsps1008.stockify.data.stockCacheKey
 import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.TransactionListSnapshot
@@ -22,11 +23,14 @@ class DividendInfoViewModelTest {
             cashDividend = 2.0
         )
         val movedToAnotherStock = original.copy(stockCode = "2317")
-        val stockCodes = setOf("2330", "2317")
+        val stockKeys = setOf(
+            stockCacheKey(StockMarket.TW, "2330"),
+            stockCacheKey(StockMarket.TW, "2317")
+        )
 
         assertNotEquals(
-            buildTransactionRevisionSignature(listOf(original), stockCodes),
-            buildTransactionRevisionSignature(listOf(movedToAnotherStock), stockCodes)
+            buildTransactionRevisionSignature(listOf(original), stockKeys),
+            buildTransactionRevisionSignature(listOf(movedToAnotherStock), stockKeys)
         )
     }
 
@@ -53,6 +57,32 @@ class DividendInfoViewModelTest {
         assertEquals(
             listOf(TaiwanStockRef("2330", "台積電"), TaiwanStockRef("2303", "聯電")),
             buildTaiwanStockRefs(snapshot, accountId = 1, valuationDateMillis = 250L)
+        )
+    }
+
+    @Test
+    fun taiwanStockRefs_doNotTreatSameCodeUsTransactionAsTaiwanHolding() {
+        val snapshot = TransactionListSnapshot(
+            stocks = listOf(
+                Stock(name = "台股 ABC", code = "ABC", market = StockMarket.TW),
+                Stock(name = "美股 ABC", code = "ABC", market = StockMarket.US)
+            ),
+            transactions = listOf(
+                StockTransaction(
+                    id = 1,
+                    stockCode = "ABC",
+                    market = StockMarket.US,
+                    accountId = 1,
+                    date = 100L,
+                    recordTime = 100L,
+                    type = "買進"
+                )
+            )
+        )
+
+        assertEquals(
+            emptyList<TaiwanStockRef>(),
+            buildTaiwanStockRefs(snapshot, accountId = 1, valuationDateMillis = 150L)
         )
     }
 }

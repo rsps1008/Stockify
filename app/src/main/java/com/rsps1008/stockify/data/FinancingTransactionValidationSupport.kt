@@ -2,7 +2,7 @@ package com.rsps1008.stockify.data
 
 object FinancingTransactionValidationSupport {
     private val financingTypes = setOf("融資買進", "融資還款", "融券賣出", "買券還券", "融券補償")
-    private data class LotScope(val stockCode: String, val accountId: Int, val lotId: String)
+    private data class LotScope(val market: String, val stockCode: String, val accountId: Int, val lotId: String)
 
     fun usesFinancing(transaction: StockTransaction): Boolean {
         return transaction.type in financingTypes || transaction.hasFinancingReference()
@@ -10,7 +10,10 @@ object FinancingTransactionValidationSupport {
 
     fun validateFinancingMarket(transaction: StockTransaction, market: String): String? {
         if (!usesFinancing(transaction)) return null
-        return if (!StockMarket.isTw(market) || !StockMarket.isTw(StockMarket.inferFromCode(transaction.stockCode))) {
+        return if (!StockMarket.isTw(market) ||
+            !StockMarket.isTw(transaction.market) ||
+            !StockMarket.isTw(StockMarket.inferFromCode(transaction.stockCode))
+        ) {
             "融資融券僅支援台股"
         } else {
             null
@@ -271,7 +274,7 @@ object FinancingTransactionValidationSupport {
     }
 
     private fun StockTransaction.toLotScope(lotId: String): LotScope =
-        LotScope(stockCode = stockCode, accountId = accountId, lotId = lotId)
+        LotScope(market = StockMarket.normalize(market), stockCode = stockCode, accountId = accountId, lotId = lotId)
 
     private fun StockTransaction.hasMarginPayment(): Boolean {
         return marginRepaymentLotId.isNotBlank() || marginRepayment != 0.0 || marginActualInterest != 0.0

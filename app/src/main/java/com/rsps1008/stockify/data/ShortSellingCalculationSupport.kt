@@ -25,7 +25,7 @@ data class ShortSellingSummary(
 
 /** Replays short-sale lots. Rates are user-entered estimates, not broker settlement values. */
 object ShortSellingCalculationSupport {
-    private data class LotKey(val stockCode: String, val accountId: Int, val lotId: String)
+    private data class LotKey(val market: String, val stockCode: String, val accountId: Int, val lotId: String)
 
     private data class LotState(
         val id: String, val openedAt: Long, val annualRate: Double,
@@ -230,10 +230,12 @@ object ShortSellingCalculationSupport {
     }
 
     private fun StockTransaction.toLotKey(lotId: String): LotKey =
-        LotKey(stockCode = stockCode, accountId = accountId, lotId = lotId)
+        LotKey(market = StockMarket.normalize(market), stockCode = stockCode, accountId = accountId, lotId = lotId)
 
     private fun LotKey.matches(transaction: StockTransaction): Boolean =
-        stockCode == transaction.stockCode && accountId == transaction.accountId
+        market == StockMarket.normalize(transaction.market) &&
+            stockCode == transaction.stockCode &&
+            accountId == transaction.accountId
 
     private fun daysBetween(start: Long, end: Long): Long = ChronoUnit.DAYS.between(
         Instant.ofEpochMilli(start).atZone(ZoneId.systemDefault()).toLocalDate(),

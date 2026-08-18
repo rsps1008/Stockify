@@ -84,6 +84,7 @@ fun AddTransactionScreen(
     navController: NavController,
     transactionId: Int?,
     prefillStockCode: String? = null,
+    prefillMarket: String? = null,
     prefillDate: Long? = null,
     hasInvalidTransactionId: Boolean = false
 ) {
@@ -228,7 +229,9 @@ fun AddTransactionScreen(
         }
     }
 
-    val transactionMarket = StockMarket.inferFromCode(stockCode)
+    val transactionMarket = StockMarket.normalize(
+        selectedStock?.market ?: prefillMarket ?: StockMarket.inferFromCode(stockCode)
+    )
     val isUsStock = StockMarket.isUs(transactionMarket)
     val isTwStock = StockMarket.isTw(transactionMarket)
     val shareStep = if (isUsStock) 1.0 else 1000.0
@@ -251,11 +254,11 @@ fun AddTransactionScreen(
         }
     }
 
-    LaunchedEffect(prefillStockCode, prefillDate) {
+    LaunchedEffect(prefillStockCode, prefillMarket, prefillDate) {
         if (transactionId == null) {
             prefillDate?.let { date = normalizeTransactionDateMillis(it) }
             val stock = if (prefillStockCode != null) {
-                viewModel.getStockByCode(prefillStockCode)
+                viewModel.getStockByCode(prefillStockCode, prefillMarket ?: StockMarket.inferFromCode(prefillStockCode))
             } else {
                 null
             }
@@ -327,13 +330,13 @@ fun AddTransactionScreen(
             stockCode.isNotBlank() &&
             (transactionType == "融資還款" || transactionType == "賣出")
         ) {
-            viewModel.loadMarginLots(stockCode, date, transactionToEdit?.id)
+            viewModel.loadMarginLots(stockCode, date, transactionToEdit?.id, transactionMarket)
         }
         if ((shortSellingFeatureEnabled || transactionId != null) &&
             stockCode.isNotBlank() &&
             (transactionType == "買券還券" || transactionType == "融券補償")
         ) {
-            viewModel.loadShortLots(stockCode, date, transactionToEdit?.id)
+            viewModel.loadShortLots(stockCode, date, transactionToEdit?.id, transactionMarket)
         }
     }
 
@@ -346,7 +349,7 @@ fun AddTransactionScreen(
     LaunchedEffect(transactionToEdit) {
         if (!hasInitializedEditState && transactionToEdit != null) {
             val it = transactionToEdit!!
-            val stock = viewModel.getStockByCode(it.stockCode)
+            val stock = viewModel.getStockByCode(it.stockCode, it.market)
             selectedStock = stock
             stockName = stock?.name ?: ""
             stockCode = stock?.code ?: ""
@@ -701,14 +704,22 @@ fun AddTransactionScreen(
                                 }
                             },
                             onClick = {
-                                if (transactionMarketChanged(stockCode, selectionOption.code)) {
+                                if (transactionMarketChanged(
+                                        currentStockCode = stockCode,
+                                        newStockCode = selectionOption.code,
+                                        currentMarket = transactionMarket,
+                                        newMarket = selectionOption.market
+                                    )
+                                ) {
                                     viewModel.resetCalculatedValues()
                                 }
                                 if (financingLotScopeChanged(
                                         currentStockCode = stockCode,
                                         currentAccountId = selectedAccountId,
                                         newStockCode = selectionOption.code,
-                                        newAccountId = selectedAccountId
+                                        newAccountId = selectedAccountId,
+                                        currentMarket = transactionMarket,
+                                        newMarket = selectionOption.market
                                     )
                                 ) {
                                     marginRepaymentLotId = ""
@@ -1146,6 +1157,7 @@ fun AddTransactionScreen(
                                 requestedStockCode,
                                 requestedAccountId,
                                 requestedDate,
+                                market = transactionMarket,
                                 onResult = autoFillResult@{ perShare, holdingShares, dateStr ->
                                     if (!isCurrentAutoFillRequest()) {
                                         return@autoFillResult
@@ -1279,6 +1291,7 @@ fun AddTransactionScreen(
                             requestedStockCode,
                             requestedAccountId,
                             requestedDate,
+                            market = transactionMarket,
                             onResult = autoFillResult@{ rate, holdingShares, dateStr ->
                                 if (!isCurrentAutoFillRequest()) {
                                     return@autoFillResult
@@ -1499,6 +1512,7 @@ fun AddTransactionScreen(
                             navController.navigate(
                                 Screen.AddTransaction.createRoute(
                                     stockCode = stockCode,
+                                    market = transactionMarket,
                                     date = date
                                 )
                             ) {

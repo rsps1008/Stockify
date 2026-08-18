@@ -38,6 +38,8 @@ import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.StockDao
 import com.rsps1008.stockify.data.StockDataFetcher
 import com.rsps1008.stockify.data.StockMarket
+import com.rsps1008.stockify.data.StockKey
+import com.rsps1008.stockify.data.toStockKey
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.StockListRepository
 import com.rsps1008.stockify.data.TwseStockHistoryService
@@ -817,7 +819,7 @@ class SettingsViewModel(
                 }
 
                 val importDate = System.currentTimeMillis()
-                val newStockCodes = appDatabase.withTransaction {
+                val newStockKeys = appDatabase.withTransaction {
                     if (replaceExisting) {
                         deleteAllData()
                     } else {
@@ -826,16 +828,17 @@ class SettingsViewModel(
                         stockDao.insertAccount(Account(id = 1, name = "預設帳戶"))
                     }
 
-                    val newCodes = linkedSetOf<String>()
+                    val newStockKeys = linkedSetOf<StockKey>()
                     importableItems.forEachIndexed { index, item ->
-                        val existingStock = stockDao.getStockByCode(item.stockCode)
+                        val market = StockMarket.inferFromCode(item.stockCode)
+                        val existingStock = stockDao.getStockByCode(item.stockCode, market)
                         val stock = existingStock ?: Stock(
                             name = item.stockName.ifBlank { item.stockCode },
                             code = item.stockCode,
-                            market = StockMarket.inferFromCode(item.stockCode)
+                            market = market
                         ).also {
                             stockDao.insertStock(it)
-                            newCodes += it.code
+                            newStockKeys += StockKey(it.market, it.code)
                         }
 
                         val currentPrice = item.currentPrice ?: return@forEachIndexed
@@ -844,6 +847,7 @@ class SettingsViewModel(
                         stockDao.insertTransaction(
                             StockTransaction(
                                 stockCode = stock.code,
+                                market = stock.market,
                                 date = importDate,
                                 recordTime = importDate + index,
                                 type = "買進",
@@ -857,10 +861,10 @@ class SettingsViewModel(
                             )
                         )
                     }
-                    newCodes
+                    newStockKeys
                 }
 
-                refreshImportedStocks(newStockCodes)
+                refreshImportedStocks(newStockKeys)
                 val skippedCount = preview.items.size - importableItems.size
                 _message.value = buildString {
                     append("PDF 匯入完成，共新增 ")
@@ -982,10 +986,10 @@ class SettingsViewModel(
         }
     }
 
-    private suspend fun refreshImportedStocks(stockCodes: Set<String>) {
+    private suspend fun refreshImportedStocks(stockKeys: Set<StockKey>) {
         try {
-            if (stockCodes.isNotEmpty()) {
-                realtimeStockDataService.refreshStocks(stockCodes)
+            if (stockKeys.isNotEmpty()) {
+                realtimeStockDataService.refreshStocks(stockKeys)
             }
         } catch (e: CancellationException) {
             throw e
@@ -1029,16 +1033,24 @@ class SettingsViewModel(
     private suspend fun buildPdfImportPreview(
         extraction: com.rsps1008.stockify.data.PdfHoldingExtractionResult
     ): PdfStockImportPreview {
-        val requestedStockCodes = extraction.holdings.map { it.stockCode }.distinct()
-        val allStocksByCode = stockDao.getStocksByCodes(requestedStockCodes).associateBy { it.code }
+        val requestedStockKeys = extraction.holdings
+            .map { StockKey(StockMarket.inferFromCode(it.stockCode), it.stockCode) }
+            .distinctBy { it.cacheKey() }
+        val allStocksByKey = requestedStockKeys
+            .groupBy { StockMarket.normalize(it.market) }
+            .flatMap { (market, keys) ->
+                stockDao.getStocksByMarketAndCodes(market, keys.map { it.code })
+            }
+            .associateBy { it.toStockKey().cacheKey() }
         val priceRequestLimit = Semaphore(3)
 
         val items = coroutineScope {
             extraction.holdings.map { holding ->
                 async(Dispatchers.IO) {
-                    val stock = allStocksByCode[holding.stockCode]
+                    val market = StockMarket.inferFromCode(holding.stockCode)
+                    val stock = allStocksByKey[StockKey(market, holding.stockCode).cacheKey()]
                     val currentPrice = priceRequestLimit.withPermit {
-                        realtimeStockDataService.fetchCurrentStockInfo(holding.stockCode)?.currentPrice
+                        realtimeStockDataService.fetchCurrentStockInfo(holding.stockCode, market)?.currentPrice
                     }
 
                     PdfStockImportPreviewItem(
@@ -1131,20 +1143,47 @@ class SettingsViewModel(
             .validate(existingTransactions + validationTransactions)
             ?.let { error -> throw Exception("$error，匯入被拒絕。") }
 
-        val allStockCodes = validationRows.map { it.stockCode }.distinct()
-        for (code in allStockCodes) {
-            val importedForCode = validationRows.filter { it.stockCode == code }
+        val importedCodes = validationRows.map { it.stockCode }.distinct()
+        val existingStocksByCode = importedCodes
+            .chunked(SQLITE_IN_CHUNK_SIZE)
+            .flatMap { stockDao.getStocksByCodesForImportRepair(it) }
+            .groupBy { it.code.trim().uppercase() }
+
+        val allStockKeys = validationRows
+            .map { StockKey(it.market, it.stockCode) }
+            .distinctBy { it.cacheKey() }
+        for (stockKey in allStockKeys) {
+            val code = stockKey.code
+            val importedForCode = validationRows.filter {
+                it.stockCode == code && StockMarket.normalize(it.market) == stockKey.normalizedMarket
+            }
             // Keep CSV restore consistent with transaction entry: the ticker is the
             // source of truth, so an old master record or a stale CSV market value
             // cannot turn a Taiwan security into US (or vice versa).
-            val effectiveMarket = StockMarket.inferFromCode(code)
+            val effectiveMarket = stockKey.normalizedMarket
             importedForCode.forEach { csvTransaction ->
                 com.rsps1008.stockify.data.FinancingTransactionValidationSupport
                     .validateFinancingMarket(csvTransaction.transaction, effectiveMarket)
                     ?.let { error -> throw Exception("股票 $code 的$error，匯入被拒絕。") }
             }
 
-            val existingTxs = existingTransactions.filter { it.stockCode == code }
+            val existingStocks = existingStocksByCode[code.trim().uppercase()].orEmpty()
+            val hasTargetStock = existingStocks.any {
+                StockMarket.normalize(it.market) == stockKey.normalizedMarket
+            }
+            val marketRepairFrom = existingStocks
+                .singleOrNull()
+                ?.takeIf { !hasTargetStock && StockMarket.normalize(it.market) != stockKey.normalizedMarket }
+                ?.market
+            val existingTxs = existingTransactions
+                .filter {
+                    it.stockCode == code &&
+                        (StockMarket.normalize(it.market) == stockKey.normalizedMarket ||
+                            (marketRepairFrom != null && StockMarket.normalize(it.market) == StockMarket.normalize(marketRepairFrom)))
+                }
+                .map { transaction ->
+                    if (marketRepairFrom != null) transaction.copy(market = stockKey.normalizedMarket) else transaction
+                }
             val newTxs = importedForCode.map { it.transaction }
             val mergedTxs = existingTxs + newTxs
             val accountIds = mergedTxs.map { it.accountId }.distinct()
@@ -1167,41 +1206,53 @@ class SettingsViewModel(
         }
     }
 
-    private suspend fun writeImportedTransactions(transactions: List<CsvTransaction>): Set<String> {
-        val stockCodes = transactions.map { it.stockCode }.distinct()
-        val existingStocksByCode = stockCodes
+    private suspend fun writeImportedTransactions(transactions: List<CsvTransaction>): Set<StockKey> {
+        val stockKeys = transactions
+            .map { StockKey(it.market, it.stockCode) }
+            .distinctBy { it.cacheKey() }
+        val existingStocksByCode = stockKeys
+            .map { it.code }
+            .distinct()
             .chunked(SQLITE_IN_CHUNK_SIZE)
-            .flatMap { stockDao.getStocksByCodes(it) }
-            .associateBy { it.code }
-        val newStocksByCode = linkedMapOf<String, Stock>()
-        val updatedStocksByCode = linkedMapOf<String, Stock>()
+            .flatMap { codes -> stockDao.getStocksByCodesForImportRepair(codes) }
+            .groupBy { it.code.trim().uppercase() }
+        val existingStocksByKey = existingStocksByCode.values
+            .flatten()
+            .associateBy { StockKey(it.market, it.code).cacheKey() }
+            .toMutableMap()
+        val newStocksByKey = linkedMapOf<String, Stock>()
 
-        transactions.forEach { csvTransaction ->
-            val code = csvTransaction.stockCode
-            val inferredMarket = StockMarket.inferFromCode(code)
-            val existingStock = existingStocksByCode[code]
+        stockKeys.forEach { stockKey ->
+            val code = stockKey.code
+            val inferredMarket = stockKey.normalizedMarket
+            val existingStock = existingStocksByKey[stockKey.cacheKey()]
             if (existingStock == null) {
-                newStocksByCode.putIfAbsent(
-                    code,
-                    Stock(
-                        name = csvTransaction.stockName,
-                        code = code,
-                        market = inferredMarket
+                val staleStock = existingStocksByCode[code.trim().uppercase()]
+                    ?.singleOrNull()
+                    ?.takeIf { StockMarket.normalize(it.market) != inferredMarket }
+                if (staleStock != null) {
+                    stockDao.updateTransactionMarket(code, staleStock.market, inferredMarket)
+                    val repairedStock = staleStock.copy(market = inferredMarket)
+                    stockDao.updateStock(repairedStock)
+                    existingStocksByKey[stockKey.cacheKey()] = repairedStock
+                } else {
+                    val stockName = transactions.firstOrNull {
+                        it.stockCode == code && StockMarket.normalize(it.market) == inferredMarket
+                    }?.stockName.orEmpty()
+                    newStocksByKey.putIfAbsent(
+                        stockKey.cacheKey(),
+                        Stock(
+                            name = stockName,
+                            code = code,
+                            market = inferredMarket
+                        )
                     )
-                )
-            } else if (
-                StockMarket.normalize(existingStock.market) != inferredMarket &&
-                code !in updatedStocksByCode
-            ) {
-                updatedStocksByCode[code] = existingStock.copy(market = inferredMarket)
+                }
             }
         }
 
-        if (newStocksByCode.isNotEmpty()) {
-            stockDao.insertStocks(newStocksByCode.values.toList())
-        }
-        if (updatedStocksByCode.isNotEmpty()) {
-            stockDao.updateStocks(updatedStocksByCode.values.toList())
+        if (newStocksByKey.isNotEmpty()) {
+            stockDao.insertStocks(newStocksByKey.values.toList())
         }
 
         val accountIds = transactions.map { it.transaction.accountId }.distinct()
@@ -1217,7 +1268,7 @@ class SettingsViewModel(
         }
 
         stockDao.insertTransactions(transactions.map { it.transaction })
-        return transactions.mapTo(linkedSetOf()) { it.stockCode }
+        return transactions.mapTo(linkedSetOf()) { StockKey(it.market, it.stockCode) }
     }
 
     fun setFetchInterval(interval: Int) {

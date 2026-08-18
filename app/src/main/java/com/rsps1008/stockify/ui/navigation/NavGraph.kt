@@ -93,11 +93,18 @@ fun NavGraph(
         }
         composable(
             route = Screen.StockDetail.route,
-            arguments = listOf(navArgument("stockCode") { type = NavType.StringType })
+            arguments = listOf(
+                navArgument("stockCode") { type = NavType.StringType },
+                navArgument("market") {
+                    type = NavType.StringType
+                    nullable = true
+                }
+            )
         ) { backStackEntry ->
             val stockCode = backStackEntry.arguments?.getString("stockCode") ?: ""
-            LogScreenEntry("StockDetailScreen", "stockCode=$stockCode")
-            StockDetailScreen(stockCode = stockCode, navController = navController)
+            val market = backStackEntry.arguments?.getString("market")
+            LogScreenEntry("StockDetailScreen", "stockCode=$stockCode, market=${market ?: "inferred"}")
+            StockDetailScreen(stockCode = stockCode, market = market, navController = navController)
         }
         composable(
             route = Screen.TransactionDetail.route,
@@ -119,6 +126,10 @@ fun NavGraph(
                     type = NavType.StringType
                     nullable = true
                 },
+                navArgument("market") {
+                    type = NavType.StringType
+                    nullable = true
+                },
                 navArgument("date") {
                     type = NavType.StringType
                     nullable = true
@@ -131,6 +142,7 @@ fun NavGraph(
             val hasInvalidTransactionId = transactionIdArg != null && transactionId == null
 
             val prefillStockCode = backStackEntry.arguments?.getString("stockCode")
+            val prefillMarket = backStackEntry.arguments?.getString("market")
             val prefillDate = backStackEntry.arguments?.getString("date")?.toLongOrNull()
             LogScreenEntry(
                 "AddTransactionScreen",
@@ -141,6 +153,7 @@ fun NavGraph(
                 navController = navController,
                 transactionId = transactionId,
                 prefillStockCode = prefillStockCode,
+                prefillMarket = prefillMarket,
                 prefillDate = prefillDate,
                 hasInvalidTransactionId = hasInvalidTransactionId
             )

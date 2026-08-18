@@ -34,11 +34,14 @@ class TwseStockHistoryService(
     private val stockDao: StockDao
 ) {
 
+    private fun historyCacheKey(market: String, stockCode: String, month: String): String =
+        "${stockCacheKey(market, stockCode)}_$month"
+
     companion object {
         private const val TAG = "TwseStockHistoryService"
     }
 
-    // Cache structure: Map of "stockCode_YYYYMM" to List<StockHistoryPoint>
+    // Cache structure: Map of "MARKET:stockCode_YYYYMM" to List<StockHistoryPoint>
     private val cache = mutableMapOf<String, List<StockHistoryPoint>>()
 
     fun clearCache() {
@@ -47,18 +50,18 @@ class TwseStockHistoryService(
 
     suspend fun getCachedHistory(
         stockCode: String,
-        rangeMonths: Int
+        rangeMonths: Int,
+        market: String = StockMarket.inferFromCode(stockCode)
     ): List<StockHistoryPoint> = withContext(Dispatchers.IO) {
         val normalizedCode = stockCode.uppercase().trim()
+        val normalizedMarket = StockMarket.normalize(market)
         val targetMonths = getTargetMonths(rangeMonths)
-        val stock = stockDao.getStockByCode(normalizedCode)
-        val market = StockMarket.normalize(stock?.market ?: StockMarket.inferFromCode(normalizedCode))
-        val latestChartDateStr = getLatestChartDateString(market)
+        val latestChartDateStr = getLatestChartDateString(normalizedMarket)
         val latestChartMonthStr = latestChartDateStr.take(7).replace("-", "")
         val resultPoints = mutableListOf<StockHistoryPoint>()
 
         for (monthStr in targetMonths) {
-            val cacheKey = "${normalizedCode}_$monthStr"
+            val cacheKey = historyCacheKey(normalizedMarket, normalizedCode, monthStr)
             val cached = cache[cacheKey]
             if (cached != null) {
                 resultPoints.addAll(cached.filterForChart(latestChartDateStr))
@@ -66,7 +69,7 @@ class TwseStockHistoryService(
             }
 
             val monthPrefix = "${monthStr.substring(0, 4)}-${monthStr.substring(4, 6)}"
-            val localData = stockDao.getHistoryPricesForMonth(normalizedCode, monthPrefix)
+            val localData = stockDao.getHistoryPricesForMonth(normalizedCode, normalizedMarket, monthPrefix)
             if (localData.isNotEmpty()) {
                 val localPoints = localData.map { StockHistoryPoint(it.date, it.price) }.filterForChart(latestChartDateStr)
                 if (shouldUseLocalMonthWithoutRefresh(monthStr, latestChartMonthStr, latestChartDateStr, localPoints)) {
@@ -82,20 +85,22 @@ class TwseStockHistoryService(
     suspend fun fetchHistory(
         stockCode: String,
         rangeMonths: Int,
+        market: String = StockMarket.inferFromCode(stockCode),
         onProgress: (step: Int, total: Int) -> Unit
     ): List<StockHistoryPoint> {
         val normalizedCode = stockCode.uppercase().trim()
-        val stock = stockDao.getStockByCode(normalizedCode)
-        val market = StockMarket.normalize(stock?.market ?: StockMarket.inferFromCode(normalizedCode))
-        return if (StockMarket.isTw(market)) {
+        val normalizedMarket = StockMarket.normalize(market)
+        val stock = stockDao.getStockByCode(normalizedCode, normalizedMarket)
+        return if (StockMarket.isTw(normalizedMarket)) {
             fetchTwHistory(
                 stockCode = normalizedCode,
                 rangeMonths = rangeMonths,
                 exchange = StockExchange.normalize(stock?.exchange),
-                onProgress = onProgress
+                onProgress = onProgress,
+                market = normalizedMarket
             )
         } else {
-            fetchUsHistory(normalizedCode, rangeMonths, onProgress)
+            fetchUsHistory(normalizedCode, rangeMonths, onProgress, normalizedMarket)
         }
     }
 
@@ -103,7 +108,8 @@ class TwseStockHistoryService(
         stockCode: String,
         rangeMonths: Int,
         exchange: String,
-        onProgress: (step: Int, total: Int) -> Unit
+        onProgress: (step: Int, total: Int) -> Unit,
+        market: String
     ): List<StockHistoryPoint> = withContext(Dispatchers.IO) {
         val targetMonths = getTargetMonths(rangeMonths)
         val total = targetMonths.size
@@ -114,7 +120,7 @@ class TwseStockHistoryService(
 
         for ((index, monthStr) in targetMonths.withIndex()) {
             onProgress(index + 1, total)
-            val cacheKey = "${stockCode}_$monthStr"
+            val cacheKey = historyCacheKey(market, stockCode, monthStr)
             val cached = cache[cacheKey]
 
             if (cached != null) {
@@ -127,7 +133,7 @@ class TwseStockHistoryService(
             }
 
             val monthPrefix = "${monthStr.substring(0, 4)}-${monthStr.substring(4, 6)}"
-            val localData = stockDao.getHistoryPricesForMonth(stockCode, monthPrefix)
+            val localData = stockDao.getHistoryPricesForMonth(stockCode, market, monthPrefix)
             if (localData.isNotEmpty()) {
                 val localPoints = localData.map { StockHistoryPoint(it.date, it.price) }.filterForChart(latestChartDateStr)
                 resultPoints.addAll(localPoints)
@@ -165,7 +171,7 @@ class TwseStockHistoryService(
                         resultPoints.addAll(points)
 
                         // Save fetched points to database
-                        val dbEntities = points.map { StockHistoryPrice(stockCode, it.date, it.price) }
+                        val dbEntities = points.map { StockHistoryPrice(stockCode, it.date, it.price, market) }
                         stockDao.insertHistoryPrices(dbEntities)
                     }
                 } catch (e: Exception) {
@@ -186,7 +192,8 @@ class TwseStockHistoryService(
     private suspend fun fetchUsHistory(
         stockCode: String,
         rangeMonths: Int,
-        onProgress: (step: Int, total: Int) -> Unit
+        onProgress: (step: Int, total: Int) -> Unit,
+        market: String
     ): List<StockHistoryPoint> = withContext(Dispatchers.IO) {
         val targetMonths = getTargetMonths(rangeMonths)
         val resultPoints = mutableListOf<StockHistoryPoint>()
@@ -197,7 +204,7 @@ class TwseStockHistoryService(
         val missingMonths = mutableListOf<String>()
 
         for (monthStr in targetMonths) {
-            val cacheKey = "${stockCode}_$monthStr"
+            val cacheKey = historyCacheKey(market, stockCode, monthStr)
             val cached = cache[cacheKey]
             if (cached != null) {
                 resultPoints.addAll(cached.filterForChart(latestChartDateStr))
@@ -209,7 +216,7 @@ class TwseStockHistoryService(
             }
 
             val monthPrefix = "${monthStr.substring(0, 4)}-${monthStr.substring(4, 6)}"
-            val localData = stockDao.getHistoryPricesForMonth(stockCode, monthPrefix)
+            val localData = stockDao.getHistoryPricesForMonth(stockCode, market, monthPrefix)
             if (localData.isNotEmpty()) {
                 val localPoints = localData.map { StockHistoryPoint(it.date, it.price) }.filterForChart(latestChartDateStr)
                 resultPoints.addAll(localPoints)
@@ -226,7 +233,7 @@ class TwseStockHistoryService(
             onProgress(1, 1) // US uses a single API call for the whole range
             
             // Get stock type to determine asset class
-            val stock = stockDao.getStockByCode(stockCode)
+            val stock = stockDao.getStockByCode(stockCode, market)
             val stockType = stock?.stockType ?: ""
             val assetClass = if (stockType.equals("ETF", ignoreCase = true)) "etf" else "stocks"
 
@@ -268,21 +275,21 @@ class TwseStockHistoryService(
 
             if (points.isNotEmpty()) {
                 // Save to database
-                val dbEntities = points.map { StockHistoryPrice(stockCode, it.date, it.price) }
+                val dbEntities = points.map { StockHistoryPrice(stockCode, it.date, it.price, market) }
                 stockDao.insertHistoryPrices(dbEntities)
                 safeLogD("Saved ${dbEntities.size} US history price points to SQLite database for $stockCode")
 
                 // Update memory cache
                 val groupedByMonth = points.groupBy { it.date.replace("-", "").substring(0, 6) }
                 for ((mStr, mPoints) in groupedByMonth) {
-                    cache["${stockCode}_$mStr"] = mPoints
+                    cache[historyCacheKey(market, stockCode, mStr)] = mPoints
                 }
 
                 // Rebuild resultPoints from cache
                 resultPoints.clear()
                 for (monthStr in targetMonths) {
                     val cacheKey = "${monthStr.substring(0, 6)}"
-                    val cached = cache["${stockCode}_$cacheKey"] ?: groupedByMonth[cacheKey] ?: emptyList()
+                    val cached = cache[historyCacheKey(market, stockCode, cacheKey)] ?: groupedByMonth[cacheKey] ?: emptyList()
                     resultPoints.addAll(cached.filterForChart(latestChartDateStr))
                 }
             }

@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
 
-@Database(entities = [Stock::class, StockTransaction::class, StockHistoryPrice::class, Account::class], version = 17, exportSchema = false)
+@Database(entities = [Stock::class, StockTransaction::class, StockHistoryPrice::class, Account::class], version = 18, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun stockDao(): StockDao
@@ -30,7 +30,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "stock_database"
                 )
                 .addCallback(AppDatabaseCallback(context))
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18)
                 .build()
                 INSTANCE = instance
                 instance
@@ -248,6 +248,59 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS `idx_stock_transactions_margin_repayment` ON `stock_transactions` (`沖抵融資批次ID`, `股號`, `帳戶ID`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `idx_stock_transactions_short_cover` ON `stock_transactions` (`沖抵融券批次ID`, `股號`, `帳戶ID`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `idx_stock_transactions_short_compensation` ON `stock_transactions` (`融券補償批次ID`, `股號`, `帳戶ID`)")
+            }
+        }
+
+        private val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE stock_transactions ADD COLUMN `市場` TEXT NOT NULL DEFAULT 'TW'")
+                db.execSQL(
+                    """
+                    UPDATE stock_transactions
+                    SET `市場` = COALESCE(
+                        (SELECT market FROM stocks WHERE stocks.code = stock_transactions.`股號` LIMIT 1),
+                        'TW'
+                    )
+                    """.trimIndent()
+                )
+
+                db.execSQL("DROP INDEX IF EXISTS `index_stocks_code`")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_stocks_market_code` ON `stocks` (`market`, `code`)")
+
+                db.execSQL("DROP INDEX IF EXISTS `idx_stock_transactions_stock_order`")
+                db.execSQL("DROP INDEX IF EXISTS `idx_stock_transactions_stock_account`")
+                db.execSQL("DROP INDEX IF EXISTS `idx_stock_transactions_margin_repayment`")
+                db.execSQL("DROP INDEX IF EXISTS `idx_stock_transactions_short_cover`")
+                db.execSQL("DROP INDEX IF EXISTS `idx_stock_transactions_short_compensation`")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_stock_transactions_stock_order` ON `stock_transactions` (`市場`, `股號`, `日期`, `紀錄時間`, `id`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_stock_transactions_stock_account` ON `stock_transactions` (`市場`, `股號`, `帳戶ID`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_stock_transactions_margin_repayment` ON `stock_transactions` (`沖抵融資批次ID`, `市場`, `股號`, `帳戶ID`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_stock_transactions_short_cover` ON `stock_transactions` (`沖抵融券批次ID`, `市場`, `股號`, `帳戶ID`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_stock_transactions_short_compensation` ON `stock_transactions` (`融券補償批次ID`, `市場`, `股號`, `帳戶ID`)")
+
+                db.execSQL(
+                    """
+                    CREATE TABLE `stock_history_prices_new` (
+                        `stockCode` TEXT NOT NULL,
+                        `date` TEXT NOT NULL,
+                        `price` REAL NOT NULL,
+                        `market` TEXT NOT NULL DEFAULT 'TW',
+                        PRIMARY KEY(`stockCode`, `market`, `date`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `stock_history_prices_new` (`stockCode`, `date`, `price`, `market`)
+                    SELECT history.`stockCode`, history.`date`, history.`price`,
+                           COALESCE(stocks.`market`, 'TW')
+                    FROM `stock_history_prices` AS history
+                    LEFT JOIN `stocks`
+                      ON stocks.`code` = history.`stockCode`
+                    """.trimIndent()
+                )
+                db.execSQL("DROP TABLE `stock_history_prices`")
+                db.execSQL("ALTER TABLE `stock_history_prices_new` RENAME TO `stock_history_prices`")
             }
         }
     }

@@ -8,7 +8,7 @@ import kotlinx.serialization.Transient
 
 @Entity(
     tableName = "stocks",
-    indices = [Index(value = ["code"], unique = true)]
+    indices = [Index(value = ["market", "code"], unique = true)]
 )
 @Serializable
 data class Stock(

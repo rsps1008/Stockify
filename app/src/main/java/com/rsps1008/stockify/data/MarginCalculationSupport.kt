@@ -26,7 +26,7 @@ data class MarginSummary(
 
 /** Pure replay of financing lots. It never changes share counts. */
 object MarginCalculationSupport {
-    private data class LotKey(val stockCode: String, val accountId: Int, val lotId: String)
+    private data class LotKey(val market: String, val stockCode: String, val accountId: Int, val lotId: String)
 
     private data class LotState(
         val id: String,
@@ -167,7 +167,7 @@ object MarginCalculationSupport {
     }
 
     private fun StockTransaction.toLotKey(lotId: String): LotKey =
-        LotKey(stockCode = stockCode, accountId = accountId, lotId = lotId)
+        LotKey(market = StockMarket.normalize(market), stockCode = stockCode, accountId = accountId, lotId = lotId)
 
     private fun daysBetween(start: Long, end: Long): Long {
         val zone = ZoneId.systemDefault()

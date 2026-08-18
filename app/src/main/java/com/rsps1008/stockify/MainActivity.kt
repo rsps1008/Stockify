@@ -204,7 +204,12 @@ fun MainScreen(navController: NavHostController) {
                                             } else {
                                                 null
                                             }
-                                            navController.navigate(Screen.AddTransaction.createRoute(stockCode = stockCode)) {
+                                            val market = if (currentEntry?.destination?.route == Screen.StockDetail.route) {
+                                                currentEntry.arguments?.getString("market")
+                                            } else {
+                                                null
+                                            }
+                                            navController.navigate(Screen.AddTransaction.createRoute(stockCode = stockCode, market = market)) {
                                                 launchSingleTop = true
                                             }
                                         }

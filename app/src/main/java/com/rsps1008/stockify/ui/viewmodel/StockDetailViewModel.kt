@@ -93,6 +93,7 @@ private data class HistoricalPointCalculationResult(
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class StockDetailViewModel(
     private val stockCode: String,
+    private val market: String = StockMarket.inferFromCode(stockCode),
     private val stockDao: StockDao,
     stockRepository: StockRepository,
     val realtimeStockDataService: RealtimeStockDataService,
@@ -100,20 +101,22 @@ class StockDetailViewModel(
     private val settingsDataStore: SettingsDataStore
 ) : ViewModel() {
 
+    private val normalizedMarket = StockMarket.normalize(market)
+
     val activeAccountId: StateFlow<Int> = settingsDataStore.activeAccountIdFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 0)
 
     val holdingInfo: StateFlow<HoldingInfo?> = activeAccountId.flatMapLatest { accountId ->
-        stockRepository.getHoldingInfo(stockCode, accountId)
+        stockRepository.getHoldingInfo(stockCode, accountId, normalizedMarket)
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
     val transactions: StateFlow<List<TransactionUiState>> = activeAccountId.flatMapLatest { accountId ->
-        stockRepository.getTransactionsForStock(stockCode, accountId)
+        stockRepository.getTransactionsForStock(stockCode, accountId, normalizedMarket)
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    private val historyStock: StateFlow<Stock?> = stockDao.getStockByCodeFlow(stockCode)
+    private val historyStock: StateFlow<Stock?> = stockDao.getStockByCodeFlow(stockCode, normalizedMarket)
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
@@ -210,8 +213,7 @@ class StockDetailViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), HistoryState.Idle)
 
     init {
-        val market = StockMarket.inferFromCode(stockCode)
-        if (StockMarket.isTw(market) || market == StockMarket.US) {
+        if (StockMarket.isTw(normalizedMarket) || normalizedMarket == StockMarket.US) {
             fetchStockHistory(HistoryRange.ONE_MONTH)
         }
     }
@@ -227,9 +229,9 @@ class StockDetailViewModel(
                 HistoryRange.SIX_MONTHS -> 6
                 HistoryRange.ONE_YEAR -> 12
             }
-            val market = historyStock.value?.market ?: StockMarket.inferFromCode(stockCode)
+            val market = historyStock.value?.market ?: normalizedMarket
 
-            val cachedPoints = twseStockHistoryService.getCachedHistory(stockCode, rangeMonths)
+            val cachedPoints = twseStockHistoryService.getCachedHistory(stockCode, rangeMonths, normalizedMarket)
             val hasCompleteCachedHistory = HistoryChartCalculationSupport.hasHistoryCoverage(cachedPoints, rangeMonths)
             if (!isCurrentRequest()) return@launch
 
@@ -240,7 +242,7 @@ class StockDetailViewModel(
             }
 
             try {
-                val rawPoints = twseStockHistoryService.fetchHistory(stockCode, rangeMonths) { step, total ->
+                val rawPoints = twseStockHistoryService.fetchHistory(stockCode, rangeMonths, normalizedMarket) { step, total ->
                     val progress = step.toFloat() / total.toFloat()
                     val statusText = if (StockMarket.isUs(market)) {
                         "正在載入美股歷史股價..."
@@ -439,10 +441,10 @@ class StockDetailViewModel(
             try {
                 when (scope) {
                     DeleteTransactionsScope.AllAccounts -> {
-                        stockDao.deleteTransactionsByStockCode(stockCode)
+                        stockDao.deleteTransactionsByStockCode(stockCode, normalizedMarket)
                     }
                     is DeleteTransactionsScope.ActiveAccount -> {
-                        stockDao.deleteTransactionsByStockCodeAndAccountId(stockCode, scope.accountId)
+                        stockDao.deleteTransactionsByStockCodeAndAccountId(stockCode, normalizedMarket, scope.accountId)
                     }
                 }
                 _deleteTransactionsState.value = DeleteTransactionsState.Success

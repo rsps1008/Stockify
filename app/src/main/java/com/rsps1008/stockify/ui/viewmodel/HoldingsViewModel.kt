@@ -19,6 +19,7 @@ import com.rsps1008.stockify.data.HomeDisplayMode
 import com.rsps1008.stockify.data.HistoryChartCalculationSupport
 import com.rsps1008.stockify.data.HoldingCalculationSupport
 import com.rsps1008.stockify.data.StockMarket
+import com.rsps1008.stockify.data.toStockKey
 import com.rsps1008.stockify.data.UsdTwdExchangeRateService
 import com.rsps1008.stockify.data.CashFlow
 import com.rsps1008.stockify.data.ReturnRateCalculator
@@ -297,10 +298,12 @@ class HoldingsViewModel(
             val normalizedUsdToTwdRate = calculationBundle.usdToTwdRate.takeIf { it > 0.0 } ?: 1.0
 
             val personalPoints = mutableListOf<PersonalHistoryPoint>()
-            val selectedStocksByCode = stocks.associateBy { it.code }
-            val marketByStockCode = historyInternal.allRawPoints.keys.associateWith { stockCode ->
+            val selectedStocksByKey = stocks.associateBy { it.toStockKey().cacheKey() }
+            val marketByStockKey = historyInternal.allRawPoints.keys.associateWith { stockKey ->
                 StockMarket.normalize(
-                    selectedStocksByCode[stockCode]?.market ?: StockMarket.inferFromCode(stockCode)
+                    selectedStocksByKey[stockKey]?.market
+                        ?: stockKey.substringBefore(':').takeIf { it != stockKey }
+                        ?: StockMarket.TW
                 )
             }
 
@@ -311,10 +314,10 @@ class HoldingsViewModel(
             }
 
             val twTxs = accountFilteredTxs.filter { tx ->
-                historyInternal.allRawPoints.containsKey(tx.stockCode)
+                historyInternal.allRawPoints.containsKey(tx.toStockKey().cacheKey())
             }
 
-            val historicalTxsByStock = twTxs.groupBy { it.stockCode }.mapValues { (_, txList) ->
+            val historicalTxsByStock = twTxs.groupBy { it.toStockKey().cacheKey() }.mapValues { (_, txList) ->
                 txList.sortedWith(
                     compareBy<StockTransaction> { it.date }
                         .thenBy { it.recordTime }
@@ -345,8 +348,8 @@ class HoldingsViewModel(
                 )
 
                 val stocksRequiringPrice = historicalTxsByStock
-                    .filter { (stockCode, stockTxs) ->
-                        val dayEnd = dayEndByMarket.getValue(marketByStockCode.getValue(stockCode))
+                    .filter { (stockKey, stockTxs) ->
+                        val dayEnd = dayEndByMarket.getValue(marketByStockKey.getValue(stockKey))
                         stockTxs.any { it.date <= dayEnd }
                     }
                     .keys
@@ -367,12 +370,12 @@ class HoldingsViewModel(
                 var totalShares = 0.0
                 val portfolioCashFlows = mutableListOf<CashFlow>()
 
-                for ((stockCode, rawList) in historyInternal.allRawPoints) {
+                for ((stockKey, rawList) in historyInternal.allRawPoints) {
                     val dailyPrice = HistoryChartCalculationSupport.priceAtOrBefore(rawList, pt.date) ?: 0.0
 
-                    val stockTxs = historicalTxsByStock[stockCode] ?: emptyList()
-                    val stockType = stocks.firstOrNull { it.code == stockCode }?.stockType ?: ""
-                    val stockMarket = marketByStockCode.getValue(stockCode)
+                    val stockTxs = historicalTxsByStock[stockKey] ?: emptyList()
+                    val stockType = selectedStocksByKey[stockKey]?.stockType ?: ""
+                    val stockMarket = marketByStockKey.getValue(stockKey)
                     val stockDayEnd = dayEndByMarket.getValue(stockMarket)
 
                     val stats = calculateHistoricalHoldingStatsAt(
@@ -503,13 +506,13 @@ class HoldingsViewModel(
 
             val cachedRawPoints = mutableMapOf<String, List<StockHistoryPoint>>()
             for (stock in selectedStocks) {
-                val cachedPoints = twseStockHistoryService.getCachedHistory(stock.code, rangeMonths)
+                val cachedPoints = twseStockHistoryService.getCachedHistory(stock.code, rangeMonths, stock.market)
                 if (cachedPoints.isNotEmpty()) {
-                    cachedRawPoints[stock.code] = cachedPoints
+                    cachedRawPoints[stock.toStockKey().cacheKey()] = cachedPoints
                 }
             }
             val hasCompleteCachedPoints = HistoryChartCalculationSupport.hasHistoryForAllStocks(
-                stockCodes = selectedStocks.map { it.code },
+                stockCodes = selectedStocks.map { it.toStockKey().cacheKey() },
                 allRawPoints = cachedRawPoints,
                 rangeMonths = rangeMonths
             )
@@ -528,7 +531,7 @@ class HoldingsViewModel(
                 val totalStocks = selectedStocks.size
 
                 for ((index, stock) in selectedStocks.withIndex()) {
-                    val rawPoints = twseStockHistoryService.fetchHistory(stock.code, rangeMonths) { step, total ->
+                    val rawPoints = twseStockHistoryService.fetchHistory(stock.code, rangeMonths, stock.market) { step, total ->
                         val baseProgress = index.toFloat() / totalStocks
                         val stepProgress = (step.toFloat() / total) / totalStocks
                         val statusText = if (StockMarket.isUs(stock.market)) {
@@ -545,7 +548,7 @@ class HoldingsViewModel(
                             }
                         }
                     }
-                    allRawPoints[stock.code] = rawPoints
+                    allRawPoints[stock.toStockKey().cacheKey()] = rawPoints
                 }
 
                 val availableRawPoints = HistoryChartCalculationSupport.filterEmptyHistorySeries(allRawPoints)

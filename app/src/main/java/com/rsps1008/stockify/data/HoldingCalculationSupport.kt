@@ -21,7 +21,7 @@ data class LongPositionReplaySummary(
 )
 
 object HoldingCalculationSupport {
-    private data class PositionKey(val stockCode: String, val accountId: Int)
+    private data class PositionKey(val market: String, val stockCode: String, val accountId: Int)
     private data class AccountPositionState(
         var shares: Double = 0.0,
         var buySharesTotal: Double = 0.0,
@@ -54,7 +54,7 @@ object HoldingCalculationSupport {
         var buyCostTotal = 0.0
 
         transactionsAtOrBefore(transactions, valuationDate).forEach { transaction ->
-            val key = PositionKey(transaction.stockCode, transaction.accountId)
+            val key = PositionKey(StockMarket.normalize(transaction.market), transaction.stockCode, transaction.accountId)
             val position = positions.getOrPut(key) { AccountPositionState() }
             when (transaction.type) {
                 "買進", "融資買進" -> {
@@ -116,7 +116,7 @@ object HoldingCalculationSupport {
         )
 
         for (transaction in orderedTransactions) {
-            val key = PositionKey(transaction.stockCode, transaction.accountId)
+            val key = PositionKey(StockMarket.normalize(transaction.market), transaction.stockCode, transaction.accountId)
             val currentShares = positions[key] ?: 0.0
             val nextShares = when (transaction.type) {
                 "買進", "融資買進" -> currentShares + transaction.buyShares

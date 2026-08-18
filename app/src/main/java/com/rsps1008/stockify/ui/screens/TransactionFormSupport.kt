@@ -40,10 +40,12 @@ internal fun shouldApplyTransactionTypeChange(
 
 internal fun transactionMarketChanged(
     currentStockCode: String,
-    newStockCode: String
+    newStockCode: String,
+    currentMarket: String = StockMarket.inferFromCode(currentStockCode),
+    newMarket: String = StockMarket.inferFromCode(newStockCode)
 ): Boolean {
     if (currentStockCode.isBlank() || newStockCode.isBlank()) return false
-    return StockMarket.inferFromCode(currentStockCode) != StockMarket.inferFromCode(newStockCode)
+    return StockMarket.normalize(currentMarket) != StockMarket.normalize(newMarket)
 }
 
 internal fun shouldApplyDividendAutoFill(
@@ -85,9 +87,13 @@ internal fun financingLotScopeChanged(
     currentStockCode: String,
     currentAccountId: Int,
     newStockCode: String,
-    newAccountId: Int
+    newAccountId: Int,
+    currentMarket: String = StockMarket.inferFromCode(currentStockCode),
+    newMarket: String = StockMarket.inferFromCode(newStockCode)
 ): Boolean {
-    return currentStockCode != newStockCode || currentAccountId != newAccountId
+    return currentStockCode != newStockCode ||
+        StockMarket.normalize(currentMarket) != StockMarket.normalize(newMarket) ||
+        currentAccountId != newAccountId
 }
 
 internal fun transactionCashFlowAmount(transaction: StockTransaction): Double? {

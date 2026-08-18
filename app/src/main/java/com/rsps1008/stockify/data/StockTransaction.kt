@@ -5,14 +5,13 @@ import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import androidx.room.Relation
 
 @Entity(
     tableName = "stock_transactions",
     indices = [
         Index(
             name = "idx_stock_transactions_stock_order",
-            value = ["股號", "日期", "紀錄時間", "id"]
+            value = ["市場", "股號", "日期", "紀錄時間", "id"]
         ),
         Index(
             name = "idx_stock_transactions_date_order",
@@ -20,7 +19,7 @@ import androidx.room.Relation
         ),
         Index(
             name = "idx_stock_transactions_stock_account",
-            value = ["股號", "帳戶ID"]
+            value = ["市場", "股號", "帳戶ID"]
         ),
         Index(
             name = "idx_stock_transactions_account",
@@ -28,15 +27,15 @@ import androidx.room.Relation
         ),
         Index(
             name = "idx_stock_transactions_margin_repayment",
-            value = ["沖抵融資批次ID", "股號", "帳戶ID"]
+            value = ["沖抵融資批次ID", "市場", "股號", "帳戶ID"]
         ),
         Index(
             name = "idx_stock_transactions_short_cover",
-            value = ["沖抵融券批次ID", "股號", "帳戶ID"]
+            value = ["沖抵融券批次ID", "市場", "股號", "帳戶ID"]
         ),
         Index(
             name = "idx_stock_transactions_short_compensation",
-            value = ["融券補償批次ID", "股號", "帳戶ID"]
+            value = ["融券補償批次ID", "市場", "股號", "帳戶ID"]
         )
     ]
 )
@@ -47,6 +46,9 @@ data class StockTransaction(
 
     @ColumnInfo(name = "股號")
     val stockCode: String,
+
+    @ColumnInfo(name = "市場")
+    val market: String = StockMarket.TW,
 
     @ColumnInfo(name = "帳戶ID")
     val accountId: Int = 1,
@@ -177,9 +179,6 @@ data class StockTransaction(
 
 data class TransactionWithStock(
     @Embedded val transaction: StockTransaction,
-    @Relation(
-        parentColumn = "股號",
-        entityColumn = "code"
-    )
+    @Embedded(prefix = "stock_")
     val stock: Stock
 )

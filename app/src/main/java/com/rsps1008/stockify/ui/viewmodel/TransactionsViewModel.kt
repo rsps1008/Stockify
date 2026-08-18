@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.rsps1008.stockify.data.Account
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.StockDao
+import com.rsps1008.stockify.data.toStockKey
 import com.rsps1008.stockify.data.TransactionListRepository
 import com.rsps1008.stockify.ui.screens.TransactionUiState
 import kotlinx.coroutines.flow.SharingStarted
@@ -48,9 +49,9 @@ class TransactionsViewModel(
         } else {
             snapshot.transactions.filter { it.accountId == activeAccountId }
         }
-        val stocksByCode = snapshot.stocks.associateBy { it.code }
+        val stocksByKey = snapshot.stocks.associateBy { it.toStockKey().cacheKey() }
         filteredTx.map { transaction ->
-            val stock = stocksByCode[transaction.stockCode]
+            val stock = stocksByKey[transaction.toStockKey().cacheKey()]
             TransactionUiState(
                 transaction = transaction,
                 stockName = stock?.name ?: "",

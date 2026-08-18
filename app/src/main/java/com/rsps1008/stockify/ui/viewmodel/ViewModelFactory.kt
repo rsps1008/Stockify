@@ -8,6 +8,7 @@ import com.rsps1008.stockify.data.OfflineStockRepository
 import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.StockDao
+import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.TaiwanWeightedIndexService
 import com.rsps1008.stockify.data.UsdTwdExchangeRateService
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
@@ -21,6 +22,7 @@ class ViewModelFactory(
     private val realtimeStockDataService: RealtimeStockDataService? = null,
     private val settingsDataStore: SettingsDataStore? = null,
     private val stockCode: String? = null,
+    private val market: String? = null,
     private val transactionId: Int? = null,
     private val dividendRepository: YahooDividendRepository? = null,
     private val exchangeRateService: UsdTwdExchangeRateService? = null,
@@ -105,6 +107,7 @@ class ViewModelFactory(
                 @Suppress("UNCHECKED_CAST")
                 StockDetailViewModel(
                     stockCode = stockCode,
+                    market = market ?: StockMarket.inferFromCode(stockCode),
                     stockDao = stockDao,
                     stockRepository = OfflineStockRepository(
                         stockDao = stockDao,

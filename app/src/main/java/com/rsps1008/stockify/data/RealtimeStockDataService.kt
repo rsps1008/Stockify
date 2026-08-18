@@ -46,6 +46,24 @@ internal fun mergeRealtimeStockInfoMaps(
 
 private const val STOCK_LOOKUP_CHUNK_SIZE = 500
 
+private fun normalizeRealtimeCache(
+    cachedData: Map<String, RealtimeStockInfo>,
+    stocks: List<Stock>
+): Map<String, RealtimeStockInfo> {
+    val stocksByCode = stocks.associateBy { it.code.trim().uppercase() }
+    return cachedData.mapNotNull { (rawKey, info) ->
+        val parts = rawKey.split(':', limit = 2)
+        val key = if (parts.size == 2) {
+            stockCacheKey(parts[0], parts[1])
+        } else {
+            val code = rawKey.trim()
+            val stock = stocksByCode[code.uppercase()]
+            stock?.toStockKey()?.cacheKey() ?: stockCacheKey(StockMarket.inferFromCode(code), code)
+        }
+        key to info
+    }.toMap()
+}
+
 class RealtimeStockDataService(
     private val stockDao: StockDao,
     private val settingsDataStore: SettingsDataStore,
@@ -102,6 +120,7 @@ class RealtimeStockDataService(
     }
 
     data class FetchResult(
+        val key: String,
         val code: String,
         val info: RealtimeStockInfo?,
         val fallbackUsed: Boolean,
@@ -161,7 +180,8 @@ class RealtimeStockDataService(
         if (cachedData.isNotEmpty()) {
             realtimeInfoMutex.withLock {
                 if (_realtimeStockInfo.value.isEmpty()) {
-                    _realtimeStockInfo.value = cachedData.toMap()
+                    val heldStocks = stockDao.getHeldStocks().first()
+                    _realtimeStockInfo.value = normalizeRealtimeCache(cachedData, heldStocks)
                 }
             }
         }
@@ -257,7 +277,13 @@ class RealtimeStockDataService(
                                         certificateFailure = fallback.certificateFailure || batchOutcome.certificateFailure
                                     )
                                 }
-                                FetchResult(stock.code, outcome.info, outcome.fallbackUsed, outcome.certificateFailure)
+                                FetchResult(
+                                    key = stock.toStockKey().cacheKey(),
+                                    code = stock.code,
+                                    info = outcome.info,
+                                    fallbackUsed = outcome.fallbackUsed,
+                                    certificateFailure = outcome.certificateFailure
+                                )
                             }
                         }
                     } else {
@@ -269,7 +295,13 @@ class RealtimeStockDataService(
                                     exchange = exchange,
                                     stockType = stock.stockType
                                 )
-                                FetchResult(stock.code, outcome.info, outcome.fallbackUsed, outcome.certificateFailure)
+                                FetchResult(
+                                    key = stock.toStockKey().cacheKey(),
+                                    code = stock.code,
+                                    info = outcome.info,
+                                    fallbackUsed = outcome.fallbackUsed,
+                                    certificateFailure = outcome.certificateFailure
+                                )
                             }
                         }
                     }
@@ -282,7 +314,7 @@ class RealtimeStockDataService(
         val certificateFailureCount = results.count { it.certificateFailure }
 
         val fetchedInfos = results.mapNotNull { result ->
-            result.info?.let { result.code to it }
+            result.info?.let { result.key to it }
         }.toMap()
 
         if (fallbackCount > 0) {
@@ -315,9 +347,9 @@ class RealtimeStockDataService(
         )
     }
 
-    fun refreshStock(stockCode: String) {
+    fun refreshStock(stockCode: String, market: String = StockMarket.inferFromCode(stockCode)) {
         scope.launch {
-            refreshStockInternal(stockCode)
+            refreshStockInternal(stockCode, market)
         }
     }
 
@@ -329,19 +361,21 @@ class RealtimeStockDataService(
         )
     }
 
-    suspend fun refreshStocks(stockCodes: Collection<String>) {
-        val distinctCodes = stockCodes
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .distinct()
+    suspend fun refreshStocks(stockKeys: Collection<StockKey>) {
+        val distinctKeys = stockKeys
+            .map { StockKey(StockMarket.normalize(it.market), it.normalizedCode) }
+            .filter { it.code.isNotEmpty() }
+            .distinctBy { it.cacheKey() }
 
-        if (distinctCodes.isEmpty()) return
+        if (distinctKeys.isEmpty()) return
 
-        val stocksByCode = distinctCodes
-            .chunked(STOCK_LOOKUP_CHUNK_SIZE)
-            .flatMap { stockDao.getStocksByCodes(it) }
-            .associateBy { it.code }
-        val stocks = distinctCodes.mapNotNull(stocksByCode::get)
+        val stocks = distinctKeys
+            .groupBy { StockMarket.normalize(it.market) }
+            .flatMap { (market, keys) ->
+                keys.map { it.code }
+                    .chunked(STOCK_LOOKUP_CHUNK_SIZE)
+                    .flatMap { codes -> stockDao.getStocksByMarketAndCodes(market, codes) }
+            }
         val batchableTaiwanStocks = stocks.filter {
             StockMarket.isTw(it.market) && !StockExchange.isEmerging(it.exchange)
         }
@@ -351,18 +385,20 @@ class RealtimeStockDataService(
         if (batchableTaiwanStocks.isNotEmpty() && preferredStockDataSource.value == "TWSE") {
             val batchOutcome = fetchTwseBatchSafely(batchableTaiwanStocks)
             val twseInfos = batchOutcome.infos
-            fetchedInfos.putAll(twseInfos)
+            batchableTaiwanStocks.forEach { stock ->
+                twseInfos[stock.code]?.let { fetchedInfos[stock.toStockKey().cacheKey()] = it }
+            }
             certificateFailure = batchOutcome.certificateFailure
 
             val missingStocks = batchableTaiwanStocks.filter { it.code !in twseInfos }
             coroutineScope {
                 missingStocks.map { stock ->
                     async(Dispatchers.IO) {
-                        stock.code to fetchWithFetcher(yahooFetcher, stock.code, stock.stockType)
+                        stock.toStockKey().cacheKey() to fetchWithFetcher(yahooFetcher, stock.code, stock.stockType)
                     }
-                }.awaitAll().forEach { (code, outcome) ->
+                }.awaitAll().forEach { (key, outcome) ->
                     certificateFailure = certificateFailure || outcome.certificateFailure
-                    outcome.info?.let { fetchedInfos[code] = it }
+                    outcome.info?.let { fetchedInfos[key] = it }
                 }
             }
         }
@@ -371,16 +407,16 @@ class RealtimeStockDataService(
         coroutineScope {
             remainingStocks.map { stock ->
                 async(Dispatchers.IO) {
-                    stock.code to fetchStockInfoForMarket(
+                    stock.toStockKey().cacheKey() to fetchStockInfoForMarket(
                         stock.code,
                         StockMarket.normalize(stock.market),
                         StockExchange.normalize(stock.exchange),
                         stock.stockType
                     )
                 }
-            }.awaitAll().forEach { (code, outcome) ->
+            }.awaitAll().forEach { (key, outcome) ->
                 certificateFailure = certificateFailure || outcome.certificateFailure
-                outcome.info?.let { fetchedInfos[code] = it }
+                outcome.info?.let { fetchedInfos[key] = it }
             }
         }
 
@@ -416,15 +452,15 @@ class RealtimeStockDataService(
         }
     }
 
-    private suspend fun refreshStockInternal(stockCode: String) {
-        val stock = stockDao.getStockByCode(stockCode)
-            val market = StockMarket.normalize(stock?.market ?: StockMarket.inferFromCode(stockCode))
-            val outcome = fetchStockInfoForMarket(
-                stockCode,
-                market,
-                StockExchange.normalize(stock?.exchange),
-                stock?.stockType.orEmpty()
-            )
+    private suspend fun refreshStockInternal(stockCode: String, requestedMarket: String) {
+        val market = StockMarket.normalize(requestedMarket)
+        val stock = stockDao.getStockByCode(stockCode, market)
+        val outcome = fetchStockInfoForMarket(
+            stockCode,
+            market,
+            StockExchange.normalize(stock?.exchange),
+            stock?.stockType.orEmpty()
+        )
 
         if (outcome.certificateFailure) {
             notifyCertificateFailureIfNeeded()
@@ -432,7 +468,7 @@ class RealtimeStockDataService(
 
         outcome.info?.let {
             mergeRealtimeStockInfo(
-                updates = mapOf(stockCode to it),
+                updates = mapOf(stockCacheKey(market, stockCode) to it),
                 saveAlways = true
             )
         }
@@ -465,17 +501,21 @@ class RealtimeStockDataService(
         }
     }
 
-    suspend fun fetchCurrentStockInfo(stockCode: String): RealtimeStockInfo? {
-        val cached = _realtimeStockInfo.value[stockCode]
+    suspend fun fetchCurrentStockInfo(
+        stockCode: String,
+        market: String = StockMarket.inferFromCode(stockCode)
+    ): RealtimeStockInfo? {
+        val normalizedMarket = StockMarket.normalize(market)
+        val cached = _realtimeStockInfo.value[stockCacheKey(normalizedMarket, stockCode)]
         if (cached != null) {
             return cached
         }
 
-        val stock = stockDao.getStockByCode(stockCode)
-        val market = StockMarket.normalize(stock?.market ?: StockMarket.inferFromCode(stockCode))
+        val stock = stockDao.getStockByCode(stockCode, normalizedMarket)
+        val resolvedMarket = StockMarket.normalize(stock?.market ?: normalizedMarket)
         return fetchStockInfoForMarket(
             stockCode,
-            market,
+            resolvedMarket,
             StockExchange.normalize(stock?.exchange),
             stock?.stockType.orEmpty()
         ).info

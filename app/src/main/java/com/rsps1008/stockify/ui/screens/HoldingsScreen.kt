@@ -1221,12 +1221,12 @@ fun HoldingCard(
                                 }
                             },
                             onTap = {
-                                navController.navigate(Screen.StockDetail.createRoute(holding.stock.code))
+                                navController.navigate(Screen.StockDetail.createRoute(holding.stock.code, holding.stock.market))
                             }
                         )
                     }
                 } else {
-                    Modifier.clickable { navController.navigate(Screen.StockDetail.createRoute(holding.stock.code)) }
+                    Modifier.clickable { navController.navigate(Screen.StockDetail.createRoute(holding.stock.code, holding.stock.market)) }
                 }
             )
     ) {
@@ -1394,12 +1394,12 @@ fun ZeroHoldingCard(
                                 }
                             },
                             onTap = {
-                                navController.navigate(Screen.StockDetail.createRoute(holding.stock.code))
+                                navController.navigate(Screen.StockDetail.createRoute(holding.stock.code, holding.stock.market))
                             }
                         )
                     }
                 } else {
-                    Modifier.clickable { navController.navigate(Screen.StockDetail.createRoute(holding.stock.code)) }
+                    Modifier.clickable { navController.navigate(Screen.StockDetail.createRoute(holding.stock.code, holding.stock.market)) }
                 }
             )
     ) {

@@ -9,6 +9,8 @@ import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.TransactionListSnapshot
 import com.rsps1008.stockify.data.TransactionListRepository
+import com.rsps1008.stockify.data.stockCacheKey
+import com.rsps1008.stockify.data.toStockKey
 import com.rsps1008.stockify.data.dividend.DividendInfoCacheEntry
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
 import kotlinx.coroutines.CancellationException
@@ -66,9 +68,9 @@ internal data class TransactionRevisionKey(
 
 internal fun buildTransactionRevisionSignature(
     transactions: List<StockTransaction>,
-    taiwanStockCodes: Set<String>
+    taiwanStockKeys: Set<String>
 ): List<TransactionRevisionKey> = transactions
-    .filter { it.stockCode in taiwanStockCodes }
+    .filter { it.toStockKey().cacheKey() in taiwanStockKeys }
     .map {
         TransactionRevisionKey(
             id = it.id,
@@ -101,16 +103,16 @@ internal fun buildTaiwanStockRefs(
     } else {
         snapshot.transactions.filter { it.accountId == accountId }
     }
-    val activeStockCodes = activeTransactions
+    val activeStockKeys = activeTransactions
         .asSequence()
         .filter { it.date <= valuationDateMillis }
-        .map { it.stockCode }
+        .map { it.toStockKey().cacheKey() }
         .toSet()
 
     return snapshot.stocks
         .asSequence()
         .filter { stock ->
-            StockMarket.isTw(stock.market) && stock.code in activeStockCodes
+            StockMarket.isTw(stock.market) && stock.toStockKey().cacheKey() in activeStockKeys
         }
         .map { stock -> TaiwanStockRef(stock.code, stock.name) }
         .distinctBy { it.stockCode }
@@ -156,8 +158,13 @@ class DividendInfoViewModel(
                 } else {
                     snapshot.transactions.filter { it.accountId == accountId }
                 }
-                val taiwanCodes = stocks.map { it.stockCode }.toSet()
-                val revisionSignature = buildTransactionRevisionSignature(activeTransactions, taiwanCodes)
+                val taiwanStockKeys = stocks
+                    .map { stockCacheKey(StockMarket.TW, it.stockCode) }
+                    .toSet()
+                val revisionSignature = buildTransactionRevisionSignature(
+                    activeTransactions,
+                    taiwanStockKeys
+                )
                 DividendRefreshScope(stocks, accountId, revisionSignature)
             }
                 .distinctUntilChanged()
