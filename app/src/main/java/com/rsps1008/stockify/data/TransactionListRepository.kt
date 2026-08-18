@@ -27,7 +27,10 @@ class TransactionListRepository(
         TransactionListSnapshot(stocks = stocks, transactions = transactions)
     }.stateIn(
         scope = applicationScope,
-        started = SharingStarted.Eagerly,
+        started = SharingStarted.WhileSubscribed(
+            stopTimeoutMillis = 5_000L,
+            replayExpirationMillis = 0L
+        ),
         initialValue = TransactionListSnapshot()
     )
 }
