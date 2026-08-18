@@ -5,7 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.StockRepository
 import com.rsps1008.stockify.data.StockMarket
+import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.StockTransaction
+import com.rsps1008.stockify.data.TransactionListSnapshot
 import com.rsps1008.stockify.data.TransactionListRepository
 import com.rsps1008.stockify.data.dividend.DividendInfoCacheEntry
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
@@ -20,7 +22,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -85,6 +86,37 @@ internal fun getDividendFetchDateString(timeMillis: Long = System.currentTimeMil
     return sdf.format(Date(timeMillis))
 }
 
+internal data class TaiwanStockRef(
+    val stockCode: String,
+    val stockName: String
+)
+
+internal fun buildTaiwanStockRefs(
+    snapshot: TransactionListSnapshot,
+    accountId: Int,
+    valuationDateMillis: Long
+): List<TaiwanStockRef> {
+    val activeTransactions = if (accountId == 0) {
+        snapshot.transactions
+    } else {
+        snapshot.transactions.filter { it.accountId == accountId }
+    }
+    val activeStockCodes = activeTransactions
+        .asSequence()
+        .filter { it.date <= valuationDateMillis }
+        .map { it.stockCode }
+        .toSet()
+
+    return snapshot.stocks
+        .asSequence()
+        .filter { stock ->
+            StockMarket.isTw(stock.market) && stock.code in activeStockCodes
+        }
+        .map { stock -> TaiwanStockRef(stock.code, stock.name) }
+        .distinctBy { it.stockCode }
+        .toList()
+}
+
 class DividendInfoViewModel(
     private val stockRepository: StockRepository,
     private val transactionListRepository: TransactionListRepository,
@@ -111,19 +143,18 @@ class DividendInfoViewModel(
     private fun observeHoldingsAndRefresh() {
         viewModelScope.launch {
             combine(
-                stockRepository.getHoldings().map { holdingsState ->
-                    holdingsState.holdings
-                        .filter { holding -> StockMarket.isTw(holding.stock.market) }
-                        .map { holding -> TaiwanStockRef(holding.stock.code, holding.stock.name) }
-                        .distinctBy { it.stockCode }
-                }.distinctUntilChanged(),
+                transactionListRepository.snapshot,
                 settingsDataStore.activeAccountIdFlow.distinctUntilChanged(),
-                transactionListRepository.snapshot.map { it.transactions }
-            ) { stocks, accountId, allTransactions ->
+            ) { snapshot, accountId ->
+                val stocks = buildTaiwanStockRefs(
+                    snapshot = snapshot,
+                    accountId = accountId,
+                    valuationDateMillis = System.currentTimeMillis()
+                )
                 val activeTransactions = if (accountId == 0) {
-                    allTransactions
+                    snapshot.transactions
                 } else {
-                    allTransactions.filter { it.accountId == accountId }
+                    snapshot.transactions.filter { it.accountId == accountId }
                 }
                 val taiwanCodes = stocks.map { it.stockCode }.toSet()
                 val revisionSignature = buildTransactionRevisionSignature(activeTransactions, taiwanCodes)
@@ -405,11 +436,6 @@ class DividendInfoViewModel(
             }
         }
     }
-
-    private data class TaiwanStockRef(
-        val stockCode: String,
-        val stockName: String
-    )
 
     private data class DividendRefreshScope(
         val stocks: List<TaiwanStockRef>,
