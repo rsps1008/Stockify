@@ -27,6 +27,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import java.time.LocalDate
 import java.time.LocalTime
@@ -34,6 +36,13 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import com.rsps1008.stockify.data.StockMarket
+
+internal fun mergeRealtimeStockInfoMaps(
+    current: Map<String, RealtimeStockInfo>,
+    updates: Map<String, RealtimeStockInfo>
+): Map<String, RealtimeStockInfo> {
+    return current.toMutableMap().apply { putAll(updates) }.toMap()
+}
 
 class RealtimeStockDataService(
     private val stockDao: StockDao,
@@ -43,6 +52,7 @@ class RealtimeStockDataService(
 ) {
     private val _realtimeStockInfo = MutableStateFlow<Map<String, RealtimeStockInfo>>(emptyMap())
     val realtimeStockInfo: StateFlow<Map<String, RealtimeStockInfo>> = _realtimeStockInfo.asStateFlow()
+    private val realtimeInfoMutex = Mutex()
 
     private var fetchJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
@@ -147,7 +157,11 @@ class RealtimeStockDataService(
     private suspend fun startFetchingLoop() {
         val cachedData = settingsDataStore.realtimeStockInfoCacheFlow.first()
         if (cachedData.isNotEmpty()) {
-            _realtimeStockInfo.value = cachedData
+            realtimeInfoMutex.withLock {
+                if (_realtimeStockInfo.value.isEmpty()) {
+                    _realtimeStockInfo.value = cachedData.toMap()
+                }
+            }
         }
 
         // App 啟動時先強制抓一次最新資料，避免只看到過期快取。
@@ -203,7 +217,6 @@ class RealtimeStockDataService(
         val stocks = stockDao.getHeldStocks().first()
         if (stocks.isEmpty()) return
 
-        val updatedInfos = _realtimeStockInfo.value.toMutableMap()
         val stockGroups = stocks.groupBy {
             StockMarket.normalize(it.market) to StockExchange.normalize(it.exchange)
         }
@@ -266,9 +279,9 @@ class RealtimeStockDataService(
         val successCount = results.count { it.info != null }
         val certificateFailureCount = results.count { it.certificateFailure }
 
-        results.forEach { r ->
-            r.info?.let { updatedInfos[r.code] = it }
-        }
+        val fetchedInfos = results.mapNotNull { result ->
+            result.info?.let { result.code to it }
+        }.toMap()
 
         if (fallbackCount > 0) {
             val fallbackNoticeEnabled = settingsDataStore.fallbackNoticeEnabledFlow.first()
@@ -293,17 +306,11 @@ class RealtimeStockDataService(
             notifyCertificateFailureIfNeeded()
         }
 
-        _realtimeStockInfo.value = updatedInfos
-
-        if (isContinuous) {
-            fetchCount++
-            if (fetchCount >= 10 || forceSave) {
-                settingsDataStore.setRealtimeStockInfoCache(updatedInfos)
-                fetchCount = 0
-            }
-        } else {
-            settingsDataStore.setRealtimeStockInfoCache(updatedInfos)
-        }
+        mergeRealtimeStockInfo(
+            updates = fetchedInfos,
+            isContinuous = isContinuous,
+            forceSave = forceSave
+        )
     }
 
     fun refreshStock(stockCode: String) {
@@ -332,13 +339,13 @@ class RealtimeStockDataService(
         val batchableTaiwanStocks = stocks.filter {
             StockMarket.isTw(it.market) && !StockExchange.isEmerging(it.exchange)
         }
-        val updatedInfos = _realtimeStockInfo.value.toMutableMap()
+        val fetchedInfos = mutableMapOf<String, RealtimeStockInfo>()
         var certificateFailure = false
 
         if (batchableTaiwanStocks.isNotEmpty() && preferredStockDataSource.value == "TWSE") {
             val batchOutcome = fetchTwseBatchSafely(batchableTaiwanStocks)
             val twseInfos = batchOutcome.infos
-            updatedInfos.putAll(twseInfos)
+            fetchedInfos.putAll(twseInfos)
             certificateFailure = batchOutcome.certificateFailure
 
             val missingStocks = batchableTaiwanStocks.filter { it.code !in twseInfos }
@@ -349,7 +356,7 @@ class RealtimeStockDataService(
                     }
                 }.awaitAll().forEach { (code, outcome) ->
                     certificateFailure = certificateFailure || outcome.certificateFailure
-                    outcome.info?.let { updatedInfos[code] = it }
+                    outcome.info?.let { fetchedInfos[code] = it }
                 }
             }
         }
@@ -367,7 +374,7 @@ class RealtimeStockDataService(
                 }
             }.awaitAll().forEach { (code, outcome) ->
                 certificateFailure = certificateFailure || outcome.certificateFailure
-                outcome.info?.let { updatedInfos[code] = it }
+                outcome.info?.let { fetchedInfos[code] = it }
             }
         }
 
@@ -375,8 +382,7 @@ class RealtimeStockDataService(
             notifyCertificateFailureIfNeeded()
         }
 
-        _realtimeStockInfo.value = updatedInfos
-        settingsDataStore.setRealtimeStockInfoCache(updatedInfos)
+        mergeRealtimeStockInfo(updates = fetchedInfos, saveAlways = true)
     }
 
     private suspend fun fetchTwseBatchSafely(stocks: List<Stock>): TwseBatchFetchOutcome {
@@ -419,10 +425,37 @@ class RealtimeStockDataService(
         }
 
         outcome.info?.let {
-            val updatedInfos = _realtimeStockInfo.value.toMutableMap()
-            updatedInfos[stockCode] = it
-            _realtimeStockInfo.value = updatedInfos
-            settingsDataStore.setRealtimeStockInfoCache(updatedInfos)
+            mergeRealtimeStockInfo(
+                updates = mapOf(stockCode to it),
+                saveAlways = true
+            )
+        }
+    }
+
+    private suspend fun mergeRealtimeStockInfo(
+        updates: Map<String, RealtimeStockInfo>,
+        isContinuous: Boolean? = null,
+        forceSave: Boolean = false,
+        saveAlways: Boolean = false
+    ) {
+        realtimeInfoMutex.withLock {
+            val mergedInfos = mergeRealtimeStockInfoMaps(_realtimeStockInfo.value, updates)
+            _realtimeStockInfo.value = mergedInfos
+
+            val shouldSave = when {
+                saveAlways || isContinuous == false -> true
+                isContinuous == true -> {
+                    fetchCount++
+                    fetchCount >= 10 || forceSave
+                }
+                else -> false
+            }
+            if (shouldSave) {
+                settingsDataStore.setRealtimeStockInfoCache(mergedInfos)
+                if (isContinuous == true) {
+                    fetchCount = 0
+                }
+            }
         }
     }
 
