@@ -146,26 +146,25 @@ class DividendInfoViewModel(
         viewModelScope.launch {
             combine(
                 transactionListRepository.snapshot,
-                settingsDataStore.activeAccountIdFlow.distinctUntilChanged(),
-            ) { snapshot, accountId ->
-                val stocks = buildTaiwanStockRefs(
-                    snapshot = snapshot,
-                    accountId = accountId,
-                    valuationDateMillis = System.currentTimeMillis()
-                )
-                val activeTransactions = if (accountId == 0) {
-                    snapshot.transactions
+                settingsDataStore.activeAccountIdFlow.distinctUntilChanged()
+            ) { snapshot, activeAccountId ->
+                if (snapshot.accountId != activeAccountId) {
+                    DividendRefreshScope(emptyList(), activeAccountId, emptyList())
                 } else {
-                    snapshot.transactions.filter { it.accountId == accountId }
+                    val stocks = buildTaiwanStockRefs(
+                        snapshot = snapshot,
+                        accountId = activeAccountId,
+                        valuationDateMillis = System.currentTimeMillis()
+                    )
+                    val taiwanStockKeys = stocks
+                        .map { stockCacheKey(StockMarket.TW, it.stockCode) }
+                        .toSet()
+                    val revisionSignature = buildTransactionRevisionSignature(
+                        snapshot.transactions,
+                        taiwanStockKeys
+                    )
+                    DividendRefreshScope(stocks, activeAccountId, revisionSignature)
                 }
-                val taiwanStockKeys = stocks
-                    .map { stockCacheKey(StockMarket.TW, it.stockCode) }
-                    .toSet()
-                val revisionSignature = buildTransactionRevisionSignature(
-                    activeTransactions,
-                    taiwanStockKeys
-                )
-                DividendRefreshScope(stocks, accountId, revisionSignature)
             }
                 .distinctUntilChanged()
                 .collect { scope ->

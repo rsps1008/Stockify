@@ -134,7 +134,11 @@ class StockifyApplication : Application() {
             applicationContext = this
         )
         twseStockHistoryService = TwseStockHistoryService(httpClient, database.stockDao())
-        transactionListRepository = TransactionListRepository(database.stockDao(), applicationScope)
+        transactionListRepository = TransactionListRepository(
+            stockDao = database.stockDao(),
+            activeAccountIdFlow = settingsDataStore.activeAccountIdFlow,
+            applicationScope = applicationScope
+        )
     }
 
     private companion object {

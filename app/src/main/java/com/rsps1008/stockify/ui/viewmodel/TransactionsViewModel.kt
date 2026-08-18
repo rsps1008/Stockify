@@ -44,19 +44,18 @@ class TransactionsViewModel(
         transactionListRepository.snapshot,
         activeAccountId
     ) { snapshot, activeAccountId ->
-        val filteredTx = if (activeAccountId == 0) {
-            snapshot.transactions
+        if (snapshot.accountId != activeAccountId) {
+            emptyList()
         } else {
-            snapshot.transactions.filter { it.accountId == activeAccountId }
-        }
-        val stocksByKey = snapshot.stocks.associateBy { it.toStockKey().cacheKey() }
-        filteredTx.map { transaction ->
-            val stock = stocksByKey[transaction.toStockKey().cacheKey()]
-            TransactionUiState(
-                transaction = transaction,
-                stockName = stock?.name ?: "",
-                market = stock?.market ?: ""
-            )
+            val stocksByKey = snapshot.stocks.associateBy { it.toStockKey().cacheKey() }
+            snapshot.transactions.map { transaction ->
+                val stock = stocksByKey[transaction.toStockKey().cacheKey()]
+                TransactionUiState(
+                    transaction = transaction,
+                    stockName = stock?.name ?: "",
+                    market = stock?.market ?: ""
+                )
+            }
         }
     }.stateIn(
         scope = viewModelScope,
