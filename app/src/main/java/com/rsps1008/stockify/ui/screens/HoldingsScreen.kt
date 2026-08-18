@@ -180,14 +180,24 @@ fun HoldingsScreen(navController: NavController) {
         true
     }
     val normalizedUsdToTwdRate = usdToTwdRate.takeIf { it > 0.0 } ?: 1.0
-    val displayedActiveHoldings = remember(orderedActiveHoldings, selectedSortColumn, isSortAscending) {
+    val displayedActiveHoldings = remember(
+        orderedActiveHoldings,
+        selectedSortColumn,
+        isSortAscending,
+        normalizedUsdToTwdRate
+    ) {
         orderedActiveHoldings.applySort(
             column = selectedSortColumn,
             ascending = isSortAscending,
             usdToTwdRate = normalizedUsdToTwdRate
         )
     }
-    val displayedZeroHoldings = remember(orderedZeroHoldings, selectedSortColumn, isSortAscending) {
+    val displayedZeroHoldings = remember(
+        orderedZeroHoldings,
+        selectedSortColumn,
+        isSortAscending,
+        normalizedUsdToTwdRate
+    ) {
         orderedZeroHoldings.applySort(
             column = selectedSortColumn,
             ascending = isSortAscending,
