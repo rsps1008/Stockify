@@ -8,6 +8,7 @@ import com.rsps1008.stockify.ui.screens.isValidMarginRepaymentAmounts
 import com.rsps1008.stockify.ui.screens.resolveSellMarginRepayment
 import com.rsps1008.stockify.ui.screens.shouldApplyDividendAutoFill
 import com.rsps1008.stockify.ui.screens.shouldApplyTransactionTypeChange
+import com.rsps1008.stockify.ui.screens.transactionMarketChanged
 import com.rsps1008.stockify.ui.screens.transactionCashFlowAmount
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.ui.screens.normalizeTransactionDateMillis
@@ -34,6 +35,14 @@ class TransactionFormSupportTest {
     fun reselectingTheCurrentTransactionTypeDoesNotCountAsAnEdit() {
         assertFalse(shouldApplyTransactionTypeChange("買進", "買進"))
         assertTrue(shouldApplyTransactionTypeChange("買進", "賣出"))
+    }
+
+    @Test
+    fun changingBetweenTaiwanAndUsStocksRequiresRecalculatingMarketCosts() {
+        assertTrue(transactionMarketChanged("2330", "AAPL"))
+        assertTrue(transactionMarketChanged("AAPL", "2330"))
+        assertFalse(transactionMarketChanged("2330", "0050"))
+        assertFalse(transactionMarketChanged("", "AAPL"))
     }
 
     @Test

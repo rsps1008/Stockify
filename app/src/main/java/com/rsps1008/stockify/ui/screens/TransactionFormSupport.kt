@@ -1,6 +1,7 @@
 package com.rsps1008.stockify.ui.screens
 
 import com.rsps1008.stockify.data.HoldingCalculationSupport
+import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.StockTransaction
 import java.math.BigDecimal
 import java.time.Instant
@@ -36,6 +37,14 @@ internal fun shouldApplyTransactionTypeChange(
     currentType: String,
     requestedType: String
 ): Boolean = currentType != requestedType
+
+internal fun transactionMarketChanged(
+    currentStockCode: String,
+    newStockCode: String
+): Boolean {
+    if (currentStockCode.isBlank() || newStockCode.isBlank()) return false
+    return StockMarket.inferFromCode(currentStockCode) != StockMarket.inferFromCode(newStockCode)
+}
 
 internal fun shouldApplyDividendAutoFill(
     requestedStockCode: String,

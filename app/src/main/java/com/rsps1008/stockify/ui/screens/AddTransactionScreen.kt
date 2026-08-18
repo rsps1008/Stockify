@@ -701,6 +701,9 @@ fun AddTransactionScreen(
                                 }
                             },
                             onClick = {
+                                if (transactionMarketChanged(stockCode, selectionOption.code)) {
+                                    viewModel.resetCalculatedValues()
+                                }
                                 if (financingLotScopeChanged(
                                         currentStockCode = stockCode,
                                         currentAccountId = selectedAccountId,

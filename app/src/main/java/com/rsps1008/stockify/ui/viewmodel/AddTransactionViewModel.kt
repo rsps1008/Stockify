@@ -471,6 +471,8 @@ class AddTransactionViewModel(
         }
 
         if (StockMarket.isUs(market)) {
+            _taxRate.value = 0.0
+            _tax.value = 0.0
             _expense.value = roundCalculatedCurrency(price * shares + _fee.value, market)
             return
         }
@@ -498,7 +500,8 @@ class AddTransactionViewModel(
 
         if (StockMarket.isUs(market)) {
             _taxRate.value = 0.0
-            _income.value = roundCalculatedCurrency(price * shares - _fee.value - _tax.value, market)
+            _tax.value = 0.0
+            _income.value = roundCalculatedCurrency(price * shares - _fee.value, market)
             return
         }
 
