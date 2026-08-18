@@ -32,6 +32,9 @@ import com.rsps1008.stockify.ui.screens.HoldingsUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,6 +49,8 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 sealed interface HomeHistoryStateInternal {
     object Idle : HomeHistoryStateInternal
@@ -82,6 +87,46 @@ private data class HistoricalHoldingStats(
     val marginSummary: MarginSummary,
     val shortSummary: ShortSellingSummary
 )
+
+private const val MAX_PARALLEL_HISTORY_DOWNLOADS = 3
+
+internal class PortfolioHistoryProgressTracker(private val stockCount: Int) {
+    private val lock = Any()
+    private val completedSteps = IntArray(stockCount)
+    private val totalSteps = IntArray(stockCount)
+    private var lastProgress = 0f
+
+    init {
+        require(stockCount > 0) { "stockCount must be positive" }
+    }
+
+    fun update(stockIndex: Int, step: Int, total: Int): Float = synchronized(lock) {
+        require(stockIndex in 0 until stockCount) { "stockIndex is out of range" }
+        val safeTotal = total.coerceAtLeast(1)
+        totalSteps[stockIndex] = maxOf(totalSteps[stockIndex], safeTotal)
+        completedSteps[stockIndex] = maxOf(
+            completedSteps[stockIndex],
+            step.coerceIn(0, safeTotal)
+        )
+        recalculateProgress()
+    }
+
+    fun markComplete(stockIndex: Int): Float = synchronized(lock) {
+        require(stockIndex in 0 until stockCount) { "stockIndex is out of range" }
+        totalSteps[stockIndex] = maxOf(totalSteps[stockIndex], 1)
+        completedSteps[stockIndex] = totalSteps[stockIndex]
+        recalculateProgress()
+    }
+
+    private fun recalculateProgress(): Float {
+        val normalizedProgress = (0 until stockCount).sumOf { index ->
+            val total = totalSteps[index].coerceAtLeast(1)
+            completedSteps[index].coerceAtMost(total).toDouble() / total
+        } / stockCount
+        lastProgress = maxOf(lastProgress, normalizedProgress.toFloat()).coerceIn(0f, 1f)
+        return lastProgress
+    }
+}
 
 class HoldingsViewModel(
     private val settingsDataStore: SettingsDataStore,
@@ -533,29 +578,53 @@ class HoldingsViewModel(
             }
 
             try {
-                val allRawPoints = mutableMapOf<String, List<StockHistoryPoint>>()
                 val totalStocks = selectedStocks.size
-
-                for ((index, stock) in selectedStocks.withIndex()) {
-                    val rawPoints = twseStockHistoryService.fetchHistory(stock.code, rangeMonths, stock.market) { step, total ->
-                        val baseProgress = index.toFloat() / totalStocks
-                        val stepProgress = (step.toFloat() / total) / totalStocks
-                        val statusText = if (StockMarket.isUs(stock.market)) {
-                            "正在載入 ${stock.name} (${index + 1}/$totalStocks) 美股歷史股價..."
-                        } else {
-                            "正在載入 ${stock.name} (${index + 1}/$totalStocks) 第 $step/$total 個月..."
-                        }
-                        if (!hasCompleteCachedPoints) {
-                            if (requestVersion == homeHistoryRequestVersion) {
-                                _historyStateInternal.value = HomeHistoryStateInternal.Loading(
-                                    baseProgress + stepProgress,
-                                    statusText
-                                )
+                val downloadSemaphore = Semaphore(MAX_PARALLEL_HISTORY_DOWNLOADS)
+                val progressTracker = PortfolioHistoryProgressTracker(totalStocks)
+                val progressStateLock = Any()
+                val downloadResults = coroutineScope {
+                    selectedStocks.mapIndexed { index, stock ->
+                        async(Dispatchers.IO) {
+                            downloadSemaphore.withPermit {
+                                val rawPoints = twseStockHistoryService.fetchHistory(
+                                    stock.code,
+                                    rangeMonths,
+                                    stock.market
+                                ) { step, total ->
+                                    if (!hasCompleteCachedPoints) {
+                                        val statusText = if (StockMarket.isUs(stock.market)) {
+                                            "正在載入 ${stock.name} (${index + 1}/$totalStocks) 美股歷史股價..."
+                                        } else {
+                                            "正在載入 ${stock.name} (${index + 1}/$totalStocks) 第 $step/$total 個月..."
+                                        }
+                                        synchronized(progressStateLock) {
+                                            val progress = progressTracker.update(index, step, total)
+                                            if (requestVersion == homeHistoryRequestVersion) {
+                                                _historyStateInternal.value = HomeHistoryStateInternal.Loading(
+                                                    progress,
+                                                    statusText
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                if (!hasCompleteCachedPoints) {
+                                    synchronized(progressStateLock) {
+                                        val progress = progressTracker.markComplete(index)
+                                        if (requestVersion == homeHistoryRequestVersion) {
+                                            _historyStateInternal.value = HomeHistoryStateInternal.Loading(
+                                                progress,
+                                                "已完成 ${stock.name} (${index + 1}/$totalStocks) 歷史股價"
+                                            )
+                                        }
+                                    }
+                                }
+                                stock.toStockKey().cacheKey() to rawPoints
                             }
                         }
-                    }
-                    allRawPoints[stock.toStockKey().cacheKey()] = rawPoints
+                    }.awaitAll()
                 }
+                val allRawPoints = downloadResults.toMap()
 
                 val availableRawPoints = HistoryChartCalculationSupport.filterEmptyHistorySeries(allRawPoints)
 
@@ -569,6 +638,8 @@ class HoldingsViewModel(
                 if (requestVersion == homeHistoryRequestVersion) {
                     _historyStateInternal.value = buildHomeHistorySuccess(range, portfolioKey, availableRawPoints)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 if (!hasCompleteCachedPoints && requestVersion == homeHistoryRequestVersion) {
                     _historyStateInternal.value = HomeHistoryStateInternal.Error("載入失敗: ${e.localizedMessage}")
