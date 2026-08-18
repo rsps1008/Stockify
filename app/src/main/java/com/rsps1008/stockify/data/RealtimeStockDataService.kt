@@ -44,6 +44,8 @@ internal fun mergeRealtimeStockInfoMaps(
     return current.toMutableMap().apply { putAll(updates) }.toMap()
 }
 
+private const val STOCK_LOOKUP_CHUNK_SIZE = 500
+
 class RealtimeStockDataService(
     private val stockDao: StockDao,
     private val settingsDataStore: SettingsDataStore,
@@ -335,7 +337,11 @@ class RealtimeStockDataService(
 
         if (distinctCodes.isEmpty()) return
 
-        val stocks = distinctCodes.mapNotNull { stockDao.getStockByCode(it) }
+        val stocksByCode = distinctCodes
+            .chunked(STOCK_LOOKUP_CHUNK_SIZE)
+            .flatMap { stockDao.getStocksByCodes(it) }
+            .associateBy { it.code }
+        val stocks = distinctCodes.mapNotNull(stocksByCode::get)
         val batchableTaiwanStocks = stocks.filter {
             StockMarket.isTw(it.market) && !StockExchange.isEmerging(it.exchange)
         }
