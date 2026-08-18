@@ -18,6 +18,9 @@ interface StockDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun replaceStocks(stocks: List<Stock>)
 
+    @Update
+    suspend fun updateStocks(stocks: List<Stock>)
+
     @Insert
     suspend fun insertStock(stock: Stock)
 
@@ -26,6 +29,9 @@ interface StockDao {
 
     @Insert
     suspend fun insertTransaction(transaction: StockTransaction)
+
+    @Insert
+    suspend fun insertTransactions(transactions: List<StockTransaction>)
 
     @Update
     suspend fun updateTransaction(transaction: StockTransaction): Int
@@ -158,6 +164,9 @@ interface StockDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAccount(account: Account)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAccounts(accounts: List<Account>)
+
     @Update
     suspend fun updateAccount(account: Account)
 
@@ -169,6 +178,9 @@ interface StockDao {
 
     @Query("SELECT * FROM accounts WHERE id = :accountId LIMIT 1")
     suspend fun getAccountById(accountId: Int): Account?
+
+    @Query("SELECT * FROM accounts WHERE id IN (:accountIds)")
+    suspend fun getAccountsByIds(accountIds: List<Int>): List<Account>
 
     @Query("DELETE FROM accounts")
     suspend fun deleteAllAccounts()

@@ -14,11 +14,13 @@ class TwseStockHistoryServiceTest {
     private val mockDao = object : StockDao {
         override suspend fun insertStocks(stocks: List<Stock>) {}
         override suspend fun replaceStocks(stocks: List<Stock>) {}
+        override suspend fun updateStocks(stocks: List<Stock>) {}
         override suspend fun insertStock(stock: Stock) {
             println("DAO insertStock: $stock")
         }
         override suspend fun updateStock(stock: Stock) {}
         override suspend fun insertTransaction(transaction: StockTransaction) {}
+        override suspend fun insertTransactions(transactions: List<StockTransaction>) {}
         override suspend fun updateTransaction(transaction: StockTransaction): Int = 1
         override suspend fun deleteTransaction(transaction: StockTransaction) {}
         override suspend fun deleteAllTransactions() {}
@@ -30,6 +32,8 @@ class TwseStockHistoryServiceTest {
         override suspend fun updateAccount(account: Account) {}
         override fun getAllAccountsFlow(): Flow<List<Account>> = flowOf(emptyList())
         override suspend fun getAccountById(accountId: Int): Account? = null
+        override suspend fun getAccountsByIds(accountIds: List<Int>): List<Account> = emptyList()
+        override suspend fun insertAccounts(accounts: List<Account>) {}
         override suspend fun getStocksByCodes(codes: List<String>): List<Stock> = emptyList()
         override fun searchStocks(query: String, likeQuery: String, limit: Int): Flow<List<Stock>> = flowOf(emptyList())
         override fun getHeldStocks(): Flow<List<Stock>> = flowOf(emptyList())

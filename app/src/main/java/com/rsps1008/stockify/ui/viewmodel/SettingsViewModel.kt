@@ -83,6 +83,7 @@ class SettingsViewModel(
 
     private companion object {
         const val TAG = "SettingsViewModel"
+        const val SQLITE_IN_CHUNK_SIZE = 500
         var hasShownLocalCsvRestoreFeeHintThisProcess = false
     }
 
@@ -1167,32 +1168,56 @@ class SettingsViewModel(
     }
 
     private suspend fun writeImportedTransactions(transactions: List<CsvTransaction>): Set<String> {
-        val refreshedStockCodes = linkedSetOf<String>()
+        val stockCodes = transactions.map { it.stockCode }.distinct()
+        val existingStocksByCode = stockCodes
+            .chunked(SQLITE_IN_CHUNK_SIZE)
+            .flatMap { stockDao.getStocksByCodes(it) }
+            .associateBy { it.code }
+        val newStocksByCode = linkedMapOf<String, Stock>()
+        val updatedStocksByCode = linkedMapOf<String, Stock>()
 
         transactions.forEach { csvTransaction ->
-            val stock = stockDao.getStockByCode(csvTransaction.stockCode)
-            val inferredMarket = StockMarket.inferFromCode(csvTransaction.stockCode)
-            if (stock == null) {
-                val newStock = Stock(
-                    name = csvTransaction.stockName,
-                    code = csvTransaction.stockCode,
-                    market = inferredMarket
+            val code = csvTransaction.stockCode
+            val inferredMarket = StockMarket.inferFromCode(code)
+            val existingStock = existingStocksByCode[code]
+            if (existingStock == null) {
+                newStocksByCode.putIfAbsent(
+                    code,
+                    Stock(
+                        name = csvTransaction.stockName,
+                        code = code,
+                        market = inferredMarket
+                    )
                 )
-                stockDao.insertStock(newStock)
-            } else if (StockMarket.normalize(stock.market) != inferredMarket) {
-                stockDao.updateStock(stock.copy(market = inferredMarket))
+            } else if (
+                StockMarket.normalize(existingStock.market) != inferredMarket &&
+                code !in updatedStocksByCode
+            ) {
+                updatedStocksByCode[code] = existingStock.copy(market = inferredMarket)
             }
-
-            val accountId = csvTransaction.transaction.accountId
-            val existingAccount = stockDao.getAccountById(accountId)
-            if (existingAccount == null) {
-                stockDao.insertAccount(Account(id = accountId, name = "未命名帳戶 ($accountId)"))
-            }
-
-            stockDao.insertTransaction(csvTransaction.transaction)
-            refreshedStockCodes += csvTransaction.stockCode
         }
-        return refreshedStockCodes
+
+        if (newStocksByCode.isNotEmpty()) {
+            stockDao.insertStocks(newStocksByCode.values.toList())
+        }
+        if (updatedStocksByCode.isNotEmpty()) {
+            stockDao.updateStocks(updatedStocksByCode.values.toList())
+        }
+
+        val accountIds = transactions.map { it.transaction.accountId }.distinct()
+        val existingAccountsById = accountIds
+            .chunked(SQLITE_IN_CHUNK_SIZE)
+            .flatMap { stockDao.getAccountsByIds(it) }
+            .associateBy { it.id }
+        val newAccounts = accountIds
+            .filterNot(existingAccountsById::containsKey)
+            .map { accountId -> Account(id = accountId, name = "未命名帳戶 ($accountId)") }
+        if (newAccounts.isNotEmpty()) {
+            stockDao.insertAccounts(newAccounts)
+        }
+
+        stockDao.insertTransactions(transactions.map { it.transaction })
+        return transactions.mapTo(linkedSetOf()) { it.stockCode }
     }
 
     fun setFetchInterval(interval: Int) {
