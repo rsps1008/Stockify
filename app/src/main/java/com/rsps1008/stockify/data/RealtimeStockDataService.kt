@@ -19,8 +19,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.async
@@ -76,6 +81,19 @@ class RealtimeStockDataService(
 
     private var fetchJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
+    private val valuationDateFlow = flow {
+        while (currentCoroutineContext().isActive) {
+            emit(LocalDate.now(ZoneId.systemDefault()))
+            delay(60_000L)
+        }
+    }.distinctUntilChanged()
+    private val openPositionStockKeys: StateFlow<Set<String>?> = combine(
+        stockDao.getAllTransactions(),
+        valuationDateFlow
+    ) { transactions, _ ->
+        openStockKeysAt(transactions, System.currentTimeMillis())
+    }
+        .stateIn(scope, SharingStarted.Eagerly, null)
     private var fetchCount = 0
     private var hasNotifiedAboutFallback = false
     private var hasNotifiedAboutCertificateFailure = false
@@ -236,7 +254,9 @@ class RealtimeStockDataService(
         forceSave: Boolean = false,
         refreshRegardlessOfMarketOpen: Boolean = false
     ) {
+        val openKeys = openPositionStockKeys.filterNotNull().first()
         val stocks = stockDao.getHeldStocks().first()
+            .filter { it.toStockKey().cacheKey() in openKeys }
         if (stocks.isEmpty()) return
 
         val stockGroups = stocks.groupBy {
