@@ -64,7 +64,10 @@ fun DividendInfoScreen(navController: NavController) {
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(dividendList) { item ->
+            items(
+                items = dividendList,
+                key = { item -> item.stockCode }
+            ) { item ->
                 DividendInfoCard(
                     item = item,
                     onClick = { navController.navigate(Screen.StockDetail.createRoute(item.stockCode, com.rsps1008.stockify.data.StockMarket.TW)) }

@@ -880,7 +880,13 @@ private fun PdfImportPreviewDialog(
                     modifier = Modifier.height(260.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(preview.items.size) { index ->
+                    items(
+                        count = preview.items.size,
+                        key = { index ->
+                            val item = preview.items[index]
+                            "${item.stockCode}#$index"
+                        }
+                    ) { index ->
                         val item = preview.items[index]
                         Card(modifier = Modifier.fillMaxWidth()) {
                             Column(modifier = Modifier.padding(12.dp)) {
