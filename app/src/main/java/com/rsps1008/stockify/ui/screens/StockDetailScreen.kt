@@ -233,7 +233,10 @@ fun StockDetailScreen(stockCode: String, navController: NavController) {
                     TransactionListHeader()
                 }
 
-                items(transactions) { transaction ->
+                items(
+                    items = transactions,
+                    key = { it.transaction.id }
+                ) { transaction ->
                     TransactionRow(transaction, navController)
                     HorizontalDivider()
                 }
