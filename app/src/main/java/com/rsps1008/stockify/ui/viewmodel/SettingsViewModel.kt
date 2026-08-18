@@ -1127,13 +1127,16 @@ class SettingsViewModel(
         transactions: List<CsvTransaction>,
         includeExistingTransactions: Boolean
     ) {
+        val importedCodes = transactions.map { it.stockCode }.distinct()
         val existingTransactions = if (includeExistingTransactions) {
-            stockDao.getAllTransactions().first()
+            importedCodes
+                .chunked(SQLITE_IN_CHUNK_SIZE)
+                .flatMap { stockDao.getTransactionsForStockCodes(it) }
         } else {
             emptyList()
         }
         val validationTransactions = assignProvisionalImportIds(
-            existingTransactions = existingTransactions,
+            maxExistingId = if (includeExistingTransactions) stockDao.getMaxTransactionId() else 0,
             importedTransactions = transactions.map { it.transaction }
         )
         val validationRows = transactions.zip(validationTransactions) { csvTransaction, transaction ->
@@ -1143,20 +1146,23 @@ class SettingsViewModel(
             .validate(existingTransactions + validationTransactions)
             ?.let { error -> throw Exception("$error，匯入被拒絕。") }
 
-        val importedCodes = validationRows.map { it.stockCode }.distinct()
         val existingStocksByCode = importedCodes
             .chunked(SQLITE_IN_CHUNK_SIZE)
             .flatMap { stockDao.getStocksByCodesForImportRepair(it) }
             .groupBy { it.code.trim().uppercase() }
 
+        val importedRowsByStockKey = validationRows.groupBy {
+            StockKey(it.market, it.stockCode).cacheKey()
+        }
+        val existingTransactionsByCode = existingTransactions.groupBy {
+            it.stockCode.trim().uppercase()
+        }
         val allStockKeys = validationRows
             .map { StockKey(it.market, it.stockCode) }
             .distinctBy { it.cacheKey() }
         for (stockKey in allStockKeys) {
             val code = stockKey.code
-            val importedForCode = validationRows.filter {
-                it.stockCode == code && StockMarket.normalize(it.market) == stockKey.normalizedMarket
-            }
+            val importedForCode = importedRowsByStockKey[stockKey.cacheKey()].orEmpty()
             // Keep CSV restore consistent with transaction entry: the ticker is the
             // source of truth, so an old master record or a stale CSV market value
             // cannot turn a Taiwan security into US (or vice versa).
@@ -1175,11 +1181,10 @@ class SettingsViewModel(
                 .singleOrNull()
                 ?.takeIf { !hasTargetStock && StockMarket.normalize(it.market) != stockKey.normalizedMarket }
                 ?.market
-            val existingTxs = existingTransactions
+            val existingTxs = existingTransactionsByCode[code.trim().uppercase()].orEmpty()
                 .filter {
-                    it.stockCode == code &&
-                        (StockMarket.normalize(it.market) == stockKey.normalizedMarket ||
-                            (marketRepairFrom != null && StockMarket.normalize(it.market) == StockMarket.normalize(marketRepairFrom)))
+                    StockMarket.normalize(it.market) == stockKey.normalizedMarket ||
+                        (marketRepairFrom != null && StockMarket.normalize(it.market) == StockMarket.normalize(marketRepairFrom))
                 }
                 .map { transaction ->
                     if (marketRepairFrom != null) transaction.copy(market = stockKey.normalizedMarket) else transaction

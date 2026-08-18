@@ -18,16 +18,26 @@ data class CsvTransaction(
 internal fun assignProvisionalImportIds(
     existingTransactions: List<StockTransaction>,
     importedTransactions: List<StockTransaction>
+): List<StockTransaction> = assignProvisionalImportIds(
+    maxExistingId = existingTransactions.maxOfOrNull { it.id }?.coerceAtLeast(0) ?: 0,
+    importedTransactions = importedTransactions
+)
+
+internal fun assignProvisionalImportIds(
+    maxExistingId: Int,
+    importedTransactions: List<StockTransaction>
 ): List<StockTransaction> {
-    val maxExistingId = existingTransactions.maxOfOrNull { it.id }?.coerceAtLeast(0) ?: 0
+    val baseId = maxExistingId.coerceAtLeast(0).toLong()
     return importedTransactions.mapIndexed { index, transaction ->
-        val provisionalId = maxExistingId.toLong() + index + 1L
+        val provisionalId = baseId + index + 1L
         require(provisionalId <= Int.MAX_VALUE) { "交易筆數過多，無法建立穩定匯入順序" }
         transaction.copy(id = provisionalId.toInt())
     }
 }
 
 class CsvService {
+
+    private val csvSplitRegex = ",(?=([^\"]*\"[^\"]*\")*[^\"]*$)".toRegex()
 
     private val csvHeader = listOf(
         "id", "交易", "交易稅", "帳戶ID", "市場", "手續費", "支出", "收入", "日期",
@@ -126,46 +136,54 @@ class CsvService {
     }
 
     private fun parseCsvLine(line: String): List<String> {
-        val csvSplitRegex = ",(?=([^\"]*\"[^\"]*\")*[^\"]*$)".toRegex()
         return line.split(csvSplitRegex)
             .map { it.trim().removeSurrounding("\"").replace("\"\"", "\"") }
     }
 
     fun import(inputStream: InputStream): List<CsvTransaction> {
-        val lines = inputStream.bufferedReader().readLines()
-        if (lines.isEmpty()) return listOf()
+        return inputStream.bufferedReader(Charsets.UTF_8).useLines { lines ->
+            val iterator = lines.iterator()
+            if (!iterator.hasNext()) return@useLines emptyList()
 
-        val headerValues = parseCsvLine(lines.first())
-        val headerMap = headerValues.mapIndexed { index, s -> s to index }.toMap()
-        val requiredHeaders = listOf(
-            "交易", "交易稅", "帳戶ID", "手續費", "支出", "收入", "日期",
-            "現金股利", "紀錄時間", "股名", "股票股利", "股號",
-            "買進價格", "買進股數", "賣出價格", "賣出股數",
-            "配發股數", "除息股數", "除權股數", "股息收入",
-            "減資比例", "減資前股數", "減資後股數", "減資返還現金",
-            "拆分比例", "拆分前股數", "拆分後股數"
-        )
-        val missingHeaders = requiredHeaders.filterNot(headerMap::containsKey)
-        require(missingHeaders.isEmpty()) {
-            "CSV 缺少必要欄位：${missingHeaders.joinToString("、")}"
-        }
-
-        return lines.drop(1).mapIndexedNotNull { index, line ->
-            if (line.isBlank()) return@mapIndexedNotNull null
-            try {
-                val values = parseCsvLine(line)
-                val transaction = parseTransaction(values, headerMap)
-                val market = parseMarket(values, headerMap, transaction.stockCode)
-                CsvTransaction(
-                    stockName = values[headerMap["股名"]!!].trim(),
-                    stockCode = transaction.stockCode,
-                    market = market,
-                    transaction = transaction.copy(market = market)
-                )
-            } catch (e: Exception) {
-                val reason = e.message?.takeIf { it.isNotBlank() }?.let { "：$it" }.orEmpty()
-                throw IllegalArgumentException("CSV 第 ${index + 2} 列格式錯誤$reason", e)
+            val headerValues = parseCsvLine(iterator.next()).mapIndexed { index, value ->
+                if (index == 0) value.removePrefix("\uFEFF") else value
             }
+            val headerMap = headerValues.mapIndexed { index, s -> s to index }.toMap()
+            val requiredHeaders = listOf(
+                "交易", "交易稅", "帳戶ID", "手續費", "支出", "收入", "日期",
+                "現金股利", "紀錄時間", "股名", "股票股利", "股號",
+                "買進價格", "買進股數", "賣出價格", "賣出股數",
+                "配發股數", "除息股數", "除權股數", "股息收入",
+                "減資比例", "減資前股數", "減資後股數", "減資返還現金",
+                "拆分比例", "拆分前股數", "拆分後股數"
+            )
+            val missingHeaders = requiredHeaders.filterNot(headerMap::containsKey)
+            require(missingHeaders.isEmpty()) {
+                "CSV 缺少必要欄位：${missingHeaders.joinToString("、")}"
+            }
+
+            val importedTransactions = ArrayList<CsvTransaction>()
+            var lineNumber = 1
+            while (iterator.hasNext()) {
+                val line = iterator.next()
+                lineNumber++
+                if (line.isBlank()) continue
+                try {
+                    val values = parseCsvLine(line)
+                    val transaction = parseTransaction(values, headerMap)
+                    val market = parseMarket(values, headerMap, transaction.stockCode)
+                    importedTransactions += CsvTransaction(
+                        stockName = values[headerMap["股名"]!!].trim(),
+                        stockCode = transaction.stockCode,
+                        market = market,
+                        transaction = transaction.copy(market = market)
+                    )
+                } catch (e: Exception) {
+                    val reason = e.message?.takeIf { it.isNotBlank() }?.let { "：$it" }.orEmpty()
+                    throw IllegalArgumentException("CSV 第 $lineNumber 列格式錯誤$reason", e)
+                }
+            }
+            importedTransactions
         }
     }
 
