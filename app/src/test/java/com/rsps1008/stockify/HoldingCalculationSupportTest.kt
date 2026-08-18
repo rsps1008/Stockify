@@ -3,6 +3,8 @@ package com.rsps1008.stockify
 import com.rsps1008.stockify.data.HoldingCalculationSupport
 import com.rsps1008.stockify.data.StockTransaction
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class HoldingCalculationSupportTest {
@@ -316,5 +318,80 @@ class HoldingCalculationSupportTest {
         assertEquals(47_700.0, summary.totalSellIncome, 0.0)
         assertEquals(48_000.0, summary.sellAmountBeforeFee, 0.0)
         assertEquals(1_000.0, summary.totalDividendIncome, 0.0)
+    }
+
+    @Test
+    fun validateLongPositionBalancesRejectsAnOversell() {
+        val transactions = listOf(
+            StockTransaction(
+                stockCode = "2330",
+                accountId = 1,
+                date = 1L,
+                recordTime = 1L,
+                type = "買進",
+                buyShares = 100.0
+            ),
+            StockTransaction(
+                stockCode = "2330",
+                accountId = 1,
+                date = 2L,
+                recordTime = 2L,
+                type = "賣出",
+                sellShares = 101.0
+            )
+        )
+
+        assertNotNull(HoldingCalculationSupport.validateLongPositionBalances(transactions))
+    }
+
+    @Test
+    fun validateLongPositionBalancesRejectsSellBeforeBuyAndKeepsAccountScopesSeparate() {
+        val sellBeforeBuy = listOf(
+            StockTransaction(
+                stockCode = "2330",
+                accountId = 1,
+                date = 1L,
+                recordTime = 1L,
+                type = "賣出",
+                sellShares = 1.0
+            ),
+            StockTransaction(
+                stockCode = "2330",
+                accountId = 1,
+                date = 2L,
+                recordTime = 2L,
+                type = "買進",
+                buyShares = 1.0
+            )
+        )
+        val separateAccounts = listOf(
+            StockTransaction(
+                stockCode = "2330",
+                accountId = 1,
+                date = 1L,
+                recordTime = 1L,
+                type = "買進",
+                buyShares = 1.0
+            ),
+            StockTransaction(
+                stockCode = "2330",
+                accountId = 2,
+                date = 1L,
+                recordTime = 1L,
+                type = "買進",
+                buyShares = 1.0
+            ),
+            StockTransaction(
+                stockCode = "2330",
+                accountId = 2,
+                date = 2L,
+                recordTime = 2L,
+                type = "賣出",
+                sellShares = 1.0
+            )
+        )
+
+        assertNotNull(HoldingCalculationSupport.validateLongPositionBalances(sellBeforeBuy))
+        assertNull(HoldingCalculationSupport.validateLongPositionBalances(separateAccounts))
     }
 }

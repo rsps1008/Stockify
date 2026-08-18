@@ -825,6 +825,9 @@ class AddTransactionViewModel(
         com.rsps1008.stockify.data.FinancingTransactionValidationSupport.validate(transactions)?.let {
             return it
         }
+        com.rsps1008.stockify.data.HoldingCalculationSupport
+            .validateLongPositionBalances(transactions)
+            ?.let { return it }
         if (!com.rsps1008.stockify.data.MarginCalculationSupport.hasValidRepaymentBalances(transactions)) {
             return "融資還款會超過批次剩餘本金，請調整交易日期或金額"
         }
@@ -843,6 +846,9 @@ class AddTransactionViewModel(
         com.rsps1008.stockify.data.FinancingTransactionValidationSupport.validate(remainingTransactions)?.let {
             return "變更帳戶後原帳戶的$it"
         }
+        com.rsps1008.stockify.data.HoldingCalculationSupport
+            .validateLongPositionBalances(remainingTransactions)
+            ?.let { return "變更帳戶後原帳戶的$it" }
         if (!com.rsps1008.stockify.data.MarginCalculationSupport.hasValidRepaymentBalances(remainingTransactions)) {
             return "變更帳戶後會破壞原帳戶的融資批次關聯"
         }

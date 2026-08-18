@@ -96,6 +96,52 @@ object HoldingCalculationSupport {
     }
 
     /**
+     * Validates the long position before a transaction list is persisted.
+     *
+     * The replay used for display remains tolerant of legacy data, but new
+     * writes must not create a negative long position and then rely on the
+     * display-side clamp to hide it.  The key intentionally includes both
+     * stock and account because the same list can contain multiple scopes
+     * during import or all-account validation.
+     */
+    fun validateLongPositionBalances(transactions: List<StockTransaction>): String? {
+        val positions = mutableMapOf<PositionKey, Double>()
+        val orderedTransactions = transactions.sortedWith(
+            compareBy<StockTransaction> { it.date }
+                .thenBy { it.recordTime }
+                .thenBy { it.id }
+        )
+
+        for (transaction in orderedTransactions) {
+            val key = PositionKey(transaction.stockCode, transaction.accountId)
+            val currentShares = positions[key] ?: 0.0
+            val nextShares = when (transaction.type) {
+                "買進", "融資買進" -> currentShares + transaction.buyShares
+                "賣出" -> {
+                    if (!transaction.sellShares.isFinite() || transaction.sellShares < 0.0) {
+                        return "賣出股數必須是非負的有效數字"
+                    }
+                    if (currentShares + POSITION_EPSILON < transaction.sellShares) {
+                        return "賣出股數超過交易當下可用持股"
+                    }
+                    currentShares - transaction.sellShares
+                }
+                "配股" -> currentShares + transaction.dividendShares
+                "減資" -> currentShares + capitalReductionShareChange(transaction, currentShares)
+                "分割" -> currentShares + splitShareChange(transaction, currentShares)
+                else -> currentShares
+            }
+
+            if (!nextShares.isFinite() || nextShares < -POSITION_EPSILON) {
+                return "交易回放後的持股數無效"
+            }
+            positions[key] = nextShares.coerceAtLeast(0.0)
+        }
+
+        return null
+    }
+
+    /**
      * Applies a split to the shares that were actually recorded for that event.
      * Older CSV backups may only contain the ratio, so they fall back to the
      * current holding at the time of the event.

@@ -62,6 +62,12 @@ class TransactionDetailViewModel(transactionId: Int, private val stockDao: Stock
                 onResult("刪除後會造成融券餘額或批次關聯錯誤，無法刪除")
                 return@launch
             }
+            com.rsps1008.stockify.data.HoldingCalculationSupport
+                .validateLongPositionBalances(remainingTransactions)
+                ?.let {
+                    onResult("刪除後會造成多頭持股餘額錯誤，無法刪除")
+                    return@launch
+                }
             stockDao.deleteTransaction(current)
             onResult(null)
         }

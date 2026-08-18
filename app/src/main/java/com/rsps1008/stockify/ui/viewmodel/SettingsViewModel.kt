@@ -1153,6 +1153,9 @@ class SettingsViewModel(
                 com.rsps1008.stockify.data.FinancingTransactionValidationSupport.validate(accountTxs)?.let { error ->
                     throw Exception("股票 $code 的$error，匯入被拒絕。")
                 }
+                com.rsps1008.stockify.data.HoldingCalculationSupport
+                    .validateLongPositionBalances(accountTxs)
+                    ?.let { error -> throw Exception("股票 $code 的$error，匯入被拒絕。") }
                 if (!com.rsps1008.stockify.data.MarginCalculationSupport.hasValidRepaymentBalances(accountTxs)) {
                     throw Exception("股票 $code 包含超過剩餘本金的融資還款，匯入被拒絕。")
                 }
