@@ -7,7 +7,6 @@ import com.rsps1008.stockify.ui.screens.TransactionUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 
@@ -39,6 +38,8 @@ class OfflineStockRepository(
             settingsDataStore.homeDisplayModeFlow,
             settingsDataStore.returnRateModeFlow,
             settingsDataStore.marginDayCountFlow,
+            settingsDataStore.feeDiscountFlow,
+            settingsDataStore.minFeeRegularFlow,
         ) { values ->
             val stocks = values[0] as List<Stock>
             val allTransactions = values[1] as List<StockTransaction>
@@ -48,6 +49,8 @@ class OfflineStockRepository(
             val homeDisplayMode = values[5] as String
             val returnRateMode = values[6] as ReturnRateMode
             val marginDayCount = values[7] as Int
+            val feeDiscount = values[8] as Double
+            val minFeeRegular = values[9] as Int
             val transactions = allTransactions
 
             val currentDateMillis = System.currentTimeMillis()
@@ -63,7 +66,7 @@ class OfflineStockRepository(
                 else -> transactedStocks
             }
 
-            suspend fun calculateHoldingInfoFor(stock: Stock): HoldingInfo {
+            fun calculateHoldingInfoFor(stock: Stock): HoldingInfo {
                 val realtime = realTimeData[stock.code]
                 val stockTransactions = transactionsByStock[stock.code].orEmpty()
                 val currentPrice = realTimeData[stock.code]?.currentPrice ?: 0.0
@@ -78,6 +81,8 @@ class OfflineStockRepository(
                     dailyChangePercentage = dailyChangePercentage,
                     limitState = limitState,
                     preDeductSellFees = preDeductSellFees,
+                    feeDiscount = feeDiscount,
+                    minFeeRegular = minFeeRegular,
                     returnRateMode = returnRateMode,
                     currentDateMillis = currentDateMillis,
                     marginDayCount = marginDayCount
@@ -135,10 +140,11 @@ class OfflineStockRepository(
                 ReturnRateMode.REMAINING_POSITION,
                 ReturnRateMode.CUMULATIVE_INVESTMENT -> if (totalInvestment > 0) (cumulativePL / totalInvestment) * 100 else 0.0
                 ReturnRateMode.XIRR -> {
+                    val holdingSharesByCode = holdingInfos.associate { it.stock.code to it.shares }
                     val portfolioCashFlows = filteredStocks.flatMap { stock ->
                         val stockTransactions = transactionsByStock[stock.code].orEmpty()
                         val currentPrice = realTimeData[stock.code]?.currentPrice ?: 0.0
-                        val shares = holdingInfos.firstOrNull { it.stock.code == stock.code }?.shares ?: 0.0
+                        val shares = holdingSharesByCode[stock.code] ?: 0.0
                         val rate = if (summaryIsCombined && StockMarket.isUs(stock.market)) usdToTwdRate else 1.0
                 buildCashFlowsForStock(stockTransactions, currentPrice, shares, currentDateMillis, rate, marginDayCount)
                     }
@@ -183,7 +189,9 @@ class OfflineStockRepository(
             realtimeStockDataService.realtimeStockInfo,
             settingsDataStore.preDeductSellFeesFlow,
             settingsDataStore.returnRateModeFlow,
-            settingsDataStore.marginDayCountFlow
+            settingsDataStore.marginDayCountFlow,
+            settingsDataStore.feeDiscountFlow,
+            settingsDataStore.minFeeRegularFlow
         ) { values ->
             val stock = values[0] as Stock?
             val transactions = values[1] as List<StockTransaction>
@@ -191,6 +199,8 @@ class OfflineStockRepository(
             val preDeductSellFees = values[3] as Boolean
             val returnRateMode = values[4] as ReturnRateMode
             val marginDayCount = values[5] as Int
+            val feeDiscount = values[6] as Double
+            val minFeeRegular = values[7] as Int
             stock?.let {
                 val realtime = realTimeData[stock.code]
                 val currentPrice = realTimeData[it.code]?.currentPrice ?: 0.0
@@ -205,6 +215,8 @@ class OfflineStockRepository(
                     dailyChangePercentage = dailyChangePercentage,
                     limitState = limitState,
                     preDeductSellFees = preDeductSellFees,
+                    feeDiscount = feeDiscount,
+                    minFeeRegular = minFeeRegular,
                     returnRateMode = returnRateMode,
                     currentDateMillis = System.currentTimeMillis(),
                     marginDayCount = marginDayCount
@@ -231,7 +243,7 @@ class OfflineStockRepository(
         }
     }
 
-    private suspend fun calculateHoldingInfo(
+    private fun calculateHoldingInfo(
         stock: Stock,
         transactions: List<StockTransaction>,
         currentPrice: Double,
@@ -239,6 +251,8 @@ class OfflineStockRepository(
         dailyChangePercentage: Double,
         limitState: LimitState,
         preDeductSellFees: Boolean,
+        feeDiscount: Double,
+        minFeeRegular: Int,
         returnRateMode: ReturnRateMode,
         currentDateMillis: Long,
         marginDayCount: Int
@@ -293,9 +307,6 @@ class OfflineStockRepository(
         var totalPL = marketValue - costBasis
 
         if (preDeductSellFees && marketValue > 0.0 && !StockMarket.isUs(stock.market)) {
-            val feeDiscount = settingsDataStore.feeDiscountFlow.first()
-            val minFeeRegular = settingsDataStore.minFeeRegularFlow.first()
-
             val sellFee = (marketValue * 0.001425 * feeDiscount).coerceAtLeast(minFeeRegular.toDouble())
             val taxRate = if (stock.stockType == "ETF") 0.001 else 0.003
             val sellTax = marketValue * taxRate
