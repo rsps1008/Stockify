@@ -2,33 +2,76 @@ package com.rsps1008.stockify.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.StockDao
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.ui.screens.TransactionUiState
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
+sealed interface TransactionDetailState {
+    object Loading : TransactionDetailState
+    object Missing : TransactionDetailState
+    data class Ready(val value: TransactionUiState) : TransactionDetailState
+}
+
+internal fun buildTransactionDetailState(
+    transaction: StockTransaction?,
+    stock: Stock?
+): TransactionDetailState = if (transaction == null || stock == null) {
+    TransactionDetailState.Missing
+} else {
+    TransactionDetailState.Ready(
+        TransactionUiState(
+            transaction = transaction,
+            stockName = stock.name,
+            market = stock.market
+        )
+    )
+}
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TransactionDetailViewModel(transactionId: Int, private val stockDao: StockDao) : ViewModel() {
 
-    private val transaction: StateFlow<StockTransaction?> = stockDao.getTransactionById(transactionId)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
+    private sealed interface TransactionRecordState {
+        object Loading : TransactionRecordState
+        object Missing : TransactionRecordState
+        data class Present(val transaction: StockTransaction) : TransactionRecordState
+    }
 
-    val transactionUiState: StateFlow<TransactionUiState?> = transaction.filterNotNull().flatMapLatest { tx ->
-        stockDao.getStockByCodeFlow(tx.stockCode, tx.market).filterNotNull().map { stock ->
-            TransactionUiState(tx, stock.name, stock.market)
+    private val transactionState: StateFlow<TransactionRecordState> = stockDao.getTransactionById(transactionId)
+        .map { transaction ->
+            transaction?.let(TransactionRecordState::Present) ?: TransactionRecordState.Missing
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), TransactionRecordState.Loading)
 
-    val canModifyTransaction: StateFlow<Boolean> = transaction.filterNotNull().flatMapLatest { tx ->
+    val transactionDetailState: StateFlow<TransactionDetailState> = transactionState
+        .flatMapLatest { recordState ->
+            when (recordState) {
+                TransactionRecordState.Loading -> flowOf(TransactionDetailState.Loading)
+                TransactionRecordState.Missing -> flowOf(TransactionDetailState.Missing)
+                is TransactionRecordState.Present -> {
+                    val transaction = recordState.transaction
+                    stockDao.getStockByCodeFlow(transaction.stockCode, transaction.market)
+                        .map { stock -> buildTransactionDetailState(transaction, stock) }
+                }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), TransactionDetailState.Loading)
+
+    val canModifyTransaction: StateFlow<Boolean> = transactionState.flatMapLatest { recordState ->
+        val tx = (recordState as? TransactionRecordState.Present)?.transaction
+        if (tx == null) {
+            return@flatMapLatest flowOf(false)
+        }
         val marginDependents = tx.marginLotId.takeIf { it.isNotBlank() }
             ?.let { lotId ->
                 stockDao.getMarginRepaymentsForLot(lotId, tx.stockCode, tx.market, tx.accountId)
@@ -46,10 +89,16 @@ class TransactionDetailViewModel(transactionId: Int, private val stockDao: Stock
 
     fun deleteTransaction(onResult: (String?) -> Unit) {
         viewModelScope.launch {
-            val current = transaction.value
-            if (current == null) {
-                onResult("交易資料尚未載入完成")
-                return@launch
+            val current = when (val recordState = transactionState.value) {
+                TransactionRecordState.Loading -> {
+                    onResult("交易資料尚未載入完成")
+                    return@launch
+                }
+                TransactionRecordState.Missing -> {
+                    onResult("找不到這筆交易")
+                    return@launch
+                }
+                is TransactionRecordState.Present -> recordState.transaction
             }
             val remainingTransactions = stockDao.getTransactionsForStock(current.stockCode, current.market)
                 .first()

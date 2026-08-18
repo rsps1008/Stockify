@@ -1,14 +1,20 @@
 package com.rsps1008.stockify.ui.screens
 
+import android.widget.Toast
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -24,17 +30,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
-import android.widget.Toast
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.rsps1008.stockify.StockifyApplication
 import com.rsps1008.stockify.ui.navigation.Screen
 import com.rsps1008.stockify.ui.theme.StockifyAppTheme
 import com.rsps1008.stockify.ui.viewmodel.TransactionDetailViewModel
+import com.rsps1008.stockify.ui.viewmodel.TransactionDetailState
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import com.rsps1008.stockify.data.formatMarketAmount
 import com.rsps1008.stockify.data.formatShareCount
@@ -50,7 +58,7 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
     val viewModel: TransactionDetailViewModel = viewModel(
         factory = ViewModelFactory(application.database.stockDao(), transactionId = transactionId)
     )
-    val transactionUiState by viewModel.transactionUiState.collectAsState()
+    val transactionDetailState by viewModel.transactionDetailState.collectAsState()
     val canModifyTransaction by viewModel.canModifyTransaction.collectAsState()
     var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -93,12 +101,15 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showDeleteDialog = true }, enabled = canModifyTransaction) {
+                    IconButton(
+                        onClick = { showDeleteDialog = true },
+                        enabled = transactionDetailState is TransactionDetailState.Ready && canModifyTransaction
+                    ) {
                         Icon(Icons.Filled.Delete, contentDescription = "Delete")
                     }
                     IconButton(
                         onClick = { navController.navigate(Screen.AddTransaction.createRoute(transactionId)) },
-                        enabled = canModifyTransaction
+                        enabled = transactionDetailState is TransactionDetailState.Ready && canModifyTransaction
                     ) {
                         Icon(Icons.Filled.Edit, contentDescription = "Edit")
                     }
@@ -106,19 +117,31 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
             )
         }
     ) { paddingValues ->
-        transactionUiState?.let { uiState ->
-            val transaction = uiState.transaction
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(16.dp)
-            ) {
-                DetailRow(label = "股票", value = uiState.stockName)
-                DetailRow(label = "日期", value = SimpleDateFormat("yyyy/MM/dd", locale).format(Date(transaction.date)))
-                DetailRow(label = "交易", value = transaction.type)
+        when (val state = transactionDetailState) {
+            TransactionDetailState.Loading -> TransactionDetailStatusContent(
+                paddingValues = paddingValues,
+                isMissing = false,
+                onBack = { navController.popBackStack() }
+            )
+            TransactionDetailState.Missing -> TransactionDetailStatusContent(
+                paddingValues = paddingValues,
+                isMissing = true,
+                onBack = { navController.popBackStack() }
+            )
+            is TransactionDetailState.Ready -> {
+                val uiState = state.value
+                val transaction = uiState.transaction
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues)
+                        .padding(16.dp)
+                ) {
+                    DetailRow(label = "股票", value = uiState.stockName)
+                    DetailRow(label = "日期", value = SimpleDateFormat("yyyy/MM/dd", locale).format(Date(transaction.date)))
+                    DetailRow(label = "交易", value = transaction.type)
 
-                when (transaction.type) {
+                    when (transaction.type) {
                     "買進", "融資買進" -> {
                         DetailRow(label = "買進價格", value = String.format(Locale.US, "%,.2f", transaction.buyPrice))
                         DetailRow(label = "買進股數", value = formatShareCount(transaction.buyShares))
@@ -192,11 +215,42 @@ fun TransactionDetailScreen(transactionId: Int, navController: NavController) {
                         DetailRow(label = "補償金額", value = formatMarketAmount(transaction.shortCompensation, uiState.market), valueColor = StockifyAppTheme.stockColors.loss)
                         DetailRow(label = "融券批次", value = formatLotId(transaction.shortCompensationLotId))
                     }
-                }
-                if (transaction.note.isNotBlank()) {
-                    DetailRow(label = "交易筆記", value = transaction.note)
+                    }
+                    if (transaction.note.isNotBlank()) {
+                        DetailRow(label = "交易筆記", value = transaction.note)
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun TransactionDetailStatusContent(
+    paddingValues: PaddingValues,
+    isMissing: Boolean,
+    onBack: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(paddingValues)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        if (isMissing) {
+            Text("找不到這筆交易", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("這筆交易可能已被刪除，或已由還原作業取代。")
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(onClick = onBack) {
+                Text("返回")
+            }
+        } else {
+            CircularProgressIndicator()
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("載入交易資料中…")
         }
     }
 }
