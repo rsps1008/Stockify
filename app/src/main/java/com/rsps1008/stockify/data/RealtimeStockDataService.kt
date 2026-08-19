@@ -33,7 +33,9 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.json.Json
 import java.time.LocalDate
 import java.time.LocalTime
@@ -50,6 +52,21 @@ internal fun mergeRealtimeStockInfoMaps(
 }
 
 private const val STOCK_LOOKUP_CHUNK_SIZE = 500
+internal const val MAX_PARALLEL_STOCK_REQUESTS = 3
+
+internal suspend fun <T, R> mapWithStockRequestLimit(
+    items: Iterable<T>,
+    transform: suspend (T) -> R
+): List<R> = coroutineScope {
+    val semaphore = Semaphore(MAX_PARALLEL_STOCK_REQUESTS)
+    items.map { item ->
+        async(Dispatchers.IO) {
+            semaphore.withPermit {
+                transform(item)
+            }
+        }
+    }.awaitAll()
+}
 
 private fun normalizeRealtimeCache(
     cachedData: Map<String, RealtimeStockInfo>,
@@ -78,6 +95,7 @@ class RealtimeStockDataService(
     private val _realtimeStockInfo = MutableStateFlow<Map<String, RealtimeStockInfo>>(emptyMap())
     val realtimeStockInfo: StateFlow<Map<String, RealtimeStockInfo>> = _realtimeStockInfo.asStateFlow()
     private val realtimeInfoMutex = Mutex()
+    private val quoteRefreshMutex = Mutex()
 
     private var fetchJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
@@ -227,24 +245,32 @@ class RealtimeStockDataService(
         forceSave: Boolean = false,
         refreshRegardlessOfMarketOpen: Boolean = false
     ) {
-        try {
-            fetchAllStockInfo(
-                isContinuous = isContinuous,
-                forceSave = forceSave,
-                refreshRegardlessOfMarketOpen = refreshRegardlessOfMarketOpen
-            )
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.e("RealtimeStockDataService", "Quote refresh failed; keeping previous data", e)
+        if (!quoteRefreshMutex.tryLock()) {
+            Log.d("RealtimeStockDataService", "Skipping overlapping quote refresh")
+            return
         }
-
         try {
-            refreshTaiwanWeightedIndex(refreshRegardlessOfMarketOpen = refreshRegardlessOfMarketOpen)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.e("RealtimeStockDataService", "Taiwan weighted index refresh failed", e)
+            try {
+                fetchAllStockInfo(
+                    isContinuous = isContinuous,
+                    forceSave = forceSave,
+                    refreshRegardlessOfMarketOpen = refreshRegardlessOfMarketOpen
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("RealtimeStockDataService", "Quote refresh failed; keeping previous data", e)
+            }
+
+            try {
+                refreshTaiwanWeightedIndex(refreshRegardlessOfMarketOpen = refreshRegardlessOfMarketOpen)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("RealtimeStockDataService", "Taiwan weighted index refresh failed", e)
+            }
+        } finally {
+            quoteRefreshMutex.unlock()
         }
     }
 
@@ -285,48 +311,44 @@ class RealtimeStockDataService(
                     ) {
                         val batchOutcome = fetchTwseBatchSafely(marketStocks)
                         val twseInfos = batchOutcome.infos
-                        marketStocks.map { stock ->
-                            async(Dispatchers.IO) {
-                                val twseInfo = twseInfos[stock.code]
-                                val outcome = if (twseInfo != null) {
-                                    FetchOutcome(info = twseInfo, fallbackUsed = false)
-                                } else {
-                                    val fallback = fetchWithFetcher(yahooFetcher, stock.code, stock.stockType)
-                                    fallback.copy(
-                                        fallbackUsed = true,
-                                        certificateFailure = fallback.certificateFailure || batchOutcome.certificateFailure
-                                    )
-                                }
-                                FetchResult(
-                                    key = stock.toStockKey().cacheKey(),
-                                    code = stock.code,
-                                    info = outcome.info,
-                                    fallbackUsed = outcome.fallbackUsed,
-                                    certificateFailure = outcome.certificateFailure
+                        mapWithStockRequestLimit(marketStocks) { stock ->
+                            val twseInfo = twseInfos[stock.code]
+                            val outcome = if (twseInfo != null) {
+                                FetchOutcome(info = twseInfo, fallbackUsed = false)
+                            } else {
+                                val fallback = fetchWithFetcher(yahooFetcher, stock.code, stock.stockType)
+                                fallback.copy(
+                                    fallbackUsed = true,
+                                    certificateFailure = fallback.certificateFailure || batchOutcome.certificateFailure
                                 )
                             }
+                            FetchResult(
+                                key = stock.toStockKey().cacheKey(),
+                                code = stock.code,
+                                info = outcome.info,
+                                fallbackUsed = outcome.fallbackUsed,
+                                certificateFailure = outcome.certificateFailure
+                            )
                         }
                     } else {
-                        marketStocks.map { stock ->
-                            async(Dispatchers.IO) {
-                                val outcome = fetchStockInfoForMarket(
-                                    stockCode = stock.code,
-                                    market = market,
-                                    exchange = exchange,
-                                    stockType = stock.stockType
-                                )
-                                FetchResult(
-                                    key = stock.toStockKey().cacheKey(),
-                                    code = stock.code,
-                                    info = outcome.info,
-                                    fallbackUsed = outcome.fallbackUsed,
-                                    certificateFailure = outcome.certificateFailure
-                                )
-                            }
+                        mapWithStockRequestLimit(marketStocks) { stock ->
+                            val outcome = fetchStockInfoForMarket(
+                                stockCode = stock.code,
+                                market = market,
+                                exchange = exchange,
+                                stockType = stock.stockType
+                            )
+                            FetchResult(
+                                key = stock.toStockKey().cacheKey(),
+                                code = stock.code,
+                                info = outcome.info,
+                                fallbackUsed = outcome.fallbackUsed,
+                                certificateFailure = outcome.certificateFailure
+                            )
                         }
                     }
                 }
-            }.awaitAll()
+            }
         }
 
         val fallbackCount = results.count { it.fallbackUsed }
@@ -411,33 +433,25 @@ class RealtimeStockDataService(
             certificateFailure = batchOutcome.certificateFailure
 
             val missingStocks = batchableTaiwanStocks.filter { it.code !in twseInfos }
-            coroutineScope {
-                missingStocks.map { stock ->
-                    async(Dispatchers.IO) {
-                        stock.toStockKey().cacheKey() to fetchWithFetcher(yahooFetcher, stock.code, stock.stockType)
-                    }
-                }.awaitAll().forEach { (key, outcome) ->
-                    certificateFailure = certificateFailure || outcome.certificateFailure
-                    outcome.info?.let { fetchedInfos[key] = it }
-                }
+            mapWithStockRequestLimit(missingStocks) { stock ->
+                stock.toStockKey().cacheKey() to fetchWithFetcher(yahooFetcher, stock.code, stock.stockType)
+            }.forEach { (key, outcome) ->
+                certificateFailure = certificateFailure || outcome.certificateFailure
+                outcome.info?.let { fetchedInfos[key] = it }
             }
         }
 
         val remainingStocks = stocks.filterNot { it in batchableTaiwanStocks }
-        coroutineScope {
-            remainingStocks.map { stock ->
-                async(Dispatchers.IO) {
-                    stock.toStockKey().cacheKey() to fetchStockInfoForMarket(
-                        stock.code,
-                        StockMarket.normalize(stock.market),
-                        StockExchange.normalize(stock.exchange),
-                        stock.stockType
-                    )
-                }
-            }.awaitAll().forEach { (key, outcome) ->
-                certificateFailure = certificateFailure || outcome.certificateFailure
-                outcome.info?.let { fetchedInfos[key] = it }
-            }
+        mapWithStockRequestLimit(remainingStocks) { stock ->
+            stock.toStockKey().cacheKey() to fetchStockInfoForMarket(
+                stock.code,
+                StockMarket.normalize(stock.market),
+                StockExchange.normalize(stock.exchange),
+                stock.stockType
+            )
+        }.forEach { (key, outcome) ->
+            certificateFailure = certificateFailure || outcome.certificateFailure
+            outcome.info?.let { fetchedInfos[key] = it }
         }
 
         if (certificateFailure) {

@@ -1,12 +1,35 @@
 package com.rsps1008.stockify
 
 import com.rsps1008.stockify.data.RealtimeStockInfo
+import com.rsps1008.stockify.data.MAX_PARALLEL_STOCK_REQUESTS
+import com.rsps1008.stockify.data.mapWithStockRequestLimit
 import com.rsps1008.stockify.data.mergeRealtimeStockInfoMaps
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RealtimeStockDataServiceTest {
+
+    @Test
+    fun mapWithStockRequestLimit_neverExceedsConfiguredParallelism() = runBlocking {
+        val activeRequests = AtomicInteger(0)
+        val peakRequests = AtomicInteger(0)
+
+        val results = mapWithStockRequestLimit((1..12).toList()) { value ->
+            val active = activeRequests.incrementAndGet()
+            peakRequests.updateAndGet { peak -> maxOf(peak, active) }
+            delay(25)
+            activeRequests.decrementAndGet()
+            value * 2
+        }
+
+        assertEquals((1..12).map { it * 2 }, results)
+        assertTrue(peakRequests.get() <= MAX_PARALLEL_STOCK_REQUESTS)
+        assertTrue(peakRequests.get() > 1)
+    }
 
     @Test
     fun mergeRealtimeStockInfoMapsPreservesConcurrentKeysAndReplacesUpdatedKeys() {
