@@ -72,6 +72,21 @@ data class DownloadBackupFile(
     val modifiedAt: Long
 )
 
+internal fun requiredExistingTransactionKeysForImport(
+    importedStockKeys: List<StockKey>,
+    existingStocksByCode: Map<String, List<Stock>>
+): List<StockKey> = buildList {
+    addAll(importedStockKeys)
+    importedStockKeys.forEach { stockKey ->
+        existingStocksByCode[stockKey.normalizedCode]
+            ?.singleOrNull()
+            ?.takeIf { StockMarket.normalize(it.market) != stockKey.normalizedMarket }
+            ?.let { legacyStock ->
+                add(StockKey(legacyStock.market, stockKey.code))
+            }
+    }
+}.distinctBy { it.cacheKey() }
+
 internal fun accountsForReplacementRestore(restoredAccounts: List<Account>): List<Account> {
     return restoredAccounts.ifEmpty { listOf(Account(id = 1, name = "預設帳戶")) }
 }
@@ -1128,11 +1143,27 @@ class SettingsViewModel(
         transactions: List<CsvTransaction>,
         includeExistingTransactions: Boolean
     ) {
-        val importedCodes = transactions.map { it.stockCode }.distinct()
-        val existingTransactions = if (includeExistingTransactions) {
+        val allStockKeys = transactions
+            .map { StockKey(it.market, it.stockCode) }
+            .distinctBy { it.cacheKey() }
+        val importedCodes = allStockKeys.map { it.normalizedCode }.distinct()
+        val existingStocksByCode = if (includeExistingTransactions) {
             importedCodes
                 .chunked(SQLITE_IN_CHUNK_SIZE)
-                .flatMap { stockDao.getTransactionsForStockCodes(it) }
+                .flatMap { stockDao.getStocksByCodesForImportRepair(it) }
+                .groupBy { it.code.trim().uppercase() }
+        } else {
+            emptyMap()
+        }
+        val existingTransactions = if (includeExistingTransactions) {
+            requiredExistingTransactionKeysForImport(allStockKeys, existingStocksByCode)
+                .groupBy { it.normalizedMarket }
+                .flatMap { (market, stockKeys) ->
+                    stockKeys
+                        .map { it.normalizedCode }
+                        .chunked(SQLITE_IN_CHUNK_SIZE)
+                        .flatMap { stockDao.getTransactionsForStockCodesAndMarket(market, it) }
+                }
         } else {
             emptyList()
         }
@@ -1147,20 +1178,12 @@ class SettingsViewModel(
             .validate(existingTransactions + validationTransactions)
             ?.let { error -> throw Exception("$error，匯入被拒絕。") }
 
-        val existingStocksByCode = importedCodes
-            .chunked(SQLITE_IN_CHUNK_SIZE)
-            .flatMap { stockDao.getStocksByCodesForImportRepair(it) }
-            .groupBy { it.code.trim().uppercase() }
-
         val importedRowsByStockKey = validationRows.groupBy {
             StockKey(it.market, it.stockCode).cacheKey()
         }
         val existingTransactionsByCode = existingTransactions.groupBy {
             it.stockCode.trim().uppercase()
         }
-        val allStockKeys = validationRows
-            .map { StockKey(it.market, it.stockCode) }
-            .distinctBy { it.cacheKey() }
         for (stockKey in allStockKeys) {
             val code = stockKey.code
             val importedForCode = importedRowsByStockKey[stockKey.cacheKey()].orEmpty()

@@ -84,8 +84,8 @@ interface StockDao {
     @Query("SELECT * FROM stock_transactions ORDER BY 日期 DESC, 紀錄時間 DESC, id DESC")
     fun getAllTransactions(): Flow<List<StockTransaction>>
 
-    @Query("SELECT * FROM stock_transactions WHERE 股號 IN (:stockCodes) ORDER BY 日期 DESC, 紀錄時間 DESC, id DESC")
-    suspend fun getTransactionsForStockCodes(stockCodes: List<String>): List<StockTransaction>
+    @Query("SELECT * FROM stock_transactions WHERE 市場 = :market AND 股號 IN (:stockCodes) ORDER BY 日期 DESC, 紀錄時間 DESC, id DESC")
+    suspend fun getTransactionsForStockCodesAndMarket(market: String, stockCodes: List<String>): List<StockTransaction>
 
     @Query("SELECT IFNULL(MAX(id), 0) FROM stock_transactions")
     suspend fun getMaxTransactionId(): Int

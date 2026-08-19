@@ -1,11 +1,38 @@
 package com.rsps1008.stockify
 
 import com.rsps1008.stockify.data.Account
+import com.rsps1008.stockify.data.Stock
+import com.rsps1008.stockify.data.StockKey
+import com.rsps1008.stockify.ui.viewmodel.requiredExistingTransactionKeysForImport
 import com.rsps1008.stockify.ui.viewmodel.accountsForReplacementRestore
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class SettingsImportSupportTest {
+
+    @Test
+    fun importValidationLoadsOnlyTargetMarketAndRequiredLegacyRepairMarket() {
+        val transactionKeys = requiredExistingTransactionKeysForImport(
+            importedStockKeys = listOf(
+                StockKey("TW", "2330"),
+                StockKey("US", "AAPL")
+            ),
+            existingStocksByCode = mapOf(
+                "2330" to listOf(Stock(name = "台積電 ADR 舊資料", code = "2330", market = "US")),
+                "AAPL" to listOf(Stock(name = "Apple", code = "AAPL", market = "US"))
+            )
+        )
+
+        assertEquals(
+            listOf(
+                StockKey("TW", "2330"),
+                StockKey("US", "AAPL"),
+                StockKey("US", "2330")
+            ),
+            transactionKeys
+        )
+    }
+
     @Test
     fun replacementRestoreUsesBackedUpAccountsInsteadOfAddingTheDefaultAccount() {
         val restoredAccounts = listOf(
