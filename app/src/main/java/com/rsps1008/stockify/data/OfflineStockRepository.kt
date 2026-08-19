@@ -17,6 +17,14 @@ class OfflineStockRepository(
     private val exchangeRateService: UsdTwdExchangeRateService
 ) : StockRepository {
 
+    private data class HoldingInfoSettings(
+        val preDeductSellFees: Boolean,
+        val returnRateMode: ReturnRateMode,
+        val marginDayCount: Int,
+        val feeDiscount: Double,
+        val minFeeRegular: Int
+    )
+
     private val valuationClock = valuationClockFlow()
 
     @Suppress("UNCHECKED_CAST")
@@ -205,26 +213,34 @@ class OfflineStockRepository(
             stockDao.getTransactionsForStockAndAccount(stockCode, normalizedMarket, accountId)
         }
 
-        return combine(
-            stockFlow,
-            transactionsFlow,
-            realtimeStockDataService.realtimeStockInfo,
+        val holdingInfoSettingsFlow = combine(
             settingsDataStore.preDeductSellFeesFlow,
             settingsDataStore.returnRateModeFlow,
             settingsDataStore.marginDayCountFlow,
             settingsDataStore.feeDiscountFlow,
-            settingsDataStore.minFeeRegularFlow,
+            settingsDataStore.minFeeRegularFlow
+        ) { preDeductSellFees, returnRateMode, marginDayCount, feeDiscount, minFeeRegular ->
+            HoldingInfoSettings(
+                preDeductSellFees = preDeductSellFees,
+                returnRateMode = returnRateMode,
+                marginDayCount = marginDayCount,
+                feeDiscount = feeDiscount,
+                minFeeRegular = minFeeRegular
+            )
+        }
+
+        return combine(
+            stockFlow,
+            transactionsFlow,
+            realtimeStockDataService.realtimeStockInfo,
+            holdingInfoSettingsFlow,
             valuationClock
-        ) { values ->
-            val stock = values[0] as Stock?
-            val transactions = values[1] as List<StockTransaction>
-            val realTimeData = values[2] as Map<String, RealtimeStockInfo>
-            val preDeductSellFees = values[3] as Boolean
-            val returnRateMode = values[4] as ReturnRateMode
-            val marginDayCount = values[5] as Int
-            val feeDiscount = values[6] as Double
-            val minFeeRegular = values[7] as Int
-            val currentDateMillis = values[8] as Long
+        ) { stock, transactions, realTimeData, settings, currentDateMillis ->
+            val preDeductSellFees = settings.preDeductSellFees
+            val returnRateMode = settings.returnRateMode
+            val marginDayCount = settings.marginDayCount
+            val feeDiscount = settings.feeDiscount
+            val minFeeRegular = settings.minFeeRegular
             stock?.let {
                 val realtimeKey = it.toStockKey().cacheKey()
                 val realtime = realTimeData[realtimeKey]
