@@ -18,6 +18,7 @@ import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.HomeDisplayMode
 import com.rsps1008.stockify.data.HistoryChartCalculationSupport
 import com.rsps1008.stockify.data.HoldingCalculationSupport
+import com.rsps1008.stockify.data.LongPositionReplaySummary
 import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.toStockKey
 import com.rsps1008.stockify.data.UsdTwdExchangeRateService
@@ -45,6 +46,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -128,6 +130,102 @@ internal class PortfolioHistoryProgressTracker(private val stockCount: Int) {
     }
 }
 
+/**
+ * Advances the long-position replay once per historical date instead of
+ * replaying every preceding transaction for every chart point.
+ */
+internal class HistoricalLongPositionTimeline(transactions: List<StockTransaction>) {
+    private val orderedTransactions = transactions.sortedWith(
+        compareBy<StockTransaction> { it.date }
+            .thenBy { it.recordTime }
+            .thenBy { it.id }
+    )
+    private var nextIndex = 0
+    private var shares = 0.0
+    private var totalBuyExpense = 0.0
+    private var totalSellIncome = 0.0
+    private var totalSellNetIncome = 0.0
+    private var sellSharesTotal = 0.0
+    private var sellAmountBeforeFee = 0.0
+    private var totalDividendIncome = 0.0
+    private var buySharesTotal = 0.0
+    private var buyCostTotal = 0.0
+    var shortIncome = 0.0
+        private set
+    var shortCoverExpense = 0.0
+        private set
+    var hasMarginPurchase = false
+        private set
+
+    val hasMarginActivity = orderedTransactions.any { transaction ->
+        transaction.type == "融資買進" ||
+            transaction.marginRepaymentLotId.isNotBlank() ||
+            transaction.marginRepayment > 0.0 ||
+            transaction.marginActualInterest > 0.0
+    }
+    val hasShortActivity = orderedTransactions.any { transaction ->
+        transaction.type == "融券賣出" ||
+            transaction.type == "買券還券" ||
+            transaction.type == "融券補償"
+    }
+
+    fun advanceTo(valuationDate: Long): LongPositionReplaySummary {
+        while (nextIndex < orderedTransactions.size && orderedTransactions[nextIndex].date <= valuationDate) {
+            apply(orderedTransactions[nextIndex])
+            nextIndex++
+        }
+        return LongPositionReplaySummary(
+            shares = shares.coerceAtLeast(0.0),
+            totalBuyExpense = totalBuyExpense,
+            totalSellIncome = totalSellIncome,
+            totalSellNetIncome = totalSellNetIncome,
+            sellSharesTotal = sellSharesTotal,
+            sellAmountBeforeFee = sellAmountBeforeFee,
+            totalDividendIncome = totalDividendIncome,
+            buySharesTotal = buySharesTotal,
+            buyCostTotal = buyCostTotal
+        )
+    }
+
+    fun transactionsAtCurrentDate(): List<StockTransaction> = orderedTransactions.subList(0, nextIndex)
+
+    private fun apply(transaction: StockTransaction) {
+        when (transaction.type) {
+            "買進", "融資買進" -> {
+                shares += transaction.buyShares
+                buySharesTotal += transaction.buyShares
+                totalBuyExpense += transaction.expense
+                buyCostTotal += transaction.expense
+                if (transaction.type == "融資買進") {
+                    hasMarginPurchase = true
+                }
+            }
+            "賣出" -> {
+                shares -= transaction.sellShares
+                sellSharesTotal += transaction.sellShares
+                sellAmountBeforeFee += transaction.sellPrice * transaction.sellShares
+                totalSellIncome += transaction.income
+                totalSellNetIncome += transaction.income
+            }
+            "配股" -> shares += transaction.dividendShares
+            "配息" -> totalDividendIncome += HoldingCalculationSupport.resolveDividendIncome(transaction)
+            "減資" -> {
+                shares += HoldingCalculationSupport.capitalReductionShareChange(transaction, shares)
+                totalSellIncome += transaction.cashReturned
+            }
+            "分割" -> {
+                shares += HoldingCalculationSupport.splitShareChange(transaction, shares)
+                val splitFactor = HoldingCalculationSupport.splitShareFactor(transaction)
+                buySharesTotal *= splitFactor
+                sellSharesTotal *= splitFactor
+            }
+            "融券賣出" -> shortIncome += transaction.income
+            "買券還券" -> shortCoverExpense += transaction.expense
+        }
+    }
+}
+
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class HoldingsViewModel(
     private val settingsDataStore: SettingsDataStore,
     private val realtimeStockDataService: RealtimeStockDataService,
@@ -324,14 +422,28 @@ class HoldingsViewModel(
         HomeHistoryCalculationBundle(settings, displayMode, usdToTwdRate)
     }
 
+    private val historyTransactions = settingsDataStore.activeAccountIdFlow
+        .distinctUntilChanged()
+        .flatMapLatest { accountId ->
+            val transactions = if (accountId == 0) {
+                stockDao.getAllTransactions()
+            } else {
+                stockDao.getTransactionsForAccount(accountId)
+            }
+            transactions.map { accountId to it }
+        }
+
     val historyState: StateFlow<HistoryState> = combine(
         _historyStateInternal,
-        stockDao.getAllTransactions(),
+        historyTransactions,
         historyCalculationBundle,
         historyStocks,
         settingsDataStore.activeAccountIdFlow
-    ) { historyInternal, allTxs, calculationBundle, stocks, activeAccountId ->
+    ) { historyInternal, scopedTransactions, calculationBundle, stocks, activeAccountId ->
         if (historyInternal is HomeHistoryStateInternal.Success) {
+            if (scopedTransactions.first != activeAccountId) {
+                return@combine HistoryState.Loading(0f, "切換帳戶資料中...")
+            }
             val expectedPortfolioKey = buildPortfolioKey(
                 stocks,
                 calculationBundle.displayMode,
@@ -345,6 +457,7 @@ class HoldingsViewModel(
             val minFee = settings.minFeeRegular.toDouble()
             val normalizedMode = HomeDisplayMode.normalize(calculationBundle.displayMode)
             val normalizedUsdToTwdRate = calculationBundle.usdToTwdRate.takeIf { it > 0.0 } ?: 1.0
+            val allTxs = scopedTransactions.second
 
             val personalPoints = mutableListOf<PersonalHistoryPoint>()
             val selectedStocksByKey = stocks.associateBy { it.toStockKey().cacheKey() }
@@ -356,13 +469,7 @@ class HoldingsViewModel(
                 )
             }
 
-            val accountFilteredTxs = if (activeAccountId == 0) {
-                allTxs
-            } else {
-                allTxs.filter { it.accountId == activeAccountId }
-            }
-
-            val twTxs = accountFilteredTxs.filter { tx ->
+            val twTxs = allTxs.filter { tx ->
                 historyInternal.allRawPoints.containsKey(tx.toStockKey().cacheKey())
             }
 
@@ -372,6 +479,9 @@ class HoldingsViewModel(
                         .thenBy { it.recordTime }
                         .thenBy { it.id }
                 )
+            }
+            val historicalTimelinesByStock = historicalTxsByStock.mapValues { (_, transactions) ->
+                HistoricalLongPositionTimeline(transactions)
             }
             if (twTxs.isEmpty()) {
                 return@combine HistoryState.Empty(
@@ -422,21 +532,46 @@ class HoldingsViewModel(
                 for ((stockKey, rawList) in historyInternal.allRawPoints) {
                     val dailyPrice = HistoryChartCalculationSupport.priceAtOrBefore(rawList, pt.date) ?: 0.0
 
-                    val stockTxs = historicalTxsByStock[stockKey] ?: emptyList()
+                    val timeline = historicalTimelinesByStock[stockKey] ?: continue
                     val stockType = selectedStocksByKey[stockKey]?.stockType ?: ""
                     val stockMarket = marketByStockKey.getValue(stockKey)
                     val stockDayEnd = dayEndByMarket.getValue(stockMarket)
+                    val replay = timeline.advanceTo(stockDayEnd)
+                    val stockTxs = timeline.transactionsAtCurrentDate()
+                    val marginSummary = if (timeline.hasMarginActivity) {
+                        MarginCalculationSupport.calculate(
+                            transactions = stockTxs,
+                            valuationDate = stockDayEnd,
+                            dayCount = settings.marginDayCount,
+                            transactionsAreOrdered = true
+                        )
+                    } else {
+                        MarginSummary()
+                    }
+                    val shortSummary = if (timeline.hasShortActivity) {
+                        ShortSellingCalculationSupport.calculate(
+                            transactions = stockTxs,
+                            valuationDate = stockDayEnd,
+                            dayCount = settings.marginDayCount,
+                            transactionsAreOrdered = true
+                        )
+                    } else {
+                        ShortSellingSummary()
+                    }
 
                     val stats = calculateHistoricalHoldingStatsAt(
                         ptPrice = dailyPrice,
-                        transactions = stockTxs,
+                        replay = replay,
                         preDeductSellFees = settings.preDeductSellFees,
                         feeDiscount = settings.feeDiscount,
                         minFeeRegular = minFee,
                         market = stockMarket,
                         stockType = stockType,
-                        dayEnd = stockDayEnd,
-                        marginDayCount = settings.marginDayCount
+                        marginSummary = marginSummary,
+                        shortSummary = shortSummary,
+                        shortIncome = timeline.shortIncome,
+                        shortCoverExpense = timeline.shortCoverExpense,
+                        hasMarginPurchase = timeline.hasMarginPurchase
                     )
                     val currencyRate = if (
                         normalizedMode == HomeDisplayMode.COMBINED &&
@@ -453,7 +588,7 @@ class HoldingsViewModel(
                     totalShares += stats.shares
                     if (settings.returnRateMode == ReturnRateMode.XIRR) {
                         portfolioCashFlows += buildHistoricalCashFlows(
-                            transactions = stockTxs.filter { it.date <= stockDayEnd },
+                            transactions = stockTxs,
                             shares = stats.shares,
                             price = dailyPrice,
                             terminalDateMillis = stockDayEnd,
@@ -670,21 +805,18 @@ class HoldingsViewModel(
 
     private fun calculateHistoricalHoldingStatsAt(
         ptPrice: Double,
-        transactions: List<StockTransaction>,
+        replay: LongPositionReplaySummary,
         preDeductSellFees: Boolean,
         feeDiscount: Double,
         minFeeRegular: Double,
         market: String,
         stockType: String,
-        dayEnd: Long,
-        marginDayCount: Int
+        marginSummary: MarginSummary,
+        shortSummary: ShortSellingSummary,
+        shortIncome: Double,
+        shortCoverExpense: Double,
+        hasMarginPurchase: Boolean
     ): HistoricalHoldingStats {
-        val txs = transactions.filter { it.date <= dayEnd }
-        val replay = HoldingCalculationSupport.replayLongPosition(
-            transactions = txs,
-            valuationDate = dayEnd,
-            transactionsAreOrdered = true
-        )
         val shares = replay.shares
         val totalBuyExpense = replay.totalBuyExpense
         val totalSellIncome = replay.totalSellIncome
@@ -693,19 +825,6 @@ class HoldingsViewModel(
         val totalDividendIncome = replay.totalDividendIncome
         val costBasis = totalBuyExpense - totalSellIncome - totalDividendIncome
         val totalSellFeeAndTax = (sellAmountBeforeFee - totalSellNetIncome).coerceAtLeast(0.0)
-        val marginSummary = MarginCalculationSupport.calculate(
-            transactions = txs,
-            valuationDate = dayEnd,
-            dayCount = marginDayCount,
-            transactionsAreOrdered = true
-        )
-        val shortSummary = ShortSellingCalculationSupport.calculate(
-            transactions = txs,
-            valuationDate = dayEnd,
-            dayCount = marginDayCount,
-            transactionsAreOrdered = true
-        )
-        val hasMarginPurchase = txs.any { it.type == "融資買進" }
         val longInvestment = if (hasMarginPurchase) {
             marginSummary.selfFundedCapital + totalSellFeeAndTax
         } else {
@@ -728,8 +847,6 @@ class HoldingsViewModel(
         val marketValue = shares * ptPrice
         var totalPL = marketValue - costBasis
         totalPL -= marginSummary.totalInterestExpense
-        val shortIncome = txs.filter { it.type == "融券賣出" }.sumOf { it.income }
-        val shortCoverExpense = txs.filter { it.type == "買券還券" }.sumOf { it.expense }
         totalPL += shortIncome - shortCoverExpense - shortSummary.outstandingShares * ptPrice - shortSummary.accruedBorrowFee - shortSummary.compensationExpense
 
         if (preDeductSellFees && marketValue > 0.0 && StockMarket.isTw(market)) {
