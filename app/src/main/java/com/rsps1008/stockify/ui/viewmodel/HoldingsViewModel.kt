@@ -135,13 +135,19 @@ internal class PortfolioHistoryProgressTracker(private val stockCount: Int) {
  * replaying every preceding transaction for every chart point.
  */
 internal class HistoricalLongPositionTimeline(transactions: List<StockTransaction>) {
+    private data class AccountPositionState(
+        var shares: Double = 0.0,
+        var buySharesTotal: Double = 0.0,
+        var sellSharesTotal: Double = 0.0
+    )
+
     private val orderedTransactions = transactions.sortedWith(
         compareBy<StockTransaction> { it.date }
             .thenBy { it.recordTime }
             .thenBy { it.id }
     )
     private var nextIndex = 0
-    private var shares = 0.0
+    private val positions = mutableMapOf<Int, AccountPositionState>()
     private var totalBuyExpense = 0.0
     private var totalSellIncome = 0.0
     private var totalSellNetIncome = 0.0
@@ -175,14 +181,14 @@ internal class HistoricalLongPositionTimeline(transactions: List<StockTransactio
             nextIndex++
         }
         return LongPositionReplaySummary(
-            shares = shares.coerceAtLeast(0.0),
+            shares = positions.values.sumOf { it.shares }.coerceAtLeast(0.0),
             totalBuyExpense = totalBuyExpense,
             totalSellIncome = totalSellIncome,
             totalSellNetIncome = totalSellNetIncome,
-            sellSharesTotal = sellSharesTotal,
+            sellSharesTotal = positions.values.sumOf { it.sellSharesTotal },
             sellAmountBeforeFee = sellAmountBeforeFee,
             totalDividendIncome = totalDividendIncome,
-            buySharesTotal = buySharesTotal,
+            buySharesTotal = positions.values.sumOf { it.buySharesTotal },
             buyCostTotal = buyCostTotal
         )
     }
@@ -190,10 +196,11 @@ internal class HistoricalLongPositionTimeline(transactions: List<StockTransactio
     fun transactionsAtCurrentDate(): List<StockTransaction> = orderedTransactions.subList(0, nextIndex)
 
     private fun apply(transaction: StockTransaction) {
+        val position = positions.getOrPut(transaction.accountId) { AccountPositionState() }
         when (transaction.type) {
             "買進", "融資買進" -> {
-                shares += transaction.buyShares
-                buySharesTotal += transaction.buyShares
+                position.shares += transaction.buyShares
+                position.buySharesTotal += transaction.buyShares
                 totalBuyExpense += transaction.expense
                 buyCostTotal += transaction.expense
                 if (transaction.type == "融資買進") {
@@ -201,23 +208,23 @@ internal class HistoricalLongPositionTimeline(transactions: List<StockTransactio
                 }
             }
             "賣出" -> {
-                shares -= transaction.sellShares
-                sellSharesTotal += transaction.sellShares
+                position.shares -= transaction.sellShares
+                position.sellSharesTotal += transaction.sellShares
                 sellAmountBeforeFee += transaction.sellPrice * transaction.sellShares
                 totalSellIncome += transaction.income
                 totalSellNetIncome += transaction.income
             }
-            "配股" -> shares += transaction.dividendShares
+            "配股" -> position.shares += transaction.dividendShares
             "配息" -> totalDividendIncome += HoldingCalculationSupport.resolveDividendIncome(transaction)
             "減資" -> {
-                shares += HoldingCalculationSupport.capitalReductionShareChange(transaction, shares)
+                position.shares += HoldingCalculationSupport.capitalReductionShareChange(transaction, position.shares)
                 totalSellIncome += transaction.cashReturned
             }
             "分割" -> {
-                shares += HoldingCalculationSupport.splitShareChange(transaction, shares)
+                position.shares += HoldingCalculationSupport.splitShareChange(transaction, position.shares)
                 val splitFactor = HoldingCalculationSupport.splitShareFactor(transaction)
-                buySharesTotal *= splitFactor
-                sellSharesTotal *= splitFactor
+                position.buySharesTotal *= splitFactor
+                position.sellSharesTotal *= splitFactor
             }
             "融券賣出" -> shortIncome += transaction.income
             "買券還券" -> shortCoverExpense += transaction.expense

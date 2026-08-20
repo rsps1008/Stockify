@@ -27,6 +27,24 @@ class HistoricalLongPositionTimelineTest {
         }
     }
 
+    @Test
+    fun advanceTo_keepsCompanyActionsWithinTheirAccount() {
+        val transactions = listOf(
+            StockTransaction(id = 1, stockCode = "2330", accountId = 1, date = 1_000, recordTime = 1, type = "買進", buyShares = 10.0, expense = 100.0),
+            StockTransaction(id = 2, stockCode = "2330", accountId = 2, date = 1_000, recordTime = 2, type = "買進", buyShares = 10.0, expense = 100.0),
+            StockTransaction(id = 3, stockCode = "2330", accountId = 1, date = 2_000, recordTime = 1, type = "分割", stockSplitRatio = 2.0, sharesBeforeSplit = 10.0, sharesAfterSplit = 20.0),
+            StockTransaction(id = 4, stockCode = "2330", accountId = 1, date = 3_000, recordTime = 1, type = "減資", capitalReductionRatio = 10.0, sharesBeforeReduction = 20.0, sharesAfterReduction = 18.0, cashReturned = 10.0)
+        )
+        val timeline = HistoricalLongPositionTimeline(transactions)
+
+        listOf(1_000L, 2_000L, 3_000L).forEach { valuationDate ->
+            assertSummaryEquals(
+                HoldingCalculationSupport.replayLongPosition(transactions, valuationDate),
+                timeline.advanceTo(valuationDate)
+            )
+        }
+    }
+
     private fun assertSummaryEquals(expected: LongPositionReplaySummary, actual: LongPositionReplaySummary) {
         assertEquals(expected.shares, actual.shares, 0.0)
         assertEquals(expected.totalBuyExpense, actual.totalBuyExpense, 0.0)
