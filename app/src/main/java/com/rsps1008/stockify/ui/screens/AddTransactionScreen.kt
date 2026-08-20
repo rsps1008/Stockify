@@ -1589,23 +1589,33 @@ private fun TransactionSubmitButtons(
     isSubmitting: Boolean
 ) {
     Column {
-        Button(
-            onClick = { onSubmit(false) },
-            enabled = isFormValid && !isSubmitting,
-            modifier = Modifier.fillMaxWidth(),
-            shape = AddTransactionButtonShape
-        ) {
-            Text(if (isSubmitting) "處理中..." else if (isNewTransaction) "新增交易" else "更新交易")
-        }
         if (isNewTransaction) {
-            Spacer(modifier = Modifier.height(12.dp))
-            OutlinedButton(
-                onClick = { onSubmit(true) },
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(
+                    onClick = { onSubmit(true) },
+                    enabled = isFormValid && !isSubmitting,
+                    modifier = Modifier.weight(1f),
+                    shape = AddTransactionButtonShape
+                ) {
+                    Text("新增下一筆")
+                }
+                Button(
+                    onClick = { onSubmit(false) },
+                    enabled = isFormValid && !isSubmitting,
+                    modifier = Modifier.weight(1f),
+                    shape = AddTransactionButtonShape
+                ) {
+                    Text(if (isSubmitting) "處理中..." else "新增交易")
+                }
+            }
+        } else {
+            Button(
+                onClick = { onSubmit(false) },
                 enabled = isFormValid && !isSubmitting,
                 modifier = Modifier.fillMaxWidth(),
                 shape = AddTransactionButtonShape
             ) {
-                Text("新增下一筆")
+                Text(if (isSubmitting) "處理中..." else "更新交易")
             }
         }
     }
