@@ -1174,6 +1174,11 @@ class SettingsViewModel(
         val validationRows = transactions.zip(validationTransactions) { csvTransaction, transaction ->
             csvTransaction.copy(transaction = transaction)
         }
+        validationTransactions.forEach { transaction ->
+            com.rsps1008.stockify.data.TransactionValidationSupport
+                .validateForWrite(transaction)
+                ?.let { error -> throw Exception("$error，匯入被拒絕。") }
+        }
         com.rsps1008.stockify.data.FinancingTransactionValidationSupport
             .validate(existingTransactions + validationTransactions)
             ?.let { error -> throw Exception("$error，匯入被拒絕。") }

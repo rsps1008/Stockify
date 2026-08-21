@@ -6,6 +6,9 @@ import com.rsps1008.stockify.data.ReturnRateMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.time.LocalDate
+import java.time.ZoneId
+import kotlin.math.pow
 
 class ReturnRateCalculatorTest {
 
@@ -43,6 +46,21 @@ class ReturnRateCalculatorTest {
         )
 
         assertNull(ReturnRateCalculator.calculateXirrPercentage(flows))
+    }
+
+    @Test
+    fun xirrUsesCalendarDaysAcrossDaylightSavingTime() {
+        val zone = ZoneId.of("America/New_York")
+        val start = LocalDate.of(2024, 1, 1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val end = LocalDate.of(2025, 1, 1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val expectedRate = 1.1.pow(365.0 / 366.0) - 1.0
+
+        val result = ReturnRateCalculator.calculateXirrRate(
+            listOf(CashFlow(start, -1_000.0), CashFlow(end, 1_100.0)),
+            zoneId = zone
+        )
+
+        assertEquals(expectedRate, result!!, 1e-8)
     }
 
     @Test

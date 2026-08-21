@@ -12,6 +12,8 @@ import com.rsps1008.stockify.data.HoldingCalculationSupport
 import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.Account
+import com.rsps1008.stockify.data.TransactionCostSupport
+import com.rsps1008.stockify.data.TransactionValidationSupport
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -509,8 +511,12 @@ class AddTransactionViewModel(
         val (discount, minFeeRegular, minFeeOddLot) = feeSettings.value
         val transactionValue = price * shares
         val calculatedFee = transactionValue * 0.001425 * discount
-        val minFee = if (shares % 1000 == 0.0) minFeeRegular else minFeeOddLot
-        val finalFee = roundCalculatedAmount(max(calculatedFee, minFee.toDouble()))
+        val minimumFee = TransactionCostSupport.minimumTaiwanSellFee(
+            shares = shares,
+            minFeeRegular = minFeeRegular.toDouble(),
+            minFeeOddLot = minFeeOddLot.toDouble()
+        )
+        val finalFee = roundCalculatedAmount(max(calculatedFee, minimumFee))
 
         _fee.value = finalFee
         _expense.value = roundCalculatedAmount(transactionValue + _fee.value)
@@ -538,8 +544,12 @@ class AddTransactionViewModel(
         val transactionValue = price * shares
 
         val calculatedFee = transactionValue * 0.001425 * discount
-        val minFee = if (shares % 1000 == 0.0) minFeeRegular else minFeeOddLot
-        val autoFee = roundCalculatedAmount(max(calculatedFee, minFee.toDouble()))
+        val minimumFee = TransactionCostSupport.minimumTaiwanSellFee(
+            shares = shares,
+            minFeeRegular = minFeeRegular.toDouble(),
+            minFeeOddLot = minFeeOddLot.toDouble()
+        )
+        val autoFee = roundCalculatedAmount(max(calculatedFee, minimumFee))
         _fee.value = autoFee
 
         val taxRateValue = when {
@@ -848,6 +858,7 @@ class AddTransactionViewModel(
     }
 
     private suspend fun validateLotBalances(candidate: StockTransaction): String? {
+        TransactionValidationSupport.validateForWrite(candidate)?.let { return it }
         com.rsps1008.stockify.data.FinancingTransactionValidationSupport
             .validateFinancingMarket(candidate, candidate.market)
             ?.let { return it }
