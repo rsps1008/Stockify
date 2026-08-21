@@ -1,6 +1,7 @@
 package com.rsps1008.stockify.ui.viewmodel
 
 import com.rsps1008.stockify.data.HoldingCalculationSupport
+import com.rsps1008.stockify.data.HistoricalLongPositionTimeline
 import com.rsps1008.stockify.data.LongPositionReplaySummary
 import com.rsps1008.stockify.data.StockTransaction
 import org.junit.Assert.assertEquals
@@ -43,6 +44,25 @@ class HistoricalLongPositionTimelineTest {
                 timeline.advanceTo(valuationDate)
             )
         }
+    }
+
+    @Test
+    fun advanceTo_isIdempotentWhenTheChartRepeatsADate() {
+        val transaction = StockTransaction(
+            id = 1,
+            stockCode = "2330",
+            date = 1_000,
+            recordTime = 1,
+            type = "買進",
+            buyShares = 10.0,
+            expense = 1_000.0
+        )
+        val timeline = HistoricalLongPositionTimeline(listOf(transaction))
+
+        val first = timeline.advanceTo(1_000)
+        val repeated = timeline.advanceTo(1_000)
+
+        assertSummaryEquals(first, repeated)
     }
 
     private fun assertSummaryEquals(expected: LongPositionReplaySummary, actual: LongPositionReplaySummary) {

@@ -17,7 +17,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -34,8 +33,6 @@ import com.rsps1008.stockify.ui.viewmodel.TransactionsViewModel
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import com.rsps1008.stockify.data.formatMarketAmount
 import com.rsps1008.stockify.data.formatShareCount
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -50,16 +47,7 @@ fun TransactionsScreen(navController: NavController) {
             transactionListRepository = application.transactionListRepository
         )
     )
-    val transactions by viewModel.transactions.collectAsState()
-
-    val dateFormatter = remember {
-        SimpleDateFormat("yyyy/MM/dd (E)", Locale.getDefault())
-    }
-    val groupedTransactions = remember(transactions, dateFormatter) {
-        transactions.groupBy {
-            dateFormatter.format(Date(it.transaction.date))
-        }
-    }
+    val transactionSections by viewModel.transactionSections.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
         Box(
@@ -92,10 +80,10 @@ fun TransactionsScreen(navController: NavController) {
                 .weight(1f)
                 .padding(horizontal = 16.dp)
         ) {
-            groupedTransactions.forEach { (date, transactionsOnDate) ->
+            transactionSections.forEach { section ->
                 item {
                     Text(
-                        text = date,
+                        text = section.date,
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -104,7 +92,7 @@ fun TransactionsScreen(navController: NavController) {
                     )
                 }
                 items(
-                    items = transactionsOnDate,
+                    items = section.transactions,
                     key = { it.transaction.id }
                 ) { transaction ->
                     TransactionRow(transaction, navController)

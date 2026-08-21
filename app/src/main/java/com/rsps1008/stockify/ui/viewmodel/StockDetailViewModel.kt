@@ -14,6 +14,8 @@ import com.rsps1008.stockify.data.StockHistoryPoint
 import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.CashFlow
 import com.rsps1008.stockify.data.HoldingCalculationSupport
+import com.rsps1008.stockify.data.HistoricalLongPositionTimeline
+import com.rsps1008.stockify.data.LongPositionReplaySummary
 import com.rsps1008.stockify.data.MarginCalculationSupport
 import com.rsps1008.stockify.data.MarginSummary
 import com.rsps1008.stockify.data.ReturnRateCalculator
@@ -175,7 +177,8 @@ class StockDetailViewModel(
             val stockType = stock?.stockType ?: ""
             val market = stock?.market ?: StockMarket.inferFromCode(stockCode)
 
-            val rawPoints = historyInternal.rawPoints.toMutableList()
+            val rawPoints = historyInternal.rawPoints.sortedBy { it.date }
+            val timeline = HistoricalLongPositionTimeline(stockTransactions, transactionsAreOrdered = true)
             var previousXirrGuessRate: Double? = null
 
             for (pt in rawPoints) {
@@ -186,10 +189,14 @@ class StockDetailViewModel(
                     continue
                 }
 
+                // The points are chronological, so each transaction is applied once
+                // and only the already-replayed prefix is passed to later calculations.
+                val replay = timeline.advanceTo(dayEnd)
                 val result = calculateHistoricalHoldingAt(
                     ptDateStr = pt.date,
                     ptPrice = pt.price,
-                    transactions = stockTransactions,
+                    transactions = timeline.transactionsAtCurrentDate(),
+                    replay = replay,
                     preDeductSellFees = settings.preDeductSellFees,
                     returnRateMode = settings.returnRateMode,
                     feeDiscount = settings.feeDiscount,
@@ -199,7 +206,12 @@ class StockDetailViewModel(
                     stockType = stockType,
                     dayEnd = dayEnd,
                     marginDayCount = settings.marginDayCount,
-                    xirrGuessRate = previousXirrGuessRate
+                    xirrGuessRate = previousXirrGuessRate,
+                    hasMarginActivity = timeline.hasMarginActivity,
+                    hasShortActivity = timeline.hasShortActivity,
+                    shortIncome = timeline.shortIncome,
+                    shortCoverExpense = timeline.shortCoverExpense,
+                    hasMarginPurchase = timeline.hasMarginPurchase
                 )
                 personalPoints.add(result.point)
                 previousXirrGuessRate = result.xirrGuessRate ?: previousXirrGuessRate
@@ -290,6 +302,7 @@ class StockDetailViewModel(
         ptDateStr: String,
         ptPrice: Double,
         transactions: List<StockTransaction>,
+        replay: LongPositionReplaySummary,
         preDeductSellFees: Boolean,
         returnRateMode: ReturnRateMode,
         feeDiscount: Double,
@@ -299,14 +312,14 @@ class StockDetailViewModel(
         stockType: String,
         dayEnd: Long,
         marginDayCount: Int,
-        xirrGuessRate: Double?
+        xirrGuessRate: Double?,
+        hasMarginActivity: Boolean,
+        hasShortActivity: Boolean,
+        shortIncome: Double,
+        shortCoverExpense: Double,
+        hasMarginPurchase: Boolean
     ): HistoricalPointCalculationResult {
-        val txs = transactions.filter { it.date <= dayEnd }
-        val replay = HoldingCalculationSupport.replayLongPosition(
-            transactions = txs,
-            valuationDate = dayEnd,
-            transactionsAreOrdered = true
-        )
+        val txs = transactions
         val shares = replay.shares
         val totalBuyExpense = replay.totalBuyExpense
         val totalSellIncome = replay.totalSellIncome
@@ -315,19 +328,26 @@ class StockDetailViewModel(
         val totalDividendIncome = replay.totalDividendIncome
         val costBasis = totalBuyExpense - totalSellIncome - totalDividendIncome
         val totalSellFeeAndTax = (sellAmountBeforeFee - totalSellNetIncome).coerceAtLeast(0.0)
-        val marginSummary = MarginCalculationSupport.calculate(
-            transactions = txs,
-            valuationDate = dayEnd,
-            dayCount = marginDayCount,
-            transactionsAreOrdered = true
-        )
-        val shortSummary = ShortSellingCalculationSupport.calculate(
-            transactions = txs,
-            valuationDate = dayEnd,
-            dayCount = marginDayCount,
-            transactionsAreOrdered = true
-        )
-        val hasMarginPurchase = txs.any { it.type == "融資買進" }
+        val marginSummary = if (hasMarginActivity) {
+            MarginCalculationSupport.calculate(
+                transactions = txs,
+                valuationDate = dayEnd,
+                dayCount = marginDayCount,
+                transactionsAreOrdered = true
+            )
+        } else {
+            MarginSummary()
+        }
+        val shortSummary = if (hasShortActivity) {
+            ShortSellingCalculationSupport.calculate(
+                transactions = txs,
+                valuationDate = dayEnd,
+                dayCount = marginDayCount,
+                transactionsAreOrdered = true
+            )
+        } else {
+            ShortSellingSummary()
+        }
         val longInvestment = if (hasMarginPurchase) {
             marginSummary.selfFundedCapital + totalSellFeeAndTax
         } else {
@@ -350,8 +370,6 @@ class StockDetailViewModel(
         val marketValue = shares * ptPrice
         var totalPL = marketValue - costBasis
         totalPL -= marginSummary.totalInterestExpense
-        val shortIncome = txs.filter { it.type == "融券賣出" }.sumOf { it.income }
-        val shortCoverExpense = txs.filter { it.type == "買券還券" }.sumOf { it.expense }
         totalPL += shortIncome - shortCoverExpense - shortSummary.outstandingShares * ptPrice - shortSummary.accruedBorrowFee - shortSummary.compensationExpense
 
         if (preDeductSellFees && marketValue > 0.0 && StockMarket.isTw(market)) {
