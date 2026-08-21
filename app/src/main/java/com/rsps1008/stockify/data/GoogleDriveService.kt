@@ -46,6 +46,7 @@ class GoogleDriveService(context: Context, account: GoogleSignInAccount) {
                 .setQ("name='$fileName' and 'appDataFolder' in parents")
                 .setSpaces("appDataFolder")
                 .setFields("files(id, name)")
+                .setOrderBy("modifiedTime desc")
                 .execute()
 
             if (fileList.files.isEmpty()) {
@@ -71,6 +72,7 @@ class GoogleDriveService(context: Context, account: GoogleSignInAccount) {
                 .setQ("name='$fileName' and 'appDataFolder' in parents")
                 .setSpaces("appDataFolder")
                 .setFields("files(id, name)")
+                .setOrderBy("modifiedTime desc")
                 .execute()
 
             if (fileList.files.isEmpty()) {
@@ -87,12 +89,33 @@ class GoogleDriveService(context: Context, account: GoogleSignInAccount) {
         }
     }
 
+    suspend fun restoreBackupIfPresent(fileName: String): Result<ByteArray?> = withContext(Dispatchers.IO) {
+        try {
+            val fileList = drive.files().list()
+                .setQ("name='$fileName' and 'appDataFolder' in parents")
+                .setSpaces("appDataFolder")
+                .setFields("files(id, name)")
+                .setOrderBy("modifiedTime desc")
+                .execute()
+
+            val fileId = fileList.files.firstOrNull()?.id
+                ?: return@withContext Result.success(null)
+            val outputStream = ByteArrayOutputStream()
+            drive.files().get(fileId).executeMediaAndDownloadTo(outputStream)
+            Result.success(outputStream.toByteArray())
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
+        }
+    }
+
     suspend fun getBackupModifiedTime(fileName: String): Result<Long?> = withContext(Dispatchers.IO) {
         try {
             val fileList = drive.files().list()
                 .setQ("name='$fileName' and 'appDataFolder' in parents")
                 .setSpaces("appDataFolder")
                 .setFields("files(id, name, modifiedTime)")
+                .setOrderBy("modifiedTime desc")
                 .execute()
 
             Result.success(fileList.files.firstOrNull()?.modifiedTime?.value)

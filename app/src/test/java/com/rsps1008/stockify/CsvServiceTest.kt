@@ -17,6 +17,35 @@ import java.io.ByteArrayOutputStream
 
 class CsvServiceTest {
     @Test
+    fun `csv round trip preserves multiline note`() {
+        val service = CsvService()
+        val note = "第一行，含逗號\n第二行\"含引號\""
+        val output = ByteArrayOutputStream()
+        service.export(
+            listOf(
+                TransactionWithStock(
+                    transaction = StockTransaction(
+                        stockCode = "2330",
+                        date = 1_753_401_600_000L,
+                        recordTime = 1_753_456_789_123L,
+                        type = "買進",
+                        buyPrice = 100.0,
+                        buyShares = 10.0,
+                        expense = 1_000.0,
+                        note = note
+                    ),
+                    stock = Stock(name = "台積電", code = "2330")
+                )
+            ),
+            output
+        )
+
+        val imported = service.import(ByteArrayInputStream(output.toByteArray())).single().transaction
+
+        assertEquals(note, imported.note)
+    }
+
+    @Test
     fun `csv round trip preserves dividend supplementary health insurance premium`() {
         val output = ByteArrayOutputStream()
         CsvService().export(

@@ -140,10 +140,52 @@ class CsvService {
             .map { it.trim().removeSurrounding("\"").replace("\"\"", "\"") }
     }
 
+    /** Splits physical CSV records without treating newlines inside quotes as record ends. */
+    internal fun splitCsvRecords(csv: String): List<String> {
+        val records = ArrayList<String>()
+        val record = StringBuilder()
+        var inQuotes = false
+        var index = 0
+
+        fun addRecord() {
+            records += record.toString()
+            record.setLength(0)
+        }
+
+        while (index < csv.length) {
+            val character = csv[index]
+            when {
+                character == '"' -> {
+                    record.append(character)
+                    if (inQuotes && index + 1 < csv.length && csv[index + 1] == '"') {
+                        record.append(csv[index + 1])
+                        index++
+                    } else {
+                        inQuotes = !inQuotes
+                    }
+                }
+                !inQuotes && character == '\r' -> {
+                    addRecord()
+                    if (index + 1 < csv.length && csv[index + 1] == '\n') index++
+                }
+                !inQuotes && character == '\n' -> addRecord()
+                else -> record.append(character)
+            }
+            index++
+        }
+
+        if (inQuotes) {
+            throw IllegalArgumentException("CSV 引號未閉合")
+        }
+        if (record.isNotEmpty()) addRecord()
+        return records
+    }
+
     fun import(inputStream: InputStream): List<CsvTransaction> {
-        return inputStream.bufferedReader(Charsets.UTF_8).useLines { lines ->
-            val iterator = lines.iterator()
-            if (!iterator.hasNext()) return@useLines emptyList()
+        return inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
+            val records = splitCsvRecords(reader.readText())
+            val iterator = records.iterator()
+            if (!iterator.hasNext()) return@use emptyList()
 
             val headerValues = parseCsvLine(iterator.next()).mapIndexed { index, value ->
                 if (index == 0) value.removePrefix("\uFEFF") else value

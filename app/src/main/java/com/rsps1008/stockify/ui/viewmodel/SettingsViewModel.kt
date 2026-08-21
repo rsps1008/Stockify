@@ -26,11 +26,14 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 import com.rsps1008.stockify.data.GoogleDriveService
+import com.rsps1008.stockify.data.GoogleDriveBackupBundle
 import com.rsps1008.stockify.data.HoldingsOrderBackupService
 import com.rsps1008.stockify.data.ReturnRateMode
 import com.rsps1008.stockify.data.PdfHoldingImportService
 import com.rsps1008.stockify.data.PdfStockImportPreview
 import com.rsps1008.stockify.data.PdfStockImportPreviewItem
+import com.rsps1008.stockify.data.PdfStockImportSupport
+import com.rsps1008.stockify.data.CsvTransactionDedupSupport
 import com.rsps1008.stockify.data.TextSizeMode
 import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.SettingsDataStore
@@ -354,16 +357,15 @@ class SettingsViewModel(
     private fun refreshCloudBackupTimes(account: GoogleSignInAccount) {
         viewModelScope.launch {
             val driveService = GoogleDriveService(getApplication(), account)
-            driveService
-                .getBackupModifiedTime("stockify_backup.csv")
-                .getOrNull()
+            val bundleUpdatedAt = driveService.getBackupModifiedTime(GoogleDriveBackupBundle.FILE_NAME).getOrNull()
+            (bundleUpdatedAt
+                ?: driveService.getBackupModifiedTime("stockify_backup.csv").getOrNull())
                 ?.let { updatedAt ->
                     _cloudDataBackupUpdatedAt.value = updatedAt
                     settingsDataStore.setCloudDataBackupUpdatedAt(updatedAt)
                 }
-            _cloudOrderBackupUpdatedAt.value = driveService
-                .getBackupModifiedTime("stockify_holdings_order.json")
-                .getOrNull()
+            _cloudOrderBackupUpdatedAt.value = bundleUpdatedAt
+                ?: driveService.getBackupModifiedTime("stockify_holdings_order.json").getOrNull()
         }
     }
 
@@ -379,23 +381,21 @@ class SettingsViewModel(
                             it.toByteArray()
                         }
                     }
-                    val driveService = GoogleDriveService(getApplication(), account)
-                    driveService.uploadBackup("stockify_backup.csv", csvContent).getOrThrow()
-
-                    // Also backup accounts
                     val accountsList = stockDao.getAllAccountsFlow().first()
                     val accountsJson = Json.encodeToString(accountsList).toByteArray(Charsets.UTF_8)
-                    driveService.uploadBackup("stockify_accounts.json", accountsJson).getOrThrow()
-
                     val order = settingsDataStore.holdingsOrderFlow.first()
                     val realizedOrder = settingsDataStore.realizedHoldingsOrderFlow.first()
                     val orderJson = withContext(Dispatchers.IO) {
                         holdingsOrderBackupService.exportToBytes(order, realizedOrder)
                     }
+                    val bundle = withContext(Dispatchers.Default) {
+                        GoogleDriveBackupBundle.create(csvContent, accountsJson, orderJson)
+                    }
+                    val driveService = GoogleDriveService(getApplication(), account)
                     driveService.uploadBackup(
-                        fileName = "stockify_holdings_order.json",
-                        content = orderJson,
-                        mimeType = "application/json"
+                        fileName = GoogleDriveBackupBundle.FILE_NAME,
+                        content = bundle,
+                        mimeType = "application/zip"
                     ).getOrThrow()
 
                     refreshCloudBackupTimes(account)
@@ -419,9 +419,18 @@ class SettingsViewModel(
                 _isLoading.value = true
                 try {
                     val driveService = GoogleDriveService(getApplication(), account)
-                    val csvContent = driveService.restoreBackup("stockify_backup.csv").getOrThrow()
-                    val accountsJson = driveService.restoreBackup("stockify_accounts.json").getOrNull()
-                    val orderJson = driveService.restoreBackup("stockify_holdings_order.json").getOrNull()
+                    val bundleBytes = driveService
+                        .restoreBackupIfPresent(GoogleDriveBackupBundle.FILE_NAME)
+                        .getOrThrow()
+                    val restored = bundleBytes?.let {
+                        withContext(Dispatchers.Default) { GoogleDriveBackupBundle.restore(it) }
+                    }
+                    val csvContent = restored?.transactionsCsv
+                        ?: driveService.restoreBackup("stockify_backup.csv").getOrThrow()
+                    val accountsJson = restored?.accountsJson
+                        ?: driveService.restoreBackup("stockify_accounts.json").getOrNull()
+                    val orderJson = restored?.holdingsOrderJson
+                        ?: driveService.restoreBackup("stockify_holdings_order.json").getOrNull()
 
                     importData = csvContent
                     accountsBackupData = accountsJson
@@ -835,7 +844,8 @@ class SettingsViewModel(
                 }
 
                 val importDate = System.currentTimeMillis()
-                val newStockKeys = appDatabase.withTransaction {
+                val stockKeysToRefresh = PdfStockImportSupport.stockKeysToRefresh(importableItems)
+                appDatabase.withTransaction {
                     if (replaceExisting) {
                         deleteAllData()
                     } else {
@@ -844,7 +854,6 @@ class SettingsViewModel(
                         stockDao.insertAccount(Account(id = 1, name = "預設帳戶"))
                     }
 
-                    val newStockKeys = linkedSetOf<StockKey>()
                     importableItems.forEachIndexed { index, item ->
                         val market = StockMarket.inferFromCode(item.stockCode)
                         val existingStock = stockDao.getStockByCode(item.stockCode, market)
@@ -854,7 +863,6 @@ class SettingsViewModel(
                             market = market
                         ).also {
                             stockDao.insertStock(it)
-                            newStockKeys += StockKey(it.market, it.code)
                         }
 
                         val currentPrice = item.currentPrice ?: return@forEachIndexed
@@ -877,10 +885,9 @@ class SettingsViewModel(
                             )
                         )
                     }
-                    newStockKeys
                 }
 
-                refreshImportedStocks(newStockKeys)
+                refreshImportedStocks(stockKeysToRefresh)
                 val skippedCount = preview.items.size - importableItems.size
                 _message.value = buildString {
                     append("PDF 匯入完成，共新增 ")
@@ -1115,9 +1122,15 @@ class SettingsViewModel(
         deleteOldData: Boolean
     ) {
         require(transactions.isNotEmpty()) { "CSV 不含可還原的交易資料" }
+        val transactionsToImport = if (deleteOldData) {
+            transactions
+        } else {
+            val existingTransactions = loadExistingTransactionsForImport(transactions)
+            CsvTransactionDedupSupport.filterNewTransactions(transactions, existingTransactions)
+        }
 
         validateImportedTransactions(
-            transactions,
+            transactionsToImport,
             includeExistingTransactions = !deleteOldData
         )
 
@@ -1131,12 +1144,34 @@ class SettingsViewModel(
                 restoredAccounts.forEach { stockDao.insertAccount(it) }
             }
 
-            writeImportedTransactions(transactions)
+            writeImportedTransactions(transactionsToImport)
         }
 
         applyHoldingsOrderBackup(restoredOrder)
         refreshImportedStocks(refreshedStockCodes)
-        _message.value = "還原成功，共 ${transactions.size} 筆紀錄"
+        _message.value = "還原成功，共 ${transactionsToImport.size} 筆紀錄"
+    }
+
+    private suspend fun loadExistingTransactionsForImport(
+        transactions: List<CsvTransaction>
+    ): List<StockTransaction> {
+        val importedStockKeys = transactions
+            .map { StockKey(it.market, it.stockCode) }
+            .distinctBy { it.cacheKey() }
+        val existingStocksByCode = importedStockKeys
+            .map { it.normalizedCode }
+            .distinct()
+            .chunked(SQLITE_IN_CHUNK_SIZE)
+            .flatMap { stockDao.getStocksByCodesForImportRepair(it) }
+            .groupBy { it.code.trim().uppercase() }
+        return requiredExistingTransactionKeysForImport(importedStockKeys, existingStocksByCode)
+            .groupBy { it.normalizedMarket }
+            .flatMap { (market, stockKeys) ->
+                stockKeys
+                    .map { it.normalizedCode }
+                    .chunked(SQLITE_IN_CHUNK_SIZE)
+                    .flatMap { stockDao.getTransactionsForStockCodesAndMarket(market, it) }
+            }
     }
 
     private suspend fun validateImportedTransactions(

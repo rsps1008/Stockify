@@ -171,9 +171,9 @@ class SettingsDataStore private constructor(
 
     val realtimeStockInfoCacheFlow: Flow<Map<String, RealtimeStockInfo>> = dataStoreInstance.data
         .map { preferences ->
-            preferences[realtimeStockInfoCacheKey]?.let {
-                Json.decodeFromString<Map<String, RealtimeStockInfo>>(it)
-            } ?: emptyMap()
+            preferences[realtimeStockInfoCacheKey]
+                ?.let { JsonCacheDecodeSupport.decodeOrNull<Map<String, RealtimeStockInfo>>(it) }
+                ?: emptyMap()
         }
     
     val themeFlow: Flow<String> = dataStoreInstance.data
@@ -238,9 +238,8 @@ class SettingsDataStore private constructor(
 
     val taiwanWeightedIndexCacheFlow: Flow<TaiwanWeightedIndexInfo?> = dataStoreInstance.data
         .map { preferences ->
-            preferences[taiwanWeightedIndexCacheKey]?.let {
-                Json.decodeFromString<TaiwanWeightedIndexInfo>(it)
-            }
+            preferences[taiwanWeightedIndexCacheKey]
+                ?.let { JsonCacheDecodeSupport.decodeOrNull<TaiwanWeightedIndexInfo>(it) }
         }
 
     val dividendInfoCacheFlow: Flow<Map<String, DividendInfoCacheEntry>> = dataStoreInstance.data
