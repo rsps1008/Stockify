@@ -12,6 +12,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 
+data class GoogleDriveBackupFile(
+    val content: ByteArray,
+    val modifiedAtMillis: Long
+)
+
 @Suppress("DEPRECATION")
 class GoogleDriveService(context: Context, account: GoogleSignInAccount) {
 
@@ -89,20 +94,30 @@ class GoogleDriveService(context: Context, account: GoogleSignInAccount) {
         }
     }
 
-    suspend fun restoreBackupIfPresent(fileName: String): Result<ByteArray?> = withContext(Dispatchers.IO) {
+    suspend fun restoreBackupIfPresent(fileName: String): Result<ByteArray?> =
+        restoreBackupWithModifiedTimeIfPresent(fileName).map { it?.content }
+
+    suspend fun restoreBackupWithModifiedTimeIfPresent(
+        fileName: String
+    ): Result<GoogleDriveBackupFile?> = withContext(Dispatchers.IO) {
         try {
             val fileList = drive.files().list()
                 .setQ("name='$fileName' and 'appDataFolder' in parents")
                 .setSpaces("appDataFolder")
-                .setFields("files(id, name)")
+                .setFields("files(id, name, modifiedTime)")
                 .setOrderBy("modifiedTime desc")
                 .execute()
 
-            val fileId = fileList.files.firstOrNull()?.id
+            val file = fileList.files.firstOrNull()
                 ?: return@withContext Result.success(null)
             val outputStream = ByteArrayOutputStream()
-            drive.files().get(fileId).executeMediaAndDownloadTo(outputStream)
-            Result.success(outputStream.toByteArray())
+            drive.files().get(file.id).executeMediaAndDownloadTo(outputStream)
+            Result.success(
+                GoogleDriveBackupFile(
+                    content = outputStream.toByteArray(),
+                    modifiedAtMillis = file.modifiedTime?.value ?: 0L
+                )
+            )
         } catch (e: Exception) {
             e.printStackTrace()
             Result.failure(e)

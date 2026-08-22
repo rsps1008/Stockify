@@ -1,6 +1,9 @@
 package com.rsps1008.stockify
 
 import com.rsps1008.stockify.data.GoogleDriveBackupBundle
+import com.rsps1008.stockify.data.GoogleDriveBackupFile
+import com.rsps1008.stockify.data.GoogleDriveBackupRestored
+import com.rsps1008.stockify.data.GoogleDriveBackupSelectionSupport
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.util.zip.ZipInputStream
@@ -12,6 +15,41 @@ import org.junit.Assert.fail
 import org.junit.Test
 
 class GoogleDriveBackupBundleTest {
+    @Test
+    fun newerLegacyOrderOverridesTheOrderEmbeddedInAnOlderBundle() {
+        val bundleOrder = "bundle-order".toByteArray()
+        val legacyOrder = "legacy-order".toByteArray()
+        val selected = GoogleDriveBackupSelectionSupport.selectHoldingsOrder(
+            bundleFile = GoogleDriveBackupFile("bundle".toByteArray(), modifiedAtMillis = 100L),
+            restoredBundle = GoogleDriveBackupRestored(
+                generation = "g1",
+                transactionsCsv = ByteArray(0),
+                accountsJson = ByteArray(0),
+                holdingsOrderJson = bundleOrder
+            ),
+            legacyOrderFile = GoogleDriveBackupFile(legacyOrder, modifiedAtMillis = 101L)
+        )
+
+        assertArrayEquals(legacyOrder, selected)
+    }
+
+    @Test
+    fun olderLegacyOrderDoesNotOverrideTheBundle() {
+        val bundleOrder = "bundle-order".toByteArray()
+        val selected = GoogleDriveBackupSelectionSupport.selectHoldingsOrder(
+            bundleFile = GoogleDriveBackupFile("bundle".toByteArray(), modifiedAtMillis = 101L),
+            restoredBundle = GoogleDriveBackupRestored(
+                generation = "g1",
+                transactionsCsv = ByteArray(0),
+                accountsJson = ByteArray(0),
+                holdingsOrderJson = bundleOrder
+            ),
+            legacyOrderFile = GoogleDriveBackupFile("legacy-order".toByteArray(), modifiedAtMillis = 100L)
+        )
+
+        assertArrayEquals(bundleOrder, selected)
+    }
+
     @Test
     fun createAndRestorePreservesGenerationAndPayloads() {
         val transactions = "id,筆記\n1,\"第一行\n第二行\"".toByteArray()

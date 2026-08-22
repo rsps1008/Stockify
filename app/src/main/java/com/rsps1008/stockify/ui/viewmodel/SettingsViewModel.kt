@@ -364,14 +364,20 @@ class SettingsViewModel(
         viewModelScope.launch {
             val driveService = GoogleDriveService(getApplication(), account)
             val bundleUpdatedAt = driveService.getBackupModifiedTime(GoogleDriveBackupBundle.FILE_NAME).getOrNull()
-            (bundleUpdatedAt
-                ?: driveService.getBackupModifiedTime("stockify_backup.csv").getOrNull())
+            val dataUpdatedAt = bundleUpdatedAt
+                ?: driveService.getBackupModifiedTime("stockify_backup.csv").getOrNull()
+            dataUpdatedAt
                 ?.let { updatedAt ->
                     _cloudDataBackupUpdatedAt.value = updatedAt
                     settingsDataStore.setCloudDataBackupUpdatedAt(updatedAt)
                 }
-            _cloudOrderBackupUpdatedAt.value = bundleUpdatedAt
-                ?: driveService.getBackupModifiedTime("stockify_holdings_order.json").getOrNull()
+            val legacyOrderUpdatedAt = driveService
+                .getBackupModifiedTime("stockify_holdings_order.json")
+                .getOrNull()
+            _cloudOrderBackupUpdatedAt.value = listOfNotNull(
+                bundleUpdatedAt,
+                legacyOrderUpdatedAt
+            ).maxOrNull()
         }
     }
 
@@ -425,18 +431,25 @@ class SettingsViewModel(
                 _isLoading.value = true
                 try {
                     val driveService = GoogleDriveService(getApplication(), account)
-                    val bundleBytes = driveService
-                        .restoreBackupIfPresent(GoogleDriveBackupBundle.FILE_NAME)
+                    val bundleFile = driveService
+                        .restoreBackupWithModifiedTimeIfPresent(GoogleDriveBackupBundle.FILE_NAME)
                         .getOrThrow()
-                    val restored = bundleBytes?.let {
+                    val restored = bundleFile?.content?.let {
                         withContext(Dispatchers.Default) { GoogleDriveBackupBundle.restore(it) }
                     }
+                    val legacyOrderFile = driveService
+                        .restoreBackupWithModifiedTimeIfPresent("stockify_holdings_order.json")
+                        .getOrNull()
                     val csvContent = restored?.transactionsCsv
                         ?: driveService.restoreBackup("stockify_backup.csv").getOrThrow()
                     val accountsJson = restored?.accountsJson
                         ?: driveService.restoreBackup("stockify_accounts.json").getOrNull()
-                    val orderJson = restored?.holdingsOrderJson
-                        ?: driveService.restoreBackup("stockify_holdings_order.json").getOrNull()
+                    val orderJson = com.rsps1008.stockify.data.GoogleDriveBackupSelectionSupport
+                        .selectHoldingsOrder(
+                            bundleFile = bundleFile,
+                            restoredBundle = restored,
+                            legacyOrderFile = legacyOrderFile
+                        )
 
                     importData = csvContent
                     accountsBackupData = accountsJson
