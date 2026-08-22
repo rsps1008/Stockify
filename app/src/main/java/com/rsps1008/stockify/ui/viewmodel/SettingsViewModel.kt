@@ -94,6 +94,12 @@ internal fun accountsForReplacementRestore(restoredAccounts: List<Account>): Lis
     return restoredAccounts.ifEmpty { listOf(Account(id = 1, name = "預設帳戶")) }
 }
 
+private data class ExistingCsvImportData(
+    val transactions: List<StockTransaction>,
+    val stocksByCode: Map<String, List<Stock>>,
+    val marketAliases: Map<String, String>
+)
+
 class SettingsViewModel(
     private val stockDao: StockDao,
     private val settingsDataStore: SettingsDataStore,
@@ -838,9 +844,9 @@ class SettingsViewModel(
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                val importableItems = preview.items.filter { it.currentPrice != null }
+                val importableItems = PdfStockImportSupport.itemsReadyForImport(preview.items)
                 if (importableItems.isEmpty()) {
-                    throw IllegalArgumentException("沒有可匯入的股票，請確認目前價格是否抓取成功")
+                    throw IllegalArgumentException("沒有可匯入的股票，請確認庫存股數與目前價格是否有效")
                 }
 
                 val importDate = System.currentTimeMillis()
@@ -861,29 +867,33 @@ class SettingsViewModel(
                             name = item.stockName.ifBlank { item.stockCode },
                             code = item.stockCode,
                             market = market
-                        ).also {
-                            stockDao.insertStock(it)
-                        }
+                        )
 
                         val currentPrice = item.currentPrice ?: return@forEachIndexed
                         val expense = ((currentPrice * item.balance).roundToInt()).toDouble()
-
-                        stockDao.insertTransaction(
-                            StockTransaction(
-                                stockCode = stock.code,
-                                market = stock.market,
-                                date = importDate,
-                                recordTime = importDate + index,
-                                type = "買進",
-                                buyPrice = currentPrice,
-                                buyShares = item.balance.toDouble(),
-                                fee = 0.0,
-                                tax = 0.0,
-                                income = 0.0,
-                                expense = expense,
-                                note = "PDF 匯入快照"
-                            )
+                        val snapshot = StockTransaction(
+                            stockCode = stock.code,
+                            market = stock.market,
+                            accountId = 1,
+                            date = importDate,
+                            recordTime = importDate + index,
+                            type = "買進",
+                            buyPrice = currentPrice,
+                            buyShares = item.balance.toDouble(),
+                            fee = 0.0,
+                            tax = 0.0,
+                            income = 0.0,
+                            expense = expense,
+                            note = "PDF 匯入快照"
                         )
+                        com.rsps1008.stockify.data.TransactionValidationSupport
+                            .validateForWrite(snapshot)
+                            ?.let { error -> throw IllegalArgumentException("PDF 快照無效：$error") }
+
+                        if (existingStock == null) {
+                            stockDao.insertStock(stock)
+                        }
+                        stockDao.insertTransaction(snapshot)
                     }
                 }
 
@@ -1073,7 +1083,11 @@ class SettingsViewModel(
                     val market = StockMarket.inferFromCode(holding.stockCode)
                     val stock = allStocksByKey[StockKey(market, holding.stockCode).cacheKey()]
                     val currentPrice = priceRequestLimit.withPermit {
-                        realtimeStockDataService.fetchCurrentStockInfo(holding.stockCode, market)?.currentPrice
+                        realtimeStockDataService.fetchCurrentStockInfo(
+                            stockCode = holding.stockCode,
+                            market = market,
+                            forceRefresh = true
+                        )?.currentPrice
                     }
 
                     PdfStockImportPreviewItem(
@@ -1122,16 +1136,25 @@ class SettingsViewModel(
         deleteOldData: Boolean
     ) {
         require(transactions.isNotEmpty()) { "CSV 不含可還原的交易資料" }
+        val existingImportData = if (deleteOldData) {
+            null
+        } else {
+            loadExistingCsvImportData(transactions)
+        }
         val transactionsToImport = if (deleteOldData) {
             transactions
         } else {
-            val existingTransactions = loadExistingTransactionsForImport(transactions)
-            CsvTransactionDedupSupport.filterNewTransactions(transactions, existingTransactions)
+            CsvTransactionDedupSupport.filterNewTransactions(
+                importedTransactions = transactions,
+                existingTransactions = existingImportData?.transactions.orEmpty(),
+                marketAliases = existingImportData?.marketAliases.orEmpty()
+            )
         }
 
         validateImportedTransactions(
             transactionsToImport,
-            includeExistingTransactions = !deleteOldData
+            includeExistingTransactions = !deleteOldData,
+            existingImportData = existingImportData
         )
 
         // Parse optional companion backups before any destructive database work.
@@ -1152,9 +1175,9 @@ class SettingsViewModel(
         _message.value = "還原成功，共 ${transactionsToImport.size} 筆紀錄"
     }
 
-    private suspend fun loadExistingTransactionsForImport(
+    private suspend fun loadExistingCsvImportData(
         transactions: List<CsvTransaction>
-    ): List<StockTransaction> {
+    ): ExistingCsvImportData {
         val importedStockKeys = transactions
             .map { StockKey(it.market, it.stockCode) }
             .distinctBy { it.cacheKey() }
@@ -1164,7 +1187,11 @@ class SettingsViewModel(
             .chunked(SQLITE_IN_CHUNK_SIZE)
             .flatMap { stockDao.getStocksByCodesForImportRepair(it) }
             .groupBy { it.code.trim().uppercase() }
-        return requiredExistingTransactionKeysForImport(importedStockKeys, existingStocksByCode)
+        val marketAliases = CsvTransactionDedupSupport.marketRepairAliases(
+            importedStockKeys = importedStockKeys,
+            existingStocksByCode = existingStocksByCode
+        )
+        val existingTransactions = requiredExistingTransactionKeysForImport(importedStockKeys, existingStocksByCode)
             .groupBy { it.normalizedMarket }
             .flatMap { (market, stockKeys) ->
                 stockKeys
@@ -1172,18 +1199,28 @@ class SettingsViewModel(
                     .chunked(SQLITE_IN_CHUNK_SIZE)
                     .flatMap { stockDao.getTransactionsForStockCodesAndMarket(market, it) }
             }
+        return ExistingCsvImportData(
+            transactions = CsvTransactionDedupSupport.canonicalizeExistingTransactions(
+                existingTransactions = existingTransactions,
+                marketAliases = marketAliases
+            ),
+            stocksByCode = existingStocksByCode,
+            marketAliases = marketAliases
+        )
     }
 
     private suspend fun validateImportedTransactions(
         transactions: List<CsvTransaction>,
-        includeExistingTransactions: Boolean
+        includeExistingTransactions: Boolean,
+        existingImportData: ExistingCsvImportData? = null
     ) {
+        if (transactions.isEmpty()) return
         val allStockKeys = transactions
             .map { StockKey(it.market, it.stockCode) }
             .distinctBy { it.cacheKey() }
         val importedCodes = allStockKeys.map { it.normalizedCode }.distinct()
         val existingStocksByCode = if (includeExistingTransactions) {
-            importedCodes
+            existingImportData?.stocksByCode ?: importedCodes
                 .chunked(SQLITE_IN_CHUNK_SIZE)
                 .flatMap { stockDao.getStocksByCodesForImportRepair(it) }
                 .groupBy { it.code.trim().uppercase() }
@@ -1191,7 +1228,7 @@ class SettingsViewModel(
             emptyMap()
         }
         val existingTransactions = if (includeExistingTransactions) {
-            requiredExistingTransactionKeysForImport(allStockKeys, existingStocksByCode)
+            existingImportData?.transactions ?: requiredExistingTransactionKeysForImport(allStockKeys, existingStocksByCode)
                 .groupBy { it.normalizedMarket }
                 .flatMap { (market, stockKeys) ->
                     stockKeys
@@ -1237,22 +1274,8 @@ class SettingsViewModel(
                     ?.let { error -> throw Exception("股票 $code 的$error，匯入被拒絕。") }
             }
 
-            val existingStocks = existingStocksByCode[code.trim().uppercase()].orEmpty()
-            val hasTargetStock = existingStocks.any {
-                StockMarket.normalize(it.market) == stockKey.normalizedMarket
-            }
-            val marketRepairFrom = existingStocks
-                .singleOrNull()
-                ?.takeIf { !hasTargetStock && StockMarket.normalize(it.market) != stockKey.normalizedMarket }
-                ?.market
             val existingTxs = existingTransactionsByCode[code.trim().uppercase()].orEmpty()
-                .filter {
-                    StockMarket.normalize(it.market) == stockKey.normalizedMarket ||
-                        (marketRepairFrom != null && StockMarket.normalize(it.market) == StockMarket.normalize(marketRepairFrom))
-                }
-                .map { transaction ->
-                    if (marketRepairFrom != null) transaction.copy(market = stockKey.normalizedMarket) else transaction
-                }
+                .filter { StockMarket.normalize(it.market) == stockKey.normalizedMarket }
             val newTxs = importedForCode.map { it.transaction }
             val mergedTxs = existingTxs + newTxs
             val accountIds = mergedTxs.map { it.accountId }.distinct()

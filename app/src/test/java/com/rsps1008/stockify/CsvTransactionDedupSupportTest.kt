@@ -2,6 +2,8 @@ package com.rsps1008.stockify
 
 import com.rsps1008.stockify.data.CsvTransaction
 import com.rsps1008.stockify.data.CsvTransactionDedupSupport
+import com.rsps1008.stockify.data.Stock
+import com.rsps1008.stockify.data.StockKey
 import com.rsps1008.stockify.data.StockTransaction
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -19,6 +21,36 @@ class CsvTransactionDedupSupportTest {
         val result = CsvTransactionDedupSupport.filterNewTransactions(imported, listOf(existing))
 
         assertEquals(listOf(101L), result.map { it.transaction.recordTime })
+    }
+
+    @Test
+    fun repairedLegacyMarketMatchesImportedTransactionInsteadOfDuplicatingIt() {
+        val existing = transaction(id = 41, recordTime = 100L).copy(market = "US")
+        val imported = CsvTransaction(
+            stockName = "台積電",
+            stockCode = "2330",
+            transaction = transaction(recordTime = 100L).copy(market = "TW")
+        )
+        val aliases = CsvTransactionDedupSupport.marketRepairAliases(
+            importedStockKeys = listOf(StockKey("TW", "2330")),
+            existingStocksByCode = mapOf(
+                "2330" to listOf(Stock(name = "台積電 ADR 舊資料", code = "2330", market = "US"))
+            )
+        )
+
+        val result = CsvTransactionDedupSupport.filterNewTransactions(
+            importedTransactions = listOf(imported),
+            existingTransactions = listOf(existing),
+            marketAliases = aliases
+        )
+
+        assertEquals(emptyList<CsvTransaction>(), result)
+        assertEquals(
+            listOf("TW"),
+            CsvTransactionDedupSupport.canonicalizeExistingTransactions(
+                listOf(existing), aliases
+            ).map { it.market }
+        )
     }
 
     private fun transaction(id: Int = 0, recordTime: Long) = StockTransaction(

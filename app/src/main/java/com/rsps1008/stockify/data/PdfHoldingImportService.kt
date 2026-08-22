@@ -81,10 +81,11 @@ class PdfHoldingImportService {
         }
     }
 
-    private fun parseHoldingRow(row: String): PdfStockHolding? {
+    internal fun parseHoldingRow(row: String): PdfStockHolding? {
         val match = ORDINARY_BALANCE_ROW_REGEX.matchEntire(row) ?: return null
         val stockCode = match.groupValues[2]
         val balance = match.groupValues[4].replace(",", "").toIntOrNull() ?: return null
+        if (balance <= 0) return null
 
         return PdfStockHolding(
             stockCode = stockCode,

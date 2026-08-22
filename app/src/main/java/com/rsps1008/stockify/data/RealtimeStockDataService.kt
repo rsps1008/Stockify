@@ -537,11 +537,12 @@ class RealtimeStockDataService(
 
     suspend fun fetchCurrentStockInfo(
         stockCode: String,
-        market: String = StockMarket.inferFromCode(stockCode)
+        market: String = StockMarket.inferFromCode(stockCode),
+        forceRefresh: Boolean = false
     ): RealtimeStockInfo? {
         val normalizedMarket = StockMarket.normalize(market)
         val cached = _realtimeStockInfo.value[stockCacheKey(normalizedMarket, stockCode)]
-        if (cached != null) {
+        if (!forceRefresh && cached != null) {
             return cached
         }
 

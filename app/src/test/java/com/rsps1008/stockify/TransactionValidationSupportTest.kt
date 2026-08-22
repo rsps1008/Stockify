@@ -42,6 +42,12 @@ class TransactionValidationSupportTest {
     }
 
     @Test
+    fun ordinaryManualAmountOverridesRemainAllowed() {
+        assertNull(TransactionValidationSupport.validateForWrite(ordinaryBuy().copy(expense = 1_001.0)))
+        assertNull(TransactionValidationSupport.validateForWrite(ordinarySell().copy(income = 119.0)))
+    }
+
+    @Test
     fun validCorporateActionRowsPass() {
         assertNull(
             TransactionValidationSupport.validateForWrite(
