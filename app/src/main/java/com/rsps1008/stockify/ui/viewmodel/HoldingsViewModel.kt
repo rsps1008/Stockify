@@ -19,6 +19,7 @@ import com.rsps1008.stockify.data.HomeDisplayMode
 import com.rsps1008.stockify.data.HistoryChartCalculationSupport
 import com.rsps1008.stockify.data.HoldingCalculationSupport
 import com.rsps1008.stockify.data.HistoricalLongPositionTimeline
+import com.rsps1008.stockify.data.HistoricalTransactionCashFlowTimeline
 import com.rsps1008.stockify.data.LongPositionReplaySummary
 import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.toStockKey
@@ -398,6 +399,68 @@ class HoldingsViewModel(
             val historicalTimelinesByStock = historicalTxsByStock.mapValues { (_, transactions) ->
                 HistoricalLongPositionTimeline(transactions, transactionsAreOrdered = true)
             }
+            val historicalMarginTimelinesByStock = historicalTxsByStock.mapValues { (_, transactions) ->
+                if (transactions.any { transaction ->
+                        transaction.type == "融資買進" ||
+                            transaction.marginRepaymentLotId.isNotBlank() ||
+                            transaction.marginRepayment > 0.0 ||
+                            transaction.marginActualInterest > 0.0
+                    }
+                ) {
+                    MarginCalculationSupport.HistoricalTimeline(
+                        transactions = transactions,
+                        dayCount = settings.marginDayCount,
+                        transactionsAreOrdered = true
+                    )
+                } else {
+                    null
+                }
+            }
+            val historicalShortTimelinesByStock = historicalTxsByStock.mapValues { (_, transactions) ->
+                if (transactions.any { transaction ->
+                        transaction.type == "融券賣出" ||
+                            transaction.type == "買券還券" ||
+                            transaction.type == "融券補償"
+                    }
+                ) {
+                    ShortSellingCalculationSupport.HistoricalTimeline(
+                        transactions = transactions,
+                        dayCount = settings.marginDayCount,
+                        transactionsAreOrdered = true
+                    )
+                } else {
+                    null
+                }
+            }
+            val historicalCashFlowTimelinesByStock = if (settings.returnRateMode == ReturnRateMode.XIRR) {
+                historicalTxsByStock.mapValues { (stockKey, transactions) ->
+                    val stockMarket = marketByStockKey.getValue(stockKey)
+                    val currencyRate = if (
+                        normalizedMode == HomeDisplayMode.COMBINED && StockMarket.isUs(stockMarket)
+                    ) {
+                        normalizedUsdToTwdRate
+                    } else {
+                        1.0
+                    }
+                    HistoricalTransactionCashFlowTimeline(
+                        transactions = transactions,
+                        currencyRate = currencyRate,
+                        transactionsAreOrdered = true
+                    )
+                }
+            } else {
+                emptyMap()
+            }
+            val historicalShortXirrTimelinesByStock = if (settings.returnRateMode == ReturnRateMode.XIRR) {
+                historicalTxsByStock.mapValues { (_, transactions) ->
+                    ShortSellingCalculationSupport.HistoricalXirrTimeline(
+                        transactions = transactions,
+                        transactionsAreOrdered = true
+                    )
+                }
+            } else {
+                emptyMap()
+            }
             if (twTxs.isEmpty()) {
                 return@combine HistoryState.Empty(
                     range = historyInternal.range,
@@ -453,26 +516,10 @@ class HoldingsViewModel(
                     val stockDayEnd = dayEndByMarket.getValue(stockMarket)
                     val replay = timeline.advanceTo(stockDayEnd)
                     val stockTxs = timeline.transactionsAtCurrentDate()
-                    val marginSummary = if (timeline.hasMarginActivity) {
-                        MarginCalculationSupport.calculate(
-                            transactions = stockTxs,
-                            valuationDate = stockDayEnd,
-                            dayCount = settings.marginDayCount,
-                            transactionsAreOrdered = true
-                        )
-                    } else {
-                        MarginSummary()
-                    }
-                    val shortSummary = if (timeline.hasShortActivity) {
-                        ShortSellingCalculationSupport.calculate(
-                            transactions = stockTxs,
-                            valuationDate = stockDayEnd,
-                            dayCount = settings.marginDayCount,
-                            transactionsAreOrdered = true
-                        )
-                    } else {
-                        ShortSellingSummary()
-                    }
+                    val marginSummary = historicalMarginTimelinesByStock[stockKey]?.advanceTo(stockDayEnd)
+                        ?: MarginSummary()
+                    val shortSummary = historicalShortTimelinesByStock[stockKey]?.advanceTo(stockDayEnd)
+                        ?: ShortSellingSummary()
 
                     val stats = calculateHistoricalHoldingStatsAt(
                         ptPrice = dailyPrice,
@@ -509,9 +556,10 @@ class HoldingsViewModel(
                             price = dailyPrice,
                             terminalDateMillis = stockDayEnd,
                             currencyRate = currencyRate,
-                            marginDayCount = settings.marginDayCount,
                             marginSummary = stats.marginSummary,
-                            shortSummary = stats.shortSummary
+                            shortSummary = stats.shortSummary,
+                            historicalCashFlowTimeline = historicalCashFlowTimelinesByStock[stockKey],
+                            historicalShortXirrTimeline = historicalShortXirrTimelinesByStock[stockKey]
                         )
                     }
                 }
@@ -525,7 +573,8 @@ class HoldingsViewModel(
                     ReturnRateMode.XIRR -> {
                         val xirrRate = ReturnRateCalculator.calculateXirrRate(
                             cashFlows = portfolioCashFlows,
-                            guess = previousPortfolioXirrGuessRate ?: 0.1
+                            guess = previousPortfolioXirrGuessRate ?: 0.1,
+                            zoneId = HistoryChartCalculationSupport.zoneIdForHomeXirr(normalizedMode)
                         )
                         previousPortfolioXirrGuessRate = xirrRate ?: previousPortfolioXirrGuessRate
                         xirrRate?.times(100.0) ?: 0.0
@@ -795,33 +844,34 @@ class HoldingsViewModel(
         price: Double,
         terminalDateMillis: Long,
         currencyRate: Double,
-        marginDayCount: Int,
         marginSummary: MarginSummary,
-        shortSummary: ShortSellingSummary
+        shortSummary: ShortSellingSummary,
+        historicalCashFlowTimeline: HistoricalTransactionCashFlowTimeline?,
+        historicalShortXirrTimeline: ShortSellingCalculationSupport.HistoricalXirrTimeline?
     ): List<CashFlow> {
-        val cashFlows = transactions.mapNotNull { transaction ->
-            when (transaction.type) {
-                "買進" -> CashFlow(transaction.date, -transaction.expense * currencyRate)
-                "融資買進" -> CashFlow(transaction.date, -(if (transaction.marginSelfFundedOverridden) transaction.marginSelfFunded else transaction.expense - transaction.marginPrincipal) * currencyRate)
-                "賣出" -> CashFlow(transaction.date, (transaction.income - transaction.marginRepayment - transaction.marginActualInterest) * currencyRate)
-                "融資還款" -> CashFlow(transaction.date, -(transaction.marginRepayment + transaction.marginActualInterest) * currencyRate)
-                "配息" -> CashFlow(
-                    transaction.date,
-                    HoldingCalculationSupport.resolveDividendIncome(transaction) * currencyRate
-                )
-                "減資" -> CashFlow(transaction.date, transaction.cashReturned * currencyRate)
-                else -> null
-            }
-        }.toMutableList()
+        val cashFlows = historicalCashFlowTimeline?.cashFlowsAt(terminalDateMillis)?.toMutableList()
+            ?: transactions.mapNotNull { transaction ->
+                when (transaction.type) {
+                    "買進" -> CashFlow(transaction.date, -transaction.expense * currencyRate)
+                    "融資買進" -> CashFlow(transaction.date, -(if (transaction.marginSelfFundedOverridden) transaction.marginSelfFunded else transaction.expense - transaction.marginPrincipal) * currencyRate)
+                    "賣出" -> CashFlow(transaction.date, (transaction.income - transaction.marginRepayment - transaction.marginActualInterest) * currencyRate)
+                    "融資還款" -> CashFlow(transaction.date, -(transaction.marginRepayment + transaction.marginActualInterest) * currencyRate)
+                    "配息" -> CashFlow(
+                        transaction.date,
+                        HoldingCalculationSupport.resolveDividendIncome(transaction) * currencyRate
+                    )
+                    "減資" -> CashFlow(transaction.date, transaction.cashReturned * currencyRate)
+                    else -> null
+                }
+            }.toMutableList()
 
-        cashFlows += ShortSellingCalculationSupport.buildXirrCashFlows(
-            transactions = transactions,
+        historicalShortXirrTimeline?.cashFlowsAt(
             valuationDate = terminalDateMillis,
             currentPrice = price,
-            dayCount = marginDayCount,
-            shortSummary = shortSummary,
-            transactionsAreOrdered = true
-        ).map { it.copy(amount = it.amount * currencyRate) }
+            shortSummary = shortSummary
+        )?.let { shortCashFlows ->
+            cashFlows += shortCashFlows.map { it.copy(amount = it.amount * currencyRate) }
+        }
 
         val hasValuedPosition = shares > 0.0 && price > 0.0
         val hasMarginDebt = marginSummary.outstandingPrincipal > 0.0 || marginSummary.accruedInterest > 0.0

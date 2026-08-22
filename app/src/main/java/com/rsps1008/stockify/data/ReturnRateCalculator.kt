@@ -12,6 +12,11 @@ data class CashFlow(
 )
 
 object ReturnRateCalculator {
+    private data class PreparedCashFlow(
+        val years: Double,
+        val amount: Double
+    )
+
     private const val DAYS_PER_YEAR = 365.0
     private const val EPSILON = 1e-10
     private const val DEFAULT_GUESS = 0.1
@@ -29,7 +34,17 @@ object ReturnRateCalculator {
         if (flows.none { it.amount > 0.0 } || flows.none { it.amount < 0.0 }) return null
 
         val baseDate = flows.first().dateMillis
-        val xirr = solveXirr(flows, baseDate, guess, zoneId) ?: return null
+        val baseLocalDate = Instant.ofEpochMilli(baseDate).atZone(zoneId).toLocalDate()
+        val preparedFlows = flows.map { flow ->
+            PreparedCashFlow(
+                years = ChronoUnit.DAYS.between(
+                    baseLocalDate,
+                    Instant.ofEpochMilli(flow.dateMillis).atZone(zoneId).toLocalDate()
+                ).toDouble() / DAYS_PER_YEAR,
+                amount = flow.amount
+            )
+        }
+        val xirr = solveXirr(preparedFlows, guess) ?: return null
         return xirr
     }
 
@@ -43,29 +58,25 @@ object ReturnRateCalculator {
     }
 
     private fun solveXirr(
-        flows: List<CashFlow>,
-        baseDate: Long,
-        guess: Double,
-        zoneId: ZoneId
+        flows: List<PreparedCashFlow>,
+        guess: Double
     ): Double? {
-        val newton = solveWithNewton(flows, baseDate, guess, zoneId)
+        val newton = solveWithNewton(flows, guess)
         if (newton != null) return newton
-        return solveWithBisection(flows, baseDate, zoneId)
+        return solveWithBisection(flows)
     }
 
     private fun solveWithNewton(
-        flows: List<CashFlow>,
-        baseDate: Long,
-        guess: Double,
-        zoneId: ZoneId
+        flows: List<PreparedCashFlow>,
+        guess: Double
     ): Double? {
         var rate = guess.takeIf { it.isFinite() && it > -0.999999999 } ?: DEFAULT_GUESS
         repeat(100) {
-            val value = xnpv(rate, flows, baseDate, zoneId)
+            val value = xnpv(rate, flows)
             if (!value.isFinite()) return null
             if (abs(value) < 1e-8) return rate
 
-            val derivative = xnpvDerivative(rate, flows, baseDate, zoneId)
+            val derivative = xnpvDerivative(rate, flows)
             if (!derivative.isFinite() || abs(derivative) < EPSILON) return null
 
             val nextRate = rate - (value / derivative)
@@ -77,16 +88,16 @@ object ReturnRateCalculator {
         return null
     }
 
-    private fun solveWithBisection(flows: List<CashFlow>, baseDate: Long, zoneId: ZoneId): Double? {
+    private fun solveWithBisection(flows: List<PreparedCashFlow>): Double? {
         var lower = -0.999999999
         var upper = 0.1
-        var lowerValue = xnpv(lower, flows, baseDate, zoneId)
-        var upperValue = xnpv(upper, flows, baseDate, zoneId)
+        var lowerValue = xnpv(lower, flows)
+        var upperValue = xnpv(upper, flows)
 
         var expandCount = 0
         while (lowerValue.isFinite() && upperValue.isFinite() && lowerValue * upperValue > 0.0 && expandCount < 80) {
             upper = if (upper < 1.0) upper + 1.0 else upper * 2.0
-            upperValue = xnpv(upper, flows, baseDate, zoneId)
+            upperValue = xnpv(upper, flows)
             expandCount++
         }
 
@@ -94,7 +105,7 @@ object ReturnRateCalculator {
 
         repeat(200) {
             val mid = (lower + upper) / 2.0
-            val midValue = xnpv(mid, flows, baseDate, zoneId)
+            val midValue = xnpv(mid, flows)
             if (!midValue.isFinite()) return null
             if (abs(midValue) < 1e-8 || abs(upper - lower) < 1e-10) return mid
 
@@ -110,30 +121,22 @@ object ReturnRateCalculator {
         return (lower + upper) / 2.0
     }
 
-    private fun xnpv(rate: Double, flows: List<CashFlow>, baseDate: Long, zoneId: ZoneId): Double {
+    private fun xnpv(rate: Double, flows: List<PreparedCashFlow>): Double {
         if (rate <= -1.0) return Double.NaN
         return flows.sumOf { flow ->
-            val years = yearsBetween(baseDate, flow.dateMillis, zoneId)
-            flow.amount / (1.0 + rate).pow(years)
+            flow.amount / (1.0 + rate).pow(flow.years)
         }
     }
 
     private fun xnpvDerivative(
         rate: Double,
-        flows: List<CashFlow>,
-        baseDate: Long,
-        zoneId: ZoneId
+        flows: List<PreparedCashFlow>
     ): Double {
         if (rate <= -1.0) return Double.NaN
         return flows.sumOf { flow ->
-            val years = yearsBetween(baseDate, flow.dateMillis, zoneId)
-            if (years == 0.0) 0.0 else (-years * flow.amount) / (1.0 + rate).pow(years + 1.0)
+            if (flow.years == 0.0) 0.0 else {
+                (-flow.years * flow.amount) / (1.0 + rate).pow(flow.years + 1.0)
+            }
         }
-    }
-
-    private fun yearsBetween(baseDateMillis: Long, dateMillis: Long, zoneId: ZoneId): Double {
-        val baseDate = Instant.ofEpochMilli(baseDateMillis).atZone(zoneId).toLocalDate()
-        val date = Instant.ofEpochMilli(dateMillis).atZone(zoneId).toLocalDate()
-        return ChronoUnit.DAYS.between(baseDate, date).toDouble() / DAYS_PER_YEAR
     }
 }

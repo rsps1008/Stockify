@@ -33,6 +33,13 @@ object ShortSellingCalculationSupport {
         var remainingShares: Double, var accruedBorrowFee: Double, var lastAccrualDate: Long
     )
 
+    private data class XirrLotState(
+        var originalShares: Double,
+        var remainingShares: Double,
+        val originalPrincipal: Double,
+        val openingIncome: Double
+    )
+
     /**
      * Calculates short-selling state. When [transactionsAreOrdered] is true,
      * the caller must provide ascending date, record time, and id order.
@@ -42,29 +49,52 @@ object ShortSellingCalculationSupport {
         valuationDate: Long,
         dayCount: Int = 365,
         transactionsAreOrdered: Boolean = false
-    ): ShortSellingSummary {
-        val denominator = if (dayCount == 360) 360 else 365
-        val lots = linkedMapOf<LotKey, LotState>()
-        var compensationExpense = 0.0
-        var cumulativeOpenedPrincipal = 0.0
-        fun accrue(lot: LotState, date: Long) {
-            if (date <= lot.lastAccrualDate || lot.remainingShares <= 0.0) return
-            val days = daysBetween(lot.lastAccrualDate, date)
-            val principal = lot.originalPrincipal * lot.remainingShares / lot.originalShares
-            lot.accruedBorrowFee += principal * lot.annualRate / 100.0 * days / denominator
-            lot.lastAccrualDate = date
+    ): ShortSellingSummary = HistoricalTimeline(
+        transactions = transactions,
+        dayCount = dayCount,
+        transactionsAreOrdered = transactionsAreOrdered
+    ).advanceTo(valuationDate)
+
+    /**
+     * Replays each ordered transaction once and accrues open short lots only
+     * between successive valuation dates. Historical chart callers must
+     * advance dates monotonically.
+     */
+    internal class HistoricalTimeline(
+        transactions: List<StockTransaction>,
+        dayCount: Int = 365,
+        transactionsAreOrdered: Boolean = false
+    ) {
+        private val denominator = if (dayCount == 360) 360 else 365
+        private val orderedTransactions = if (transactionsAreOrdered) {
+            transactions
+        } else {
+            transactions.sortedWith(
+                compareBy<StockTransaction> { it.date }
+                    .thenBy { it.recordTime }
+                    .thenBy { it.id }
+            )
         }
-        val orderedTransactions = transactions.asSequence()
-            .filter { it.date <= valuationDate }
-            .let { sequence ->
-                if (transactionsAreOrdered) {
-                    sequence
-                } else {
-                    sequence.sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime }.thenBy { it.id })
-                }
+        private val lots = linkedMapOf<LotKey, LotState>()
+        private var nextIndex = 0
+        private var lastValuationDate = Long.MIN_VALUE
+        private var compensationExpense = 0.0
+        private var cumulativeOpenedPrincipal = 0.0
+
+        fun advanceTo(valuationDate: Long): ShortSellingSummary {
+            require(valuationDate >= lastValuationDate) {
+                "融券歷史回放日期必須遞增"
             }
-        orderedTransactions
-            .forEach { tx ->
+            while (nextIndex < orderedTransactions.size && orderedTransactions[nextIndex].date <= valuationDate) {
+                apply(orderedTransactions[nextIndex])
+                nextIndex++
+            }
+            lots.values.forEach { accrue(it, valuationDate) }
+            lastValuationDate = valuationDate
+            return summary()
+        }
+
+        private fun apply(tx: StockTransaction) {
             lots.values.forEach { accrue(it, tx.date) }
             when (tx.type) {
                 "融券賣出" -> {
@@ -105,8 +135,16 @@ object ShortSellingCalculationSupport {
                 }
             }
         }
-        lots.values.forEach { accrue(it, valuationDate) }
-        return ShortSellingSummary(
+
+        private fun accrue(lot: LotState, date: Long) {
+            if (date <= lot.lastAccrualDate || lot.remainingShares <= 0.0) return
+            val days = daysBetween(lot.lastAccrualDate, date)
+            val principal = lot.originalPrincipal * lot.remainingShares / lot.originalShares
+            lot.accruedBorrowFee += principal * lot.annualRate / 100.0 * days / denominator
+            lot.lastAccrualDate = date
+        }
+
+        private fun summary(): ShortSellingSummary = ShortSellingSummary(
             outstandingShares = lots.values.sumOf { it.remainingShares },
             accruedBorrowFee = lots.values.sumOf { it.accruedBorrowFee },
             compensationExpense = compensationExpense,
@@ -115,9 +153,120 @@ object ShortSellingCalculationSupport {
                 .sumOf { it.originalPrincipal * (it.remainingShares / it.originalShares) },
             cumulativeOpenedPrincipal = cumulativeOpenedPrincipal,
             lots = lots.values.filter { it.remainingShares > 0.0 }.map {
-                ShortLotSummary(it.id, it.openedAt, it.annualRate, it.originalShares, it.remainingShares, it.originalPrincipal, it.accruedBorrowFee)
+                ShortLotSummary(
+                    it.id,
+                    it.openedAt,
+                    it.annualRate,
+                    it.originalShares,
+                    it.remainingShares,
+                    it.originalPrincipal,
+                    it.accruedBorrowFee
+                )
             }
         )
+    }
+
+    /** Incrementally builds short-selling cash flows for historical XIRR. */
+    internal class HistoricalXirrTimeline(
+        transactions: List<StockTransaction>,
+        transactionsAreOrdered: Boolean = false
+    ) {
+        private val orderedTransactions = if (transactionsAreOrdered) {
+            transactions
+        } else {
+            transactions.sortedWith(
+                compareBy<StockTransaction> { it.date }
+                    .thenBy { it.recordTime }
+                    .thenBy { it.id }
+            )
+        }
+        private val lots = linkedMapOf<LotKey, XirrLotState>()
+        private val cashFlows = mutableListOf<CashFlow>()
+        private var nextIndex = 0
+        private var lastValuationDate = Long.MIN_VALUE
+
+        fun cashFlowsAt(
+            valuationDate: Long,
+            currentPrice: Double,
+            shortSummary: ShortSellingSummary
+        ): List<CashFlow> {
+            require(valuationDate >= lastValuationDate) {
+                "歷史 XIRR 現金流日期必須遞增"
+            }
+            while (nextIndex < orderedTransactions.size && orderedTransactions[nextIndex].date <= valuationDate) {
+                apply(orderedTransactions[nextIndex])
+                nextIndex++
+            }
+
+            val result = cashFlows.toMutableList()
+            if (currentPrice > 0.0) {
+                lots.values.filter { it.remainingShares > 0.0 }.forEach { lot ->
+                    val remainingRatio = lot.remainingShares / lot.originalShares
+                    result += CashFlow(
+                        valuationDate,
+                        lot.originalPrincipal * remainingRatio +
+                            lot.openingIncome * remainingRatio -
+                            currentPrice * lot.remainingShares
+                    )
+                }
+            }
+            if (shortSummary.accruedBorrowFee > 0.0) {
+                result += CashFlow(valuationDate, -shortSummary.accruedBorrowFee)
+            }
+            lastValuationDate = valuationDate
+            return result
+        }
+
+        private fun apply(transaction: StockTransaction) {
+            when (transaction.type) {
+                "融券賣出" -> {
+                    val shares = transaction.sellShares.coerceAtLeast(0.0)
+                    if (shares > 0.0) {
+                        val principal = transaction.shortBorrowPrincipal.takeIf { it > 0.0 }
+                            ?: transaction.sellPrice * shares
+                        val lotId = transaction.shortLotId.ifBlank { "legacy-short-${transaction.id}" }
+                        lots[transaction.toLotKey(lotId)] = XirrLotState(
+                            originalShares = shares,
+                            remainingShares = shares,
+                            originalPrincipal = principal,
+                            openingIncome = transaction.income
+                        )
+                        cashFlows += CashFlow(transaction.date, -principal)
+                    }
+                }
+                "買券還券" -> {
+                    val requestedShares = transaction.shortCoverShares.coerceAtLeast(0.0)
+                    val lot = lots[transaction.toLotKey(transaction.shortCoverLotId)]
+                    if (lot != null && requestedShares > 0.0 && lot.remainingShares > 0.0) {
+                        val coveredShares = requestedShares.coerceAtMost(lot.remainingShares)
+                        val coveredRatio = coveredShares / lot.originalShares
+                        val allocatedCoverExpense = transaction.expense * (coveredShares / requestedShares)
+                        val returnedAmount =
+                            lot.originalPrincipal * coveredRatio +
+                                lot.openingIncome * coveredRatio -
+                                allocatedCoverExpense
+                        cashFlows += CashFlow(transaction.date, returnedAmount)
+                        lot.remainingShares -= coveredShares
+                    } else if (transaction.expense > 0.0) {
+                        cashFlows += CashFlow(transaction.date, -transaction.expense)
+                    }
+                }
+                "融券補償" -> if (transaction.shortCompensation > 0.0) {
+                    cashFlows += CashFlow(transaction.date, -transaction.shortCompensation)
+                }
+                "分割", "減資" -> {
+                    val factor = shareAdjustmentFactor(transaction)
+                    if (factor > 0.0 && factor != 1.0) {
+                        lots.forEach { (key, lot) ->
+                            if (key.matches(transaction)) {
+                                lot.originalShares *= factor
+                                lot.remainingShares *= factor
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -132,99 +281,20 @@ object ShortSellingCalculationSupport {
         shortSummary: ShortSellingSummary? = null,
         transactionsAreOrdered: Boolean = false
     ): List<CashFlow> {
-        data class XirrLotState(
-            var originalShares: Double,
-            var remainingShares: Double,
-            val originalPrincipal: Double,
-            val openingIncome: Double
+        val summary = shortSummary ?: calculate(
+            transactions = transactions,
+            valuationDate = valuationDate,
+            dayCount = dayCount,
+            transactionsAreOrdered = transactionsAreOrdered
         )
-
-        val lots = linkedMapOf<LotKey, XirrLotState>()
-        val cashFlows = mutableListOf<CashFlow>()
-        val orderedTransactions = transactions.asSequence()
-            .filter { it.date <= valuationDate }
-            .let { sequence ->
-                if (transactionsAreOrdered) {
-                    sequence
-                } else {
-                    sequence.sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime }.thenBy { it.id })
-                }
-            }
-        orderedTransactions
-            .forEach { transaction ->
-                when (transaction.type) {
-                    "融券賣出" -> {
-                        val shares = transaction.sellShares.coerceAtLeast(0.0)
-                        if (shares > 0.0) {
-                            val principal = transaction.shortBorrowPrincipal.takeIf { it > 0.0 }
-                                ?: transaction.sellPrice * shares
-                            val lotId = transaction.shortLotId.ifBlank { "legacy-short-${transaction.id}" }
-                            lots[transaction.toLotKey(lotId)] = XirrLotState(
-                                originalShares = shares,
-                                remainingShares = shares,
-                                originalPrincipal = principal,
-                                openingIncome = transaction.income
-                            )
-                            cashFlows += CashFlow(transaction.date, -principal)
-                        }
-                    }
-                    "買券還券" -> {
-                        val requestedShares = transaction.shortCoverShares.coerceAtLeast(0.0)
-                        val lot = lots[transaction.toLotKey(transaction.shortCoverLotId)]
-                        if (lot != null && requestedShares > 0.0 && lot.remainingShares > 0.0) {
-                            val coveredShares = requestedShares.coerceAtMost(lot.remainingShares)
-                            val coveredRatio = coveredShares / lot.originalShares
-                            val allocatedCoverExpense = transaction.expense * (coveredShares / requestedShares)
-                            val returnedAmount =
-                                lot.originalPrincipal * coveredRatio +
-                                    lot.openingIncome * coveredRatio -
-                                    allocatedCoverExpense
-                            cashFlows += CashFlow(transaction.date, returnedAmount)
-                            lot.remainingShares -= coveredShares
-                        } else if (transaction.expense > 0.0) {
-                            cashFlows += CashFlow(transaction.date, -transaction.expense)
-                        }
-                    }
-                    "融券補償" -> if (transaction.shortCompensation > 0.0) {
-                        cashFlows += CashFlow(transaction.date, -transaction.shortCompensation)
-                    }
-                    "分割", "減資" -> {
-                        val factor = shareAdjustmentFactor(transaction)
-                        if (factor > 0.0 && factor != 1.0) {
-                            lots.forEach { (key, lot) ->
-                                if (key.matches(transaction)) {
-                                    lot.originalShares *= factor
-                                    lot.remainingShares *= factor
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-        if (currentPrice > 0.0) {
-            lots.values.filter { it.remainingShares > 0.0 }.forEach { lot ->
-                val remainingRatio = lot.remainingShares / lot.originalShares
-                cashFlows += CashFlow(
-                    valuationDate,
-                    lot.originalPrincipal * remainingRatio +
-                        lot.openingIncome * remainingRatio -
-                        currentPrice * lot.remainingShares
-                )
-            }
-        }
-
-        val accruedBorrowFee = shortSummary?.accruedBorrowFee
-            ?: calculate(
-                transactions = transactions,
-                valuationDate = valuationDate,
-                dayCount = dayCount,
-                transactionsAreOrdered = transactionsAreOrdered
-            ).accruedBorrowFee
-        if (accruedBorrowFee > 0.0) {
-            cashFlows += CashFlow(valuationDate, -accruedBorrowFee)
-        }
-        return cashFlows
+        return HistoricalXirrTimeline(
+            transactions = transactions,
+            transactionsAreOrdered = transactionsAreOrdered
+        ).cashFlowsAt(
+            valuationDate = valuationDate,
+            currentPrice = currentPrice,
+            shortSummary = summary
+        )
     }
 
     /** Validates selected-lot covers without silently clamping excess shares. */

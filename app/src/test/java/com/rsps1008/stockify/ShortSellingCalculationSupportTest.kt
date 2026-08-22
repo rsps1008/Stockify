@@ -303,4 +303,65 @@ class ShortSellingCalculationSupportTest {
             )
         )
     }
+
+    @Test
+    fun historicalTimelinesMatchFreshShortReplayAndXirrCashFlows() {
+        val day = 24L * 60 * 60 * 1000
+        val transactions = listOf(
+            StockTransaction(
+                stockCode = "2330", date = 0L, recordTime = 0L, type = "融券賣出",
+                sellPrice = 100.0, sellShares = 1_000.0, income = 100_000.0,
+                shortBorrowPrincipal = 100_000.0, shortBorrowAnnualRate = 3.65,
+                shortLotId = "short-1"
+            ),
+            StockTransaction(
+                stockCode = "2330", date = day * 2, recordTime = day * 2, type = "融券賣出",
+                sellPrice = 120.0, sellShares = 500.0, income = 60_000.0,
+                shortBorrowPrincipal = 60_000.0, shortBorrowAnnualRate = 7.3,
+                shortLotId = "short-2"
+            ),
+            StockTransaction(
+                stockCode = "2330", date = day * 4, recordTime = day * 4, type = "分割",
+                stockSplitRatio = 2.0, sharesBeforeSplit = 1_500.0, sharesAfterSplit = 3_000.0
+            ),
+            StockTransaction(
+                stockCode = "2330", date = day * 6, recordTime = day * 6, type = "買券還券",
+                expense = 70_000.0, shortCoverLotId = "short-1", shortCoverShares = 800.0
+            ),
+            StockTransaction(
+                stockCode = "2330", date = day * 7, recordTime = day * 7, type = "融券補償",
+                shortCompensationLotId = "short-2", shortCompensation = 500.0
+            )
+        )
+        val summaryTimeline = ShortSellingCalculationSupport.HistoricalTimeline(
+            transactions = transactions,
+            dayCount = 365,
+            transactionsAreOrdered = true
+        )
+        val xirrTimeline = ShortSellingCalculationSupport.HistoricalXirrTimeline(
+            transactions = transactions,
+            transactionsAreOrdered = true
+        )
+
+        listOf(0L, day * 3, day * 5, day * 6, day * 8, day * 10).forEach { valuationDate ->
+            val expectedSummary = ShortSellingCalculationSupport.calculate(transactions, valuationDate, 365)
+            val actualSummary = summaryTimeline.advanceTo(valuationDate)
+            assertEquals(expectedSummary.outstandingShares, actualSummary.outstandingShares, 1e-7)
+            assertEquals(expectedSummary.accruedBorrowFee, actualSummary.accruedBorrowFee, 1e-7)
+            assertEquals(expectedSummary.compensationExpense, actualSummary.compensationExpense, 1e-7)
+            assertEquals(expectedSummary.openedPrincipal, actualSummary.openedPrincipal, 1e-7)
+            assertEquals(expectedSummary.cumulativeOpenedPrincipal, actualSummary.cumulativeOpenedPrincipal, 1e-7)
+            assertEquals(
+                ShortSellingCalculationSupport.buildXirrCashFlows(
+                    transactions = transactions,
+                    valuationDate = valuationDate,
+                    currentPrice = 90.0,
+                    dayCount = 365,
+                    shortSummary = expectedSummary,
+                    transactionsAreOrdered = true
+                ),
+                xirrTimeline.cashFlowsAt(valuationDate, 90.0, actualSummary)
+            )
+        }
+    }
 }

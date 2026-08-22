@@ -209,4 +209,50 @@ class MarginCalculationSupportTest {
         assertTrue(MarginCalculationSupport.hasValidRepaymentBalances(transactions))
         assertEquals(70_000.0, summary.outstandingPrincipal, 0.0)
     }
+
+    @Test
+    fun historicalTimelineMatchesFreshReplayAtEveryValuationDate() {
+        val day = 24L * 60 * 60 * 1000
+        val transactions = listOf(
+            loan(0L, "first", 100_000.0, 36.5),
+            loan(day * 2, "second", 50_000.0, 7.3),
+            StockTransaction(
+                stockCode = "2330", accountId = 1, date = day * 5, recordTime = day * 5,
+                type = "融資還款", marginRepaymentLotId = "first", marginRepayment = 40_000.0,
+                marginActualInterest = 450.0
+            ),
+            StockTransaction(
+                stockCode = "2330", accountId = 1, date = day * 8, recordTime = day * 8,
+                type = "融資還款", marginRepaymentLotId = "second", marginActualInterest = 100.0
+            )
+        )
+        val timeline = MarginCalculationSupport.HistoricalTimeline(
+            transactions = transactions,
+            dayCount = 365,
+            transactionsAreOrdered = true
+        )
+
+        listOf(0L, day, day * 3, day * 5, day * 8, day * 10).forEach { valuationDate ->
+            assertMarginSummaryEquals(
+                expected = MarginCalculationSupport.calculate(transactions, valuationDate, 365),
+                actual = timeline.advanceTo(valuationDate)
+            )
+        }
+    }
+
+    private fun assertMarginSummaryEquals(
+        expected: com.rsps1008.stockify.data.MarginSummary,
+        actual: com.rsps1008.stockify.data.MarginSummary
+    ) {
+        assertEquals(expected.outstandingPrincipal, actual.outstandingPrincipal, 1e-7)
+        assertEquals(expected.accruedInterest, actual.accruedInterest, 1e-7)
+        assertEquals(expected.selfFundedCapital, actual.selfFundedCapital, 1e-7)
+        assertEquals(expected.cashBalance, actual.cashBalance, 1e-7)
+        assertEquals(expected.actualInterestPaid, actual.actualInterestPaid, 1e-7)
+        assertEquals(expected.lots.map { it.lotId }, actual.lots.map { it.lotId })
+        expected.lots.zip(actual.lots).forEach { (expectedLot, actualLot) ->
+            assertEquals(expectedLot.remainingPrincipal, actualLot.remainingPrincipal, 1e-7)
+            assertEquals(expectedLot.accruedInterest, actualLot.accruedInterest, 1e-7)
+        }
+    }
 }

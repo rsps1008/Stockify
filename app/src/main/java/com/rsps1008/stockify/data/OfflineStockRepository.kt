@@ -181,7 +181,10 @@ class OfflineStockRepository(
                             transactionsAreOrdered = true
                         )
                     }
-                    ReturnRateCalculator.calculateXirrPercentage(portfolioCashFlows) ?: 0.0
+                    ReturnRateCalculator.calculateXirrPercentage(
+                        cashFlows = portfolioCashFlows,
+                        zoneId = HistoryChartCalculationSupport.zoneIdForHomeXirr(mode)
+                    ) ?: 0.0
                 }
             }
             val dividendIncome = holdingInfos.sumOf { holding ->
@@ -409,7 +412,10 @@ class OfflineStockRepository(
                     shortSummary = shortSummary,
                     transactionsAreOrdered = true
                 )
-                ReturnRateCalculator.calculateXirrPercentage(cashFlows) ?: 0.0
+                ReturnRateCalculator.calculateXirrPercentage(
+                    cashFlows = cashFlows,
+                    zoneId = HistoryChartCalculationSupport.zoneIdForMarket(stock.market)
+                ) ?: 0.0
             }
         }
 

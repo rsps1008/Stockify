@@ -6,6 +6,7 @@ import com.rsps1008.stockify.data.StockMarket
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -13,6 +14,22 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HistoryChartCalculationSupportTest {
+
+    @Test
+    fun xirrDateZonesAreStableForIndividualAndCombinedModes() {
+        assertEquals(
+            ZoneId.of("Asia/Taipei"),
+            HistoryChartCalculationSupport.zoneIdForHomeXirr("TW")
+        )
+        assertEquals(
+            ZoneId.of("America/New_York"),
+            HistoryChartCalculationSupport.zoneIdForHomeXirr("US")
+        )
+        assertEquals(
+            ZoneOffset.UTC,
+            HistoryChartCalculationSupport.zoneIdForHomeXirr("COMBINED")
+        )
+    }
 
     @Test
     fun valuationDateEndMillisUsesEachMarketLocalClose() {

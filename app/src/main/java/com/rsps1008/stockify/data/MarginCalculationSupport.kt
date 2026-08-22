@@ -48,30 +48,52 @@ object MarginCalculationSupport {
         valuationDate: Long,
         dayCount: Int = 365,
         transactionsAreOrdered: Boolean = false
-    ): MarginSummary {
-        val denominator = if (dayCount == 360) 360 else 365
-        val lots = linkedMapOf<LotKey, LotState>()
-        var selfFundedCapital = 0.0
-        var cashBalance = 0.0
+    ): MarginSummary = HistoricalTimeline(
+        transactions = transactions,
+        dayCount = dayCount,
+        transactionsAreOrdered = transactionsAreOrdered
+    ).advanceTo(valuationDate)
 
-        fun accrueUntil(lot: LotState, date: Long) {
-            if (date <= lot.lastAccrualDate || lot.remainingPrincipal <= 0.0) return
-            val days = daysBetween(lot.lastAccrualDate, date)
-            lot.accruedInterest += lot.remainingPrincipal * lot.annualRate / 100.0 * days / denominator
-            lot.lastAccrualDate = date
+    /**
+     * Replays each ordered transaction once and only accrues lots between
+     * successive valuation dates. Historical chart callers must advance dates
+     * monotonically.
+     */
+    internal class HistoricalTimeline(
+        transactions: List<StockTransaction>,
+        dayCount: Int = 365,
+        transactionsAreOrdered: Boolean = false
+    ) {
+        private val denominator = if (dayCount == 360) 360 else 365
+        private val orderedTransactions = if (transactionsAreOrdered) {
+            transactions
+        } else {
+            transactions.sortedWith(
+                compareBy<StockTransaction> { it.date }
+                    .thenBy { it.recordTime }
+                    .thenBy { it.id }
+            )
+        }
+        private val lots = linkedMapOf<LotKey, LotState>()
+        private var nextIndex = 0
+        private var lastValuationDate = Long.MIN_VALUE
+        private var selfFundedCapital = 0.0
+        private var cashBalance = 0.0
+
+        fun advanceTo(valuationDate: Long): MarginSummary {
+            require(valuationDate >= lastValuationDate) {
+                "融資歷史回放日期必須遞增"
+            }
+            while (nextIndex < orderedTransactions.size && orderedTransactions[nextIndex].date <= valuationDate) {
+                apply(orderedTransactions[nextIndex])
+                nextIndex++
+            }
+            lots.values.forEach { accrueUntil(it, valuationDate) }
+            lastValuationDate = valuationDate
+            return summary()
         }
 
-        val orderedTransactions = transactions.asSequence()
-            .filter { it.date <= valuationDate }
-            .let { sequence ->
-                if (transactionsAreOrdered) {
-                    sequence
-                } else {
-                    sequence.sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime }.thenBy { it.id })
-                }
-            }
-        orderedTransactions
-            .forEach { tx ->
+        private fun apply(tx: StockTransaction) {
             lots.values.forEach { accrueUntil(it, tx.date) }
             when (tx.type) {
                 "融資買進" -> {
@@ -103,7 +125,8 @@ object MarginCalculationSupport {
                 "配息" -> cashBalance += HoldingCalculationSupport.resolveDividendIncome(tx)
                 "減資" -> cashBalance += tx.cashReturned
             }
-            val isMarginRepayment = tx.marginRepaymentLotId.isNotBlank() && (tx.marginRepayment > 0.0 || tx.marginActualInterest > 0.0)
+            val isMarginRepayment = tx.marginRepaymentLotId.isNotBlank() &&
+                (tx.marginRepayment > 0.0 || tx.marginActualInterest > 0.0)
             if (isMarginRepayment) {
                 lots[tx.toLotKey(tx.marginRepaymentLotId)]?.let { lot ->
                     accrueUntil(lot, tx.date)
@@ -134,18 +157,33 @@ object MarginCalculationSupport {
             }
         }
 
-        lots.values.forEach { accrueUntil(it, valuationDate) }
-        val activeLots = lots.values.filter { it.remainingPrincipal > 0.0 || it.accruedInterest > 0.0 }
-        return MarginSummary(
-            outstandingPrincipal = lots.values.sumOf { it.remainingPrincipal },
-            accruedInterest = lots.values.sumOf { it.accruedInterest },
-            lots = activeLots.map {
-                MarginLotSummary(it.id, it.openedAt, it.annualRate, it.originalPrincipal, it.remainingPrincipal, it.accruedInterest)
-            },
-            selfFundedCapital = selfFundedCapital,
-            cashBalance = cashBalance,
-            actualInterestPaid = lots.values.sumOf { it.actualInterestPaid }
-        )
+        private fun accrueUntil(lot: LotState, date: Long) {
+            if (date <= lot.lastAccrualDate || lot.remainingPrincipal <= 0.0) return
+            val days = daysBetween(lot.lastAccrualDate, date)
+            lot.accruedInterest += lot.remainingPrincipal * lot.annualRate / 100.0 * days / denominator
+            lot.lastAccrualDate = date
+        }
+
+        private fun summary(): MarginSummary {
+            val activeLots = lots.values.filter { it.remainingPrincipal > 0.0 || it.accruedInterest > 0.0 }
+            return MarginSummary(
+                outstandingPrincipal = lots.values.sumOf { it.remainingPrincipal },
+                accruedInterest = lots.values.sumOf { it.accruedInterest },
+                lots = activeLots.map {
+                    MarginLotSummary(
+                        it.id,
+                        it.openedAt,
+                        it.annualRate,
+                        it.originalPrincipal,
+                        it.remainingPrincipal,
+                        it.accruedInterest
+                    )
+                },
+                selfFundedCapital = selfFundedCapital,
+                cashBalance = cashBalance,
+                actualInterestPaid = lots.values.sumOf { it.actualInterestPaid }
+            )
+        }
     }
 
     /**

@@ -15,6 +15,7 @@ import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.CashFlow
 import com.rsps1008.stockify.data.HoldingCalculationSupport
 import com.rsps1008.stockify.data.HistoricalLongPositionTimeline
+import com.rsps1008.stockify.data.HistoricalTransactionCashFlowTimeline
 import com.rsps1008.stockify.data.LongPositionReplaySummary
 import com.rsps1008.stockify.data.MarginCalculationSupport
 import com.rsps1008.stockify.data.MarginSummary
@@ -179,6 +180,40 @@ class StockDetailViewModel(
 
             val rawPoints = historyInternal.rawPoints.sortedBy { it.date }
             val timeline = HistoricalLongPositionTimeline(stockTransactions, transactionsAreOrdered = true)
+            val marginTimeline = if (timeline.hasMarginActivity) {
+                MarginCalculationSupport.HistoricalTimeline(
+                    transactions = stockTransactions,
+                    dayCount = settings.marginDayCount,
+                    transactionsAreOrdered = true
+                )
+            } else {
+                null
+            }
+            val shortTimeline = if (timeline.hasShortActivity) {
+                ShortSellingCalculationSupport.HistoricalTimeline(
+                    transactions = stockTransactions,
+                    dayCount = settings.marginDayCount,
+                    transactionsAreOrdered = true
+                )
+            } else {
+                null
+            }
+            val historicalCashFlowTimeline = if (settings.returnRateMode == ReturnRateMode.XIRR) {
+                HistoricalTransactionCashFlowTimeline(
+                    transactions = stockTransactions,
+                    transactionsAreOrdered = true
+                )
+            } else {
+                null
+            }
+            val historicalShortXirrTimeline = if (settings.returnRateMode == ReturnRateMode.XIRR) {
+                ShortSellingCalculationSupport.HistoricalXirrTimeline(
+                    transactions = stockTransactions,
+                    transactionsAreOrdered = true
+                )
+            } else {
+                null
+            }
             var previousXirrGuessRate: Double? = null
 
             for (pt in rawPoints) {
@@ -192,6 +227,8 @@ class StockDetailViewModel(
                 // The points are chronological, so each transaction is applied once
                 // and only the already-replayed prefix is passed to later calculations.
                 val replay = timeline.advanceTo(dayEnd)
+                val marginSummary = marginTimeline?.advanceTo(dayEnd) ?: MarginSummary()
+                val shortSummary = shortTimeline?.advanceTo(dayEnd) ?: ShortSellingSummary()
                 val result = calculateHistoricalHoldingAt(
                     ptDateStr = pt.date,
                     ptPrice = pt.price,
@@ -205,13 +242,14 @@ class StockDetailViewModel(
                     market = market,
                     stockType = stockType,
                     dayEnd = dayEnd,
-                    marginDayCount = settings.marginDayCount,
                     xirrGuessRate = previousXirrGuessRate,
-                    hasMarginActivity = timeline.hasMarginActivity,
-                    hasShortActivity = timeline.hasShortActivity,
                     shortIncome = timeline.shortIncome,
                     shortCoverExpense = timeline.shortCoverExpense,
-                    hasMarginPurchase = timeline.hasMarginPurchase
+                    hasMarginPurchase = timeline.hasMarginPurchase,
+                    marginSummary = marginSummary,
+                    shortSummary = shortSummary,
+                    historicalCashFlowTimeline = historicalCashFlowTimeline,
+                    historicalShortXirrTimeline = historicalShortXirrTimeline
                 )
                 personalPoints.add(result.point)
                 previousXirrGuessRate = result.xirrGuessRate ?: previousXirrGuessRate
@@ -311,13 +349,14 @@ class StockDetailViewModel(
         market: String,
         stockType: String,
         dayEnd: Long,
-        marginDayCount: Int,
         xirrGuessRate: Double?,
-        hasMarginActivity: Boolean,
-        hasShortActivity: Boolean,
         shortIncome: Double,
         shortCoverExpense: Double,
-        hasMarginPurchase: Boolean
+        hasMarginPurchase: Boolean,
+        marginSummary: MarginSummary,
+        shortSummary: ShortSellingSummary,
+        historicalCashFlowTimeline: HistoricalTransactionCashFlowTimeline?,
+        historicalShortXirrTimeline: ShortSellingCalculationSupport.HistoricalXirrTimeline?
     ): HistoricalPointCalculationResult {
         val txs = transactions
         val shares = replay.shares
@@ -328,26 +367,6 @@ class StockDetailViewModel(
         val totalDividendIncome = replay.totalDividendIncome
         val costBasis = totalBuyExpense - totalSellIncome - totalDividendIncome
         val totalSellFeeAndTax = (sellAmountBeforeFee - totalSellNetIncome).coerceAtLeast(0.0)
-        val marginSummary = if (hasMarginActivity) {
-            MarginCalculationSupport.calculate(
-                transactions = txs,
-                valuationDate = dayEnd,
-                dayCount = marginDayCount,
-                transactionsAreOrdered = true
-            )
-        } else {
-            MarginSummary()
-        }
-        val shortSummary = if (hasShortActivity) {
-            ShortSellingCalculationSupport.calculate(
-                transactions = txs,
-                valuationDate = dayEnd,
-                dayCount = marginDayCount,
-                transactionsAreOrdered = true
-            )
-        } else {
-            ShortSellingSummary()
-        }
         val longInvestment = if (hasMarginPurchase) {
             marginSummary.selfFundedCapital + totalSellFeeAndTax
         } else {
@@ -401,11 +420,13 @@ class StockDetailViewModel(
                         shares = shares,
                         price = ptPrice,
                         terminalDateMillis = dayEnd,
-                        marginDayCount = marginDayCount,
                         marginSummary = marginSummary,
-                        shortSummary = shortSummary
+                        shortSummary = shortSummary,
+                        historicalCashFlowTimeline = historicalCashFlowTimeline,
+                        historicalShortXirrTimeline = historicalShortXirrTimeline
                     ),
-                    guess = xirrGuessRate ?: 0.1
+                    guess = xirrGuessRate ?: 0.1,
+                    zoneId = HistoryChartCalculationSupport.zoneIdForMarket(market)
                 )
                 nextXirrGuessRate = xirrRate
                 xirrRate?.times(100.0) ?: 0.0
@@ -430,42 +451,41 @@ class StockDetailViewModel(
         shares: Double,
         price: Double,
         terminalDateMillis: Long,
-        marginDayCount: Int,
         marginSummary: MarginSummary,
-        shortSummary: ShortSellingSummary
+        shortSummary: ShortSellingSummary,
+        historicalCashFlowTimeline: HistoricalTransactionCashFlowTimeline?,
+        historicalShortXirrTimeline: ShortSellingCalculationSupport.HistoricalXirrTimeline?
     ): List<CashFlow> {
-        val cashFlows = transactions.mapNotNull { transaction ->
-            when (transaction.type) {
-                "買進" -> CashFlow(transaction.date, -transaction.expense)
-                "融資買進" -> CashFlow(
-                    transaction.date,
-                    -(if (transaction.marginSelfFundedOverridden) transaction.marginSelfFunded else transaction.expense - transaction.marginPrincipal)
-                )
-                "賣出" -> CashFlow(
-                    transaction.date,
-                    transaction.income - transaction.marginRepayment - transaction.marginActualInterest
-                )
-                "融資還款" -> CashFlow(
-                    transaction.date,
-                    -(transaction.marginRepayment + transaction.marginActualInterest)
-                )
-                "配息" -> CashFlow(
-                    transaction.date,
-                    HoldingCalculationSupport.resolveDividendIncome(transaction)
-                )
-                "減資" -> CashFlow(transaction.date, transaction.cashReturned)
-                else -> null
-            }
-        }.toMutableList()
+        val cashFlows = historicalCashFlowTimeline?.cashFlowsAt(terminalDateMillis)?.toMutableList()
+            ?: transactions.mapNotNull { transaction ->
+                when (transaction.type) {
+                    "買進" -> CashFlow(transaction.date, -transaction.expense)
+                    "融資買進" -> CashFlow(
+                        transaction.date,
+                        -(if (transaction.marginSelfFundedOverridden) transaction.marginSelfFunded else transaction.expense - transaction.marginPrincipal)
+                    )
+                    "賣出" -> CashFlow(
+                        transaction.date,
+                        transaction.income - transaction.marginRepayment - transaction.marginActualInterest
+                    )
+                    "融資還款" -> CashFlow(
+                        transaction.date,
+                        -(transaction.marginRepayment + transaction.marginActualInterest)
+                    )
+                    "配息" -> CashFlow(
+                        transaction.date,
+                        HoldingCalculationSupport.resolveDividendIncome(transaction)
+                    )
+                    "減資" -> CashFlow(transaction.date, transaction.cashReturned)
+                    else -> null
+                }
+            }.toMutableList()
 
-        cashFlows += ShortSellingCalculationSupport.buildXirrCashFlows(
-            transactions = transactions,
+        historicalShortXirrTimeline?.cashFlowsAt(
             valuationDate = terminalDateMillis,
             currentPrice = price,
-            dayCount = marginDayCount,
-            shortSummary = shortSummary,
-            transactionsAreOrdered = true
-        )
+            shortSummary = shortSummary
+        )?.let { cashFlows += it }
 
         val hasValuedPosition = shares > 0.0 && price > 0.0
         val hasMarginDebt = marginSummary.outstandingPrincipal > 0.0 || marginSummary.accruedInterest > 0.0
