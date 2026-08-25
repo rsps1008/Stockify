@@ -169,6 +169,7 @@ object ShortSellingCalculationSupport {
     /** Incrementally builds short-selling cash flows for historical XIRR. */
     internal class HistoricalXirrTimeline(
         transactions: List<StockTransaction>,
+        private val transactionDateMapper: (Long) -> Long = { it },
         transactionsAreOrdered: Boolean = false
     ) {
         private val orderedTransactions = if (transactionsAreOrdered) {
@@ -188,7 +189,8 @@ object ShortSellingCalculationSupport {
         fun cashFlowsAt(
             valuationDate: Long,
             currentPrice: Double,
-            shortSummary: ShortSellingSummary
+            shortSummary: ShortSellingSummary,
+            terminalDate: Long = valuationDate
         ): List<CashFlow> {
             require(valuationDate >= lastValuationDate) {
                 "歷史 XIRR 現金流日期必須遞增"
@@ -203,7 +205,7 @@ object ShortSellingCalculationSupport {
                 lots.values.filter { it.remainingShares > 0.0 }.forEach { lot ->
                     val remainingRatio = lot.remainingShares / lot.originalShares
                     result += CashFlow(
-                        valuationDate,
+                        terminalDate,
                         lot.originalPrincipal * remainingRatio +
                             lot.openingIncome * remainingRatio -
                             currentPrice * lot.remainingShares
@@ -211,7 +213,7 @@ object ShortSellingCalculationSupport {
                 }
             }
             if (shortSummary.accruedBorrowFee > 0.0) {
-                result += CashFlow(valuationDate, -shortSummary.accruedBorrowFee)
+                result += CashFlow(terminalDate, -shortSummary.accruedBorrowFee)
             }
             lastValuationDate = valuationDate
             return result
@@ -231,7 +233,7 @@ object ShortSellingCalculationSupport {
                             originalPrincipal = principal,
                             openingIncome = transaction.income
                         )
-                        cashFlows += CashFlow(transaction.date, -principal)
+                        cashFlows += CashFlow(transactionDateMapper(transaction.date), -principal)
                     }
                 }
                 "買券還券" -> {
@@ -245,14 +247,20 @@ object ShortSellingCalculationSupport {
                             lot.originalPrincipal * coveredRatio +
                                 lot.openingIncome * coveredRatio -
                                 allocatedCoverExpense
-                        cashFlows += CashFlow(transaction.date, returnedAmount)
+                        cashFlows += CashFlow(transactionDateMapper(transaction.date), returnedAmount)
                         lot.remainingShares -= coveredShares
                     } else if (transaction.expense > 0.0) {
-                        cashFlows += CashFlow(transaction.date, -transaction.expense)
+                        cashFlows += CashFlow(
+                            transactionDateMapper(transaction.date),
+                            -transaction.expense
+                        )
                     }
                 }
                 "融券補償" -> if (transaction.shortCompensation > 0.0) {
-                    cashFlows += CashFlow(transaction.date, -transaction.shortCompensation)
+                    cashFlows += CashFlow(
+                        transactionDateMapper(transaction.date),
+                        -transaction.shortCompensation
+                    )
                 }
                 "分割", "減資" -> {
                     val factor = shareAdjustmentFactor(transaction)
@@ -279,6 +287,7 @@ object ShortSellingCalculationSupport {
         currentPrice: Double,
         dayCount: Int = 365,
         shortSummary: ShortSellingSummary? = null,
+        transactionDateMapper: (Long) -> Long = { it },
         transactionsAreOrdered: Boolean = false
     ): List<CashFlow> {
         val summary = shortSummary ?: calculate(
@@ -289,6 +298,7 @@ object ShortSellingCalculationSupport {
         )
         return HistoricalXirrTimeline(
             transactions = transactions,
+            transactionDateMapper = transactionDateMapper,
             transactionsAreOrdered = transactionsAreOrdered
         ).cashFlowsAt(
             valuationDate = valuationDate,

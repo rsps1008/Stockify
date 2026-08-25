@@ -23,6 +23,7 @@ import com.rsps1008.stockify.data.ReturnRateCalculator
 import com.rsps1008.stockify.data.ShortSellingCalculationSupport
 import com.rsps1008.stockify.data.ShortSellingSummary
 import com.rsps1008.stockify.data.HistoryChartCalculationSupport
+import com.rsps1008.stockify.data.TransactionDateSupport
 import com.rsps1008.stockify.data.TransactionCostSupport
 import com.rsps1008.stockify.ui.screens.HoldingInfo
 import com.rsps1008.stockify.ui.screens.TransactionUiState
@@ -179,6 +180,10 @@ class StockDetailViewModel(
             val market = stock?.market ?: StockMarket.inferFromCode(stockCode)
 
             val rawPoints = historyInternal.rawPoints.sortedBy { it.date }
+            val xirrZoneId = HistoryChartCalculationSupport.zoneIdForMarket(market)
+            val transactionDateMapper: (Long) -> Long = { transactionDate ->
+                TransactionDateSupport.moveToZoneDateStartMillis(transactionDate, xirrZoneId)
+            }
             val timeline = HistoricalLongPositionTimeline(stockTransactions, transactionsAreOrdered = true)
             val marginTimeline = if (timeline.hasMarginActivity) {
                 MarginCalculationSupport.HistoricalTimeline(
@@ -201,6 +206,7 @@ class StockDetailViewModel(
             val historicalCashFlowTimeline = if (settings.returnRateMode == ReturnRateMode.XIRR) {
                 HistoricalTransactionCashFlowTimeline(
                     transactions = stockTransactions,
+                    transactionDateMapper = transactionDateMapper,
                     transactionsAreOrdered = true
                 )
             } else {
@@ -209,6 +215,7 @@ class StockDetailViewModel(
             val historicalShortXirrTimeline = if (settings.returnRateMode == ReturnRateMode.XIRR) {
                 ShortSellingCalculationSupport.HistoricalXirrTimeline(
                     transactions = stockTransactions,
+                    transactionDateMapper = transactionDateMapper,
                     transactionsAreOrdered = true
                 )
             } else {
@@ -219,16 +226,18 @@ class StockDetailViewModel(
             for (pt in rawPoints) {
                 val dayEnd = HistoryChartCalculationSupport.valuationDateEndMillis(pt.date, market)
                     ?: continue
+                val transactionCutoff = TransactionDateSupport.replayCutoffMillis(pt.date)
+                    ?: continue
 
-                if (firstTxTime != null && dayEnd < firstTxTime) {
+                if (firstTxTime != null && transactionCutoff < firstTxTime) {
                     continue
                 }
 
                 // The points are chronological, so each transaction is applied once
                 // and only the already-replayed prefix is passed to later calculations.
-                val replay = timeline.advanceTo(dayEnd)
-                val marginSummary = marginTimeline?.advanceTo(dayEnd) ?: MarginSummary()
-                val shortSummary = shortTimeline?.advanceTo(dayEnd) ?: ShortSellingSummary()
+                val replay = timeline.advanceTo(transactionCutoff)
+                val marginSummary = marginTimeline?.advanceTo(transactionCutoff) ?: MarginSummary()
+                val shortSummary = shortTimeline?.advanceTo(transactionCutoff) ?: ShortSellingSummary()
                 val result = calculateHistoricalHoldingAt(
                     ptDateStr = pt.date,
                     ptPrice = pt.price,
@@ -242,6 +251,7 @@ class StockDetailViewModel(
                     market = market,
                     stockType = stockType,
                     dayEnd = dayEnd,
+                    transactionCutoff = transactionCutoff,
                     xirrGuessRate = previousXirrGuessRate,
                     shortIncome = timeline.shortIncome,
                     shortCoverExpense = timeline.shortCoverExpense,
@@ -349,6 +359,7 @@ class StockDetailViewModel(
         market: String,
         stockType: String,
         dayEnd: Long,
+        transactionCutoff: Long,
         xirrGuessRate: Double?,
         shortIncome: Double,
         shortCoverExpense: Double,
@@ -420,6 +431,7 @@ class StockDetailViewModel(
                         shares = shares,
                         price = ptPrice,
                         terminalDateMillis = dayEnd,
+                        transactionCutoffMillis = transactionCutoff,
                         marginSummary = marginSummary,
                         shortSummary = shortSummary,
                         historicalCashFlowTimeline = historicalCashFlowTimeline,
@@ -451,12 +463,15 @@ class StockDetailViewModel(
         shares: Double,
         price: Double,
         terminalDateMillis: Long,
+        transactionCutoffMillis: Long,
         marginSummary: MarginSummary,
         shortSummary: ShortSellingSummary,
         historicalCashFlowTimeline: HistoricalTransactionCashFlowTimeline?,
         historicalShortXirrTimeline: ShortSellingCalculationSupport.HistoricalXirrTimeline?
     ): List<CashFlow> {
-        val cashFlows = historicalCashFlowTimeline?.cashFlowsAt(terminalDateMillis)?.toMutableList()
+        val cashFlows = historicalCashFlowTimeline
+            ?.cashFlowsAt(transactionCutoffMillis)
+            ?.toMutableList()
             ?: transactions.mapNotNull { transaction ->
                 when (transaction.type) {
                     "買進" -> CashFlow(transaction.date, -transaction.expense)
@@ -482,9 +497,10 @@ class StockDetailViewModel(
             }.toMutableList()
 
         historicalShortXirrTimeline?.cashFlowsAt(
-            valuationDate = terminalDateMillis,
+            valuationDate = transactionCutoffMillis,
             currentPrice = price,
-            shortSummary = shortSummary
+            shortSummary = shortSummary,
+            terminalDate = terminalDateMillis
         )?.let { cashFlows += it }
 
         val hasValuedPosition = shares > 0.0 && price > 0.0

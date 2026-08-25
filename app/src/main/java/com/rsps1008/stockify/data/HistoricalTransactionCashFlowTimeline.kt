@@ -7,6 +7,7 @@ package com.rsps1008.stockify.data
 internal class HistoricalTransactionCashFlowTimeline(
     transactions: List<StockTransaction>,
     private val currencyRate: Double = 1.0,
+    private val transactionDateMapper: (Long) -> Long = { it },
     transactionsAreOrdered: Boolean = false
 ) {
     private val orderedTransactions = if (transactionsAreOrdered) {
@@ -48,6 +49,6 @@ internal class HistoricalTransactionCashFlowTimeline(
             "減資" -> transaction.cashReturned * currencyRate
             else -> return null
         }
-        return CashFlow(transaction.date, amount)
+        return CashFlow(transactionDateMapper(transaction.date), amount)
     }
 }

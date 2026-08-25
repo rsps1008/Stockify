@@ -44,4 +44,25 @@ class HistoricalTransactionCashFlowTimelineTest {
             timeline.cashFlowsAt(day * 4)
         )
     }
+
+    @Test
+    fun transactionCashFlowsUseTheConfiguredDateOnlyMapping() {
+        val transaction = StockTransaction(
+            stockCode = "AAPL",
+            market = "US",
+            date = 1_000L,
+            recordTime = 1_000L,
+            type = "買進",
+            expense = 100.0
+        )
+        val timeline = HistoricalTransactionCashFlowTimeline(
+            transactions = listOf(transaction),
+            transactionDateMapper = { it + 5_000L }
+        )
+
+        assertEquals(
+            listOf(com.rsps1008.stockify.data.CashFlow(6_000L, -100.0)),
+            timeline.cashFlowsAt(1_000L)
+        )
+    }
 }

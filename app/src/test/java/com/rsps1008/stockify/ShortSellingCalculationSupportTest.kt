@@ -364,4 +364,36 @@ class ShortSellingCalculationSupportTest {
             )
         }
     }
+
+    @Test
+    fun historicalXirrSeparatesTransactionDateMappingFromTerminalDate() {
+        val transaction = StockTransaction(
+            stockCode = "2330",
+            date = 1_000L,
+            recordTime = 1_000L,
+            type = "融券賣出",
+            sellPrice = 100.0,
+            sellShares = 10.0,
+            income = 1_000.0,
+            shortBorrowPrincipal = 1_000.0,
+            shortLotId = "short-1"
+        )
+        val timeline = ShortSellingCalculationSupport.HistoricalXirrTimeline(
+            transactions = listOf(transaction),
+            transactionDateMapper = { it + 5_000L }
+        )
+
+        val cashFlows = timeline.cashFlowsAt(
+            valuationDate = 1_000L,
+            currentPrice = 90.0,
+            shortSummary = ShortSellingCalculationSupport.calculate(
+                transactions = listOf(transaction),
+                valuationDate = 1_000L
+            ),
+            terminalDate = 9_000L
+        )
+
+        assertEquals(6_000L, cashFlows.first().dateMillis)
+        assertEquals(9_000L, cashFlows.last().dateMillis)
+    }
 }

@@ -29,6 +29,24 @@ data class StockHistoryPoint(
     val price: Double
 )
 
+internal fun shouldUseHistoryMonthWithoutRefresh(
+    month: String,
+    latestChartMonth: String,
+    latestChartDate: String,
+    points: List<StockHistoryPoint>,
+    forceRefreshCurrentMonth: Boolean = false
+): Boolean {
+    if (month == latestChartMonth && forceRefreshCurrentMonth) return false
+    return month != latestChartMonth || points.any { it.date == latestChartDate }
+}
+
+internal fun mergeHistoryPointsPreferLatest(
+    points: List<StockHistoryPoint>
+): List<StockHistoryPoint> = points
+    .associateBy { it.date }
+    .values
+    .sortedBy { it.date }
+
 internal class StockHistoryCache {
     private val lock = Any()
     private val values = mutableMapOf<String, List<StockHistoryPoint>>()
@@ -103,20 +121,27 @@ class TwseStockHistoryService(
             val localData = stockDao.getHistoryPricesForMonth(normalizedCode, normalizedMarket, monthPrefix)
             if (localData.isNotEmpty()) {
                 val localPoints = localData.map { StockHistoryPoint(it.date, it.price) }.filterForChart(latestChartDateStr)
-                if (shouldUseLocalMonthWithoutRefresh(monthStr, latestChartMonthStr, latestChartDateStr, localPoints)) {
+                if (shouldUseHistoryMonthWithoutRefresh(
+                        monthStr,
+                        latestChartMonthStr,
+                        latestChartDateStr,
+                        localPoints
+                    )
+                ) {
                     cache.putIfCurrent(cacheKey, localPoints, cacheGeneration)
                 }
                 resultPoints.addAll(localPoints)
             }
         }
 
-        resultPoints.distinctBy { it.date }.sortedBy { it.date }
+        mergeHistoryPointsPreferLatest(resultPoints)
     }
 
     suspend fun fetchHistory(
         stockCode: String,
         rangeMonths: Int,
         market: String = StockMarket.inferFromCode(stockCode),
+        forceRefreshCurrentMonth: Boolean = false,
         onProgress: (step: Int, total: Int) -> Unit
     ): List<StockHistoryPoint> {
         val normalizedCode = stockCode.uppercase().trim()
@@ -128,10 +153,17 @@ class TwseStockHistoryService(
                 rangeMonths = rangeMonths,
                 exchange = StockExchange.normalize(stock?.exchange),
                 onProgress = onProgress,
-                market = normalizedMarket
+                market = normalizedMarket,
+                forceRefreshCurrentMonth = forceRefreshCurrentMonth
             )
         } else {
-            fetchUsHistory(normalizedCode, rangeMonths, onProgress, normalizedMarket)
+            fetchUsHistory(
+                normalizedCode,
+                rangeMonths,
+                onProgress,
+                normalizedMarket,
+                forceRefreshCurrentMonth
+            )
         }
     }
 
@@ -140,7 +172,8 @@ class TwseStockHistoryService(
         rangeMonths: Int,
         exchange: String,
         onProgress: (step: Int, total: Int) -> Unit,
-        market: String
+        market: String,
+        forceRefreshCurrentMonth: Boolean
     ): List<StockHistoryPoint> = withContext(Dispatchers.IO) {
         val targetMonths = getTargetMonths(rangeMonths)
         val total = targetMonths.size
@@ -157,7 +190,16 @@ class TwseStockHistoryService(
 
             if (cached != null) {
                 resultPoints.addAll(cached.filterForChart(latestChartDateStr))
-                continue
+                if (shouldUseHistoryMonthWithoutRefresh(
+                        month = monthStr,
+                        latestChartMonth = latestChartMonthStr,
+                        latestChartDate = latestChartDateStr,
+                        points = cached,
+                        forceRefreshCurrentMonth = forceRefreshCurrentMonth
+                    )
+                ) {
+                    continue
+                }
             }
 
             if (monthStr > latestChartMonthStr) {
@@ -169,7 +211,14 @@ class TwseStockHistoryService(
             if (localData.isNotEmpty()) {
                 val localPoints = localData.map { StockHistoryPoint(it.date, it.price) }.filterForChart(latestChartDateStr)
                 resultPoints.addAll(localPoints)
-                if (shouldUseLocalMonthWithoutRefresh(monthStr, latestChartMonthStr, latestChartDateStr, localPoints)) {
+                if (shouldUseHistoryMonthWithoutRefresh(
+                        monthStr,
+                        latestChartMonthStr,
+                        latestChartDateStr,
+                        localPoints,
+                        forceRefreshCurrentMonth
+                    )
+                ) {
                     cache.putIfCurrent(cacheKey, localPoints, cacheGeneration)
                     continue
                 }
@@ -199,7 +248,15 @@ class TwseStockHistoryService(
                         parseTwseResponse(body)
                     }.filterForChart(latestChartDateStr)
                     if (points.isNotEmpty()) {
-                        cache.putIfCurrent(cacheKey, points, cacheGeneration)
+                        if (shouldUseHistoryMonthWithoutRefresh(
+                                monthStr,
+                                latestChartMonthStr,
+                                latestChartDateStr,
+                                points
+                            )
+                        ) {
+                            cache.putIfCurrent(cacheKey, points, cacheGeneration)
+                        }
                         resultPoints.addAll(points)
 
                         // Save fetched points to database
@@ -218,14 +275,15 @@ class TwseStockHistoryService(
         }
 
         // Return sorted chronologically by date
-        resultPoints.distinctBy { it.date }.sortedBy { it.date }
+        mergeHistoryPointsPreferLatest(resultPoints)
     }
 
     private suspend fun fetchUsHistory(
         stockCode: String,
         rangeMonths: Int,
         onProgress: (step: Int, total: Int) -> Unit,
-        market: String
+        market: String,
+        forceRefreshCurrentMonth: Boolean
     ): List<StockHistoryPoint> = withContext(Dispatchers.IO) {
         val targetMonths = getTargetMonths(rangeMonths)
         val resultPoints = mutableListOf<StockHistoryPoint>()
@@ -241,7 +299,16 @@ class TwseStockHistoryService(
             val cached = cache.get(cacheKey)
             if (cached != null) {
                 resultPoints.addAll(cached.filterForChart(latestChartDateStr))
-                continue
+                if (shouldUseHistoryMonthWithoutRefresh(
+                        month = monthStr,
+                        latestChartMonth = latestChartMonthStr,
+                        latestChartDate = latestChartDateStr,
+                        points = cached,
+                        forceRefreshCurrentMonth = forceRefreshCurrentMonth
+                    )
+                ) {
+                    continue
+                }
             }
 
             if (monthStr > latestChartMonthStr) {
@@ -253,7 +320,14 @@ class TwseStockHistoryService(
             if (localData.isNotEmpty()) {
                 val localPoints = localData.map { StockHistoryPoint(it.date, it.price) }.filterForChart(latestChartDateStr)
                 resultPoints.addAll(localPoints)
-                if (shouldUseLocalMonthWithoutRefresh(monthStr, latestChartMonthStr, latestChartDateStr, localPoints)) {
+                if (shouldUseHistoryMonthWithoutRefresh(
+                        monthStr,
+                        latestChartMonthStr,
+                        latestChartDateStr,
+                        localPoints,
+                        forceRefreshCurrentMonth
+                    )
+                ) {
                     cache.putIfCurrent(cacheKey, localPoints, cacheGeneration)
                     continue
                 }
@@ -315,19 +389,27 @@ class TwseStockHistoryService(
                 // Update memory cache
                 val groupedByMonth = points.groupBy { it.date.replace("-", "").substring(0, 6) }
                 for ((mStr, mPoints) in groupedByMonth) {
-                    cache.putIfCurrent(
-                        historyCacheKey(market, stockCode, mStr),
-                        mPoints,
-                        cacheGeneration
-                    )
+                    if (shouldUseHistoryMonthWithoutRefresh(
+                            mStr,
+                            latestChartMonthStr,
+                            latestChartDateStr,
+                            mPoints
+                        )
+                    ) {
+                        cache.putIfCurrent(
+                            historyCacheKey(market, stockCode, mStr),
+                            mPoints,
+                            cacheGeneration
+                        )
+                    }
                 }
 
                 // Rebuild resultPoints from cache
                 resultPoints.clear()
                 for (monthStr in targetMonths) {
                     val cacheKey = "${monthStr.substring(0, 6)}"
-                    val cached = cache.get(historyCacheKey(market, stockCode, cacheKey))
-                        ?: groupedByMonth[cacheKey]
+                    val cached = groupedByMonth[cacheKey]
+                        ?: cache.get(historyCacheKey(market, stockCode, cacheKey))
                         ?: emptyList()
                     resultPoints.addAll(cached.filterForChart(latestChartDateStr))
                 }
@@ -335,7 +417,7 @@ class TwseStockHistoryService(
         }
 
         // Return sorted chronologically by date
-        resultPoints.distinctBy { it.date }.sortedBy { it.date }
+        mergeHistoryPointsPreferLatest(resultPoints)
     }
 
     private suspend fun fetchNasdaqBody(
@@ -404,15 +486,6 @@ class TwseStockHistoryService(
             list.add(monthStr)
         }
         return list.reversed() // Oldest month first
-    }
-
-    private fun shouldUseLocalMonthWithoutRefresh(
-        monthStr: String,
-        latestChartMonthStr: String,
-        latestChartDateStr: String,
-        points: List<StockHistoryPoint>
-    ): Boolean {
-        return monthStr != latestChartMonthStr || points.any { it.date == latestChartDateStr }
     }
 
     private fun getLatestChartDateString(market: String): String {
