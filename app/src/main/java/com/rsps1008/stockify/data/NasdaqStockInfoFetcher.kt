@@ -128,11 +128,12 @@ class NasdaqStockInfoFetcher : StockInfoFetcher {
                 ?.replace(",", "")
                 ?.toDoubleOrNull() ?: 0.0
 
-            if (price != null) {
+            val validPrice = price.takeIf { it.isFinitePositive() }
+            if (validPrice != null) {
                 val info = RealtimeStockInfo(
-                    currentPrice = price,
-                    change = change,
-                    changePercent = changePercent,
+                    currentPrice = validPrice,
+                    change = change.finiteOrZero(),
+                    changePercent = changePercent.finiteOrZero(),
                     limitState = LimitState.NONE
                 )
                 Log.d("NasdaqStockInfoFetcher", "Nasdaq Fetched $stockCode -> $info from $url")

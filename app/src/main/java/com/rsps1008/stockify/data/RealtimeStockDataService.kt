@@ -245,11 +245,7 @@ class RealtimeStockDataService(
         forceSave: Boolean = false,
         refreshRegardlessOfMarketOpen: Boolean = false
     ) {
-        if (!quoteRefreshMutex.tryLock()) {
-            Log.d("RealtimeStockDataService", "Skipping overlapping quote refresh")
-            return
-        }
-        try {
+        quoteRefreshMutex.withLock {
             try {
                 fetchAllStockInfo(
                     isContinuous = isContinuous,
@@ -269,8 +265,6 @@ class RealtimeStockDataService(
             } catch (e: Exception) {
                 Log.e("RealtimeStockDataService", "Taiwan weighted index refresh failed", e)
             }
-        } finally {
-            quoteRefreshMutex.unlock()
         }
     }
 

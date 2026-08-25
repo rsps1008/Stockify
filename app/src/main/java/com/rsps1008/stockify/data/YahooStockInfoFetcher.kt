@@ -89,9 +89,11 @@ class YahooStockInfoFetcher : StockInfoFetcher {
             val price = priceStr?.normalizeYahooNumber()?.toDoubleOrNull()
             val yesterdayPrice = yesterdayPriceStr?.normalizeYahooNumber()?.toDoubleOrNull()
 
-            if (price != null && yesterdayPrice != null && yesterdayPrice != 0.0) {
-                val change = price - yesterdayPrice
-                val changePercent = (change / yesterdayPrice) * 100
+            val validPrice = price.takeIf { it.isFinitePositive() }
+            val validYesterdayPrice = yesterdayPrice.takeIf { it.isFinitePositive() }
+            if (validPrice != null && validYesterdayPrice != null) {
+                val change = validPrice - validYesterdayPrice
+                val changePercent = (change / validYesterdayPrice) * 100
                 val limitState =
                     when {
                         changePercent >= 9.9 -> LimitState.LIMIT_UP
@@ -99,7 +101,7 @@ class YahooStockInfoFetcher : StockInfoFetcher {
                         else -> LimitState.NONE
                     }
                 val info = RealtimeStockInfo(
-                    currentPrice = price,
+                    currentPrice = validPrice,
                     change = change,
                     changePercent = changePercent,
                     limitState = limitState

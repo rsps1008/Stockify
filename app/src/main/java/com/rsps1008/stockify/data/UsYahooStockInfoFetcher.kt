@@ -111,11 +111,13 @@ class UsYahooStockInfoFetcher : StockInfoFetcher {
             val changePercent = meta["regularMarketChangePercent"].asDoubleOrNull()
                 ?: (price?.let { current -> previousClose?.let { if (it != 0.0) ((current - it) / it) * 100 else 0.0 } })
 
-            if (price != null && previousClose != null) {
+            val validPrice = price.takeIf { it.isFinitePositive() }
+            val validPreviousClose = previousClose.takeIf { it.isFinitePositive() }
+            if (validPrice != null && validPreviousClose != null) {
                 val info = RealtimeStockInfo(
-                    currentPrice = price,
-                    change = change ?: 0.0,
-                    changePercent = changePercent ?: 0.0,
+                    currentPrice = validPrice,
+                    change = change.finiteOrZero(),
+                    changePercent = changePercent.finiteOrZero(),
                     limitState = LimitState.NONE
                 )
                 Log.d("UsYahooStockInfoFetcher", "US Yahoo Fetched $stockCode -> $info from $url")
@@ -128,5 +130,5 @@ class UsYahooStockInfoFetcher : StockInfoFetcher {
     }
 
     private fun JsonElement?.asDoubleOrNull(): Double? =
-        (this as? JsonPrimitive)?.doubleOrNull
+        (this as? JsonPrimitive)?.doubleOrNull?.takeIf { it.isFinite() }
 }

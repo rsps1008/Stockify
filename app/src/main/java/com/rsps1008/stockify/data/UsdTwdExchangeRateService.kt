@@ -58,9 +58,10 @@ class UsdTwdExchangeRateService(
 
     suspend fun refreshOnce() {
         val rate = fetchRate()
-        if (rate != null && rate > 0.0) {
-            _usdToTwdRate.value = rate
-            settingsDataStore.setUsdToTwdRate(rate)
+        val validRate = rate.takeIf { it.isFinitePositive() }
+        if (validRate != null) {
+            _usdToTwdRate.value = validRate
+            settingsDataStore.setUsdToTwdRate(validRate)
         }
     }
 

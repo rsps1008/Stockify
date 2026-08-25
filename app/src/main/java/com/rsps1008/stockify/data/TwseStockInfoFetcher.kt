@@ -137,18 +137,19 @@ class TwseStockInfoFetcher : StockInfoFetcher {
             ?: firstValidPrice(obj["a"].stringOrNull())
             ?: firstValidPrice(obj["b"].stringOrNull())
         val yesterday = obj["y"].stringOrNull()?.toDoubleOrNull()
-        if (price == null || yesterday == null || yesterday == 0.0) return null
+        val validPrice = price.takeIf { it.isFinitePositive() } ?: return null
+        val validYesterday = yesterday.takeIf { it.isFinitePositive() } ?: return null
 
-        val change = price - yesterday
-        val up = obj["u"].stringOrNull()?.toDoubleOrNull()
-        val down = obj["w"].stringOrNull()?.toDoubleOrNull()
+        val change = validPrice - validYesterday
+        val up = obj["u"].stringOrNull()?.toDoubleOrNull().takeIf { it?.isFinite() == true }
+        val down = obj["w"].stringOrNull()?.toDoubleOrNull().takeIf { it?.isFinite() == true }
         return RealtimeStockInfo(
-            currentPrice = price,
+            currentPrice = validPrice,
             change = change,
-            changePercent = (change / yesterday) * 100,
+            changePercent = (change / validYesterday) * 100,
             limitState = when {
-                up != null && price == up -> LimitState.LIMIT_UP
-                down != null && price == down -> LimitState.LIMIT_DOWN
+                up != null && validPrice == up -> LimitState.LIMIT_UP
+                down != null && validPrice == down -> LimitState.LIMIT_DOWN
                 else -> LimitState.NONE
             }
         )
@@ -157,7 +158,7 @@ class TwseStockInfoFetcher : StockInfoFetcher {
     fun firstValidPrice(raw: String?): Double? =
         raw?.split("_")
             ?.mapNotNull { it.toDoubleOrNull() }
-            ?.firstOrNull { it > 0.0 }
+            ?.firstOrNull { it.isFinite() && it > 0.0 }
 
     private fun JsonElement?.stringOrNull(): String? =
         (this as? JsonPrimitive)?.contentOrNull
