@@ -11,6 +11,7 @@ import java.util.zip.ZipOutputStream
 import java.util.zip.ZipEntry
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.fail
 import org.junit.Test
 
@@ -88,6 +89,20 @@ class GoogleDriveBackupBundleTest {
             fail("checksum mismatch should reject the backup")
         } catch (e: IllegalArgumentException) {
             assertEquals("交易備份 checksum 不一致", e.message)
+        }
+    }
+
+    @Test
+    fun restoreRejectsAnOversizedCompressedEntryBeforeExpandingItFully() {
+        val output = ByteArrayOutputStream()
+        ZipOutputStream(output).use { zip ->
+            zip.putNextEntry(ZipEntry("transactions.csv"))
+            zip.write(ByteArray(8 * 1024 * 1024 + 1))
+            zip.closeEntry()
+        }
+
+        assertThrows(IllegalArgumentException::class.java) {
+            GoogleDriveBackupBundle.restore(output.toByteArray())
         }
     }
 

@@ -190,6 +190,9 @@ interface StockDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAccounts(accounts: List<Account>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun replaceAccounts(accounts: List<Account>)
+
     @Update
     suspend fun updateAccount(account: Account)
 

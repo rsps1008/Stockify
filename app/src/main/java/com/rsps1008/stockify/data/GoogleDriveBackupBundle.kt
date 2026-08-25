@@ -25,6 +25,8 @@ object GoogleDriveBackupBundle {
     private const val ACCOUNTS_ENTRY = "accounts.json"
     private const val HOLDINGS_ORDER_ENTRY = "holdings_order.json"
     private const val VERSION = 1
+    private const val MAX_ENTRY_BYTES = 8 * 1024 * 1024
+    private const val MAX_TOTAL_UNCOMPRESSED_BYTES = 20 * 1024 * 1024
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -66,11 +68,17 @@ object GoogleDriveBackupBundle {
 
     fun restore(bundle: ByteArray): GoogleDriveBackupRestored {
         val entries = linkedMapOf<String, ByteArray>()
+        var totalUncompressedBytes = 0
         ZipInputStream(ByteArrayInputStream(bundle)).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
                 require(!entry.isDirectory) { "備份 bundle 不可包含目錄" }
-                require(entries.put(entry.name, zip.readBytes()) == null) {
+                val content = zip.readEntryWithLimit(MAX_ENTRY_BYTES)
+                totalUncompressedBytes += content.size
+                require(totalUncompressedBytes <= MAX_TOTAL_UNCOMPRESSED_BYTES) {
+                    "備份 bundle 解壓後資料過大"
+                }
+                require(entries.put(entry.name, content) == null) {
                     "備份 bundle 含有重複檔案"
                 }
                 zip.closeEntry()
@@ -107,6 +115,18 @@ object GoogleDriveBackupBundle {
 
     private fun Map<String, ByteArray>.requireEntry(name: String): ByteArray =
         this[name] ?: error("備份 bundle 缺少 $name")
+
+    private fun ZipInputStream.readEntryWithLimit(maxBytes: Int): ByteArray {
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        while (true) {
+            val read = read(buffer)
+            if (read < 0) break
+            require(output.size() + read <= maxBytes) { "備份 bundle 單一檔案過大" }
+            output.write(buffer, 0, read)
+        }
+        return output.toByteArray()
+    }
 
     private fun sha256(content: ByteArray): String =
         MessageDigest.getInstance("SHA-256")

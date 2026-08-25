@@ -21,6 +21,8 @@ import com.google.api.services.drive.DriveScopes
 import com.rsps1008.stockify.data.CsvService
 import com.rsps1008.stockify.data.CsvTransaction
 import com.rsps1008.stockify.data.Account
+import com.rsps1008.stockify.data.validatedRestoredAccounts
+import com.rsps1008.stockify.data.resolvedActiveAccountId
 import com.rsps1008.stockify.StockifyApplication
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -569,8 +571,12 @@ class SettingsViewModel(
                         it.readBytes()
                     }
                 } ?: error("無法讀取檔案")
-                val accounts = Json.decodeFromString<List<Account>>(content.toString(Charsets.UTF_8))
-                accounts.forEach { stockDao.insertAccount(it) }
+                val accounts = validatedRestoredAccounts(
+                    Json.decodeFromString<List<Account>>(content.toString(Charsets.UTF_8))
+                )
+                appDatabase.withTransaction {
+                    stockDao.replaceAccounts(accounts)
+                }
                 _message.value = "本地帳戶名稱還原成功，共 ${accounts.size} 個帳戶"
             } catch (e: CancellationException) {
                 throw e
@@ -1173,19 +1179,30 @@ class SettingsViewModel(
         )
 
         // Parse optional companion backups before any destructive database work.
-        val restoredAccounts = parseAccountsBackup()
+        val parsedAccounts = parseAccountsBackup()
+        val restoredAccounts = if (parsedAccounts.isEmpty()) {
+            emptyList()
+        } else {
+            validatedRestoredAccounts(parsedAccounts)
+        }
         val restoredOrder = parseHoldingsOrderBackup()
         val refreshedStockCodes = appDatabase.withTransaction {
             if (deleteOldData) {
                 deleteAllData(restoredAccounts)
             } else if (restoredAccounts.isNotEmpty()) {
-                restoredAccounts.forEach { stockDao.insertAccount(it) }
+                stockDao.replaceAccounts(restoredAccounts)
             }
 
             writeImportedTransactions(transactionsToImport)
         }
 
         applyHoldingsOrderBackup(restoredOrder)
+        if (deleteOldData) {
+            val activeAccountId = settingsDataStore.activeAccountIdFlow.first()
+            settingsDataStore.setActiveAccountId(
+                resolvedActiveAccountId(activeAccountId, accountsForReplacementRestore(restoredAccounts))
+            )
+        }
         refreshImportedStocks(refreshedStockCodes)
         _message.value = "還原成功，共 ${transactionsToImport.size} 筆紀錄"
     }
@@ -1551,7 +1568,7 @@ class SettingsViewModel(
     private suspend fun deleteAllData(restoredAccounts: List<Account> = emptyList()) {
         stockDao.deleteAllTransactions()
         stockDao.deleteAllAccounts()
-        accountsForReplacementRestore(restoredAccounts).forEach { stockDao.insertAccount(it) }
+        stockDao.replaceAccounts(accountsForReplacementRestore(restoredAccounts))
     }
 
     fun updateStockListFromTwse() {
