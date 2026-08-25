@@ -114,7 +114,9 @@ class SettingsViewModel(
         var hasShownLocalCsvRestoreFeeHintThisProcess = false
     }
 
-    private val stockDataFetcher = StockDataFetcher()
+    private val stockDataFetcher = StockDataFetcher(
+        (application as StockifyApplication).httpClient
+    )
     private val stockListRepository = StockListRepository(application)
     private val csvService = CsvService()
     private val pdfHoldingImportService = PdfHoldingImportService()

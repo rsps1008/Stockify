@@ -1,7 +1,6 @@
 package com.rsps1008.stockify.data
 
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.CancellationException
@@ -22,6 +21,27 @@ private val requiredTaiwanStockListSections = listOf(
     TaiwanStockListSection(mode = "5", label = "興櫃")
 )
 
+internal data class UsStockListSource(
+    val url: String,
+    val symbolColumn: String,
+    val label: String
+)
+
+private val requiredUsStockListSources = listOf(
+    UsStockListSource(
+        url = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt",
+        symbolColumn = "Symbol",
+        label = "Nasdaq Listed"
+    ),
+    UsStockListSource(
+        url = "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt",
+        symbolColumn = "ACT Symbol",
+        label = "Other Listed"
+    )
+)
+
+private const val MINIMUM_US_STOCKS_PER_SOURCE = 100
+
 internal fun requireCompleteTaiwanStockLists(
     stocksByMode: Map<String, List<Stock>>
 ): List<Stock> = requiredTaiwanStockListSections.flatMap { section ->
@@ -33,12 +53,67 @@ internal fun requireCompleteTaiwanStockLists(
     stocks
 }
 
-class StockDataFetcher {
-    private val client = HttpClient(CIO) {
-        engine {
-            requestTimeout = 30000
+internal fun parseUsStockListSource(
+    responseText: String,
+    source: UsStockListSource
+): List<Stock> {
+    val reader = BufferedReader(StringReader(responseText))
+    val header = reader.readLine()
+        ?.removePrefix("\uFEFF")
+        ?.split('|')
+        ?.takeIf { it.isNotEmpty() }
+        ?: throw IllegalStateException("${source.label} 缺少標頭")
+    val columns = header.withIndex().associate { it.value.trim() to it.index }
+    val symbolIndex = columns[source.symbolColumn]
+        ?: throw IllegalStateException("${source.label} 缺少 ${source.symbolColumn} 欄位")
+    val nameIndex = columns["Security Name"]
+        ?: throw IllegalStateException("${source.label} 缺少 Security Name 欄位")
+    val testIssueIndex = columns["Test Issue"] ?: -1
+    val etfIndex = columns["ETF"] ?: -1
+    val lastRequiredFieldIndex = maxOf(symbolIndex, nameIndex, testIssueIndex, etfIndex)
+    val stocks = linkedMapOf<String, Stock>()
+    var hasFooter = false
+
+    reader.forEachLine { line ->
+        val fields = line.split('|')
+        val symbol = fields.getOrNull(symbolIndex)?.trim().orEmpty()
+        if (symbol.startsWith("File Creation Time:")) {
+            hasFooter = true
+            return@forEachLine
         }
+        if (fields.size <= lastRequiredFieldIndex) return@forEachLine
+        if (symbol.isBlank()) return@forEachLine
+        if (testIssueIndex >= 0 && fields.getOrNull(testIssueIndex)?.trim() == "Y") return@forEachLine
+
+        val name = fields.getOrNull(nameIndex)?.trim().orEmpty()
+        val stockType = if (etfIndex >= 0 && fields.getOrNull(etfIndex)?.trim() == "Y") {
+            "ETF"
+        } else {
+            "Stock"
+        }
+        stocks.putIfAbsent(
+            symbol,
+            Stock(
+                id = 0,
+                code = symbol,
+                name = name.ifBlank { symbol },
+                market = StockMarket.US,
+                industry = "",
+                stockType = stockType
+            )
+        )
     }
+
+    check(hasFooter) { "${source.label} 缺少檔案 footer" }
+    check(stocks.size >= MINIMUM_US_STOCKS_PER_SOURCE) {
+        "${source.label} 有效美股資料不足 $MINIMUM_US_STOCKS_PER_SOURCE 筆"
+    }
+    return stocks.values.toList()
+}
+
+class StockDataFetcher(
+    private val client: HttpClient
+) {
 
     suspend fun fetchStockList(): List<Stock> = withContext(Dispatchers.IO) {
         val stocksByMode = linkedMapOf<String, List<Stock>>()
@@ -114,48 +189,13 @@ class StockDataFetcher {
     }
 
     suspend fun fetchUsStockList(): List<Stock> = withContext(Dispatchers.IO) {
-        val sources = listOf(
-            "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt" to "Symbol",
-            "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt" to "ACT Symbol"
-        )
         val stocksByCode = linkedMapOf<String, Stock>()
 
-        for ((url, symbolColumn) in sources) {
-            val responseText = client.get(url).bodyAsText()
-            val reader = BufferedReader(StringReader(responseText))
-            val header = reader.readLine()
-                ?.removePrefix("\uFEFF")
-                ?.split('|')
-                ?: continue
-            val columns = header.withIndex().associate { it.value to it.index }
-            val symbolIndex = columns[symbolColumn] ?: continue
-            val nameIndex = columns["Security Name"] ?: continue
-            val testIssueIndex = columns["Test Issue"] ?: -1
-            val etfIndex = columns["ETF"] ?: -1
-
-            reader.forEachLine { line ->
-                val fields = line.split('|')
-                val symbol = fields.getOrNull(symbolIndex)?.trim().orEmpty()
-                if (symbol.isBlank() || symbol.startsWith("File Creation Time:")) return@forEachLine
-                if (testIssueIndex >= 0 && fields.getOrNull(testIssueIndex)?.trim() == "Y") return@forEachLine
-
-                val name = fields.getOrNull(nameIndex)?.trim().orEmpty()
-                val stockType = if (etfIndex >= 0 && fields.getOrNull(etfIndex)?.trim() == "Y") {
-                    "ETF"
-                } else {
-                    "Stock"
-                }
-                stocksByCode.putIfAbsent(
-                    symbol,
-                    Stock(
-                        id = 0,
-                        code = symbol,
-                        name = name.ifBlank { symbol },
-                        market = StockMarket.US,
-                        industry = "",
-                        stockType = stockType
-                    )
-                )
+        for (source in requiredUsStockListSources) {
+            val responseText = client.get(source.url).bodyAsText()
+            val sourceStocks = parseUsStockListSource(responseText, source)
+            sourceStocks.forEach { stock ->
+                stocksByCode.putIfAbsent(stock.code, stock)
             }
         }
 

@@ -74,7 +74,7 @@ class StockifyApplication : Application() {
         }
 
         try {
-            val stocks = StockDataFetcher().fetchStockList()
+            val stocks = StockDataFetcher(httpClient).fetchStockList()
             if (stocks.isEmpty()) {
                 Log.w(TAG, "Taiwan stock list update returned no stocks")
                 return
@@ -115,7 +115,7 @@ class StockifyApplication : Application() {
         }
 
         try {
-            val stocks = StockDataFetcher().fetchUsStockList()
+            val stocks = StockDataFetcher(httpClient).fetchUsStockList()
             if (stocks.isEmpty()) {
                 Log.w(TAG, "U.S. stock list update returned no stocks")
                 return
