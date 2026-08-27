@@ -78,6 +78,9 @@ class TwseStockHistoryServiceTest {
         override suspend fun deleteTransactionsByStockCode(stockCode: String, market: String) {}
         override suspend fun deleteTransactionsByStockCodeAndAccountId(stockCode: String, market: String, accountId: Int) {}
         override suspend fun updateTransactionMarket(stockCode: String, fromMarket: String, toMarket: String) {}
+        override suspend fun updateTransactionStockIdentity(fromCode: String, fromMarket: String, toCode: String, toMarket: String) {}
+        override suspend fun getHistoryPricesForImportRepair(stockCode: String, market: String): List<StockHistoryPrice> = emptyList()
+        override suspend fun deleteHistoryPricesForImportRepair(stockCode: String, market: String) {}
         override suspend fun deleteStockByCodeAndMarket(stockCode: String, market: String) {}
         override suspend fun deleteTransactionsByAccountId(accountId: Int) {}
         override suspend fun getHoldingShares(stockCode: String, market: String): Double = 0.0

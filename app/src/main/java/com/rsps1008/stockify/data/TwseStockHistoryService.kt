@@ -38,7 +38,30 @@ internal fun shouldUseHistoryMonthWithoutRefresh(
     forceRefreshCurrentMonth: Boolean = false
 ): Boolean {
     if (month == latestChartMonth && forceRefreshCurrentMonth) return false
-    return month != latestChartMonth || points.any { it.date == latestChartDate }
+    return month != latestChartMonth || points.any {
+        it.date == latestChartDate && it.price.isFinite() && it.price > 0.0
+    }
+}
+
+internal fun latestExpectedHistoryDate(
+    now: ZonedDateTime,
+    market: String
+): java.time.LocalDate {
+    val marketCloseTime = if (StockMarket.isUs(market)) {
+        LocalTime.of(16, 0)
+    } else {
+        LocalTime.of(13, 30)
+    }
+    val isWeekday = now.dayOfWeek in DayOfWeek.MONDAY..DayOfWeek.FRIDAY
+    var latestDate = if (isWeekday && !now.toLocalTime().isBefore(marketCloseTime)) {
+        now.toLocalDate()
+    } else {
+        now.toLocalDate().minusDays(1)
+    }
+    while (latestDate.dayOfWeek == DayOfWeek.SATURDAY || latestDate.dayOfWeek == DayOfWeek.SUNDAY) {
+        latestDate = latestDate.minusDays(1)
+    }
+    return latestDate
 }
 
 internal fun targetHistoryMonths(
@@ -112,7 +135,7 @@ class TwseStockHistoryService(
         rangeMonths: Int,
         market: String = StockMarket.inferFromCode(stockCode)
     ): List<StockHistoryPoint> = withContext(Dispatchers.IO) {
-        val normalizedCode = stockCode.uppercase().trim()
+        val normalizedCode = canonicalStockCode(stockCode)
         val normalizedMarket = StockMarket.normalize(market)
         val targetMonths = getTargetMonths(rangeMonths, normalizedMarket)
         val latestChartDateStr = getLatestChartDateString(normalizedMarket)
@@ -155,7 +178,7 @@ class TwseStockHistoryService(
         forceRefreshCurrentMonth: Boolean = false,
         onProgress: (step: Int, total: Int) -> Unit
     ): List<StockHistoryPoint> {
-        val normalizedCode = stockCode.uppercase().trim()
+        val normalizedCode = canonicalStockCode(stockCode)
         val normalizedMarket = StockMarket.normalize(market)
         val stock = stockDao.getStockByCode(normalizedCode, normalizedMarket)
         return if (StockMarket.isTw(normalizedMarket)) {
@@ -474,7 +497,10 @@ class TwseStockHistoryService(
                 val day = dateParts[1].trim().toIntOrNull()?.let { String.format(Locale.US, "%02d", it) } ?: dateParts[1].trim()
                 val formattedDate = "$year-$month-$day"
 
-                val price = closeStr.replace("$", "").replace(",", "").trim().toDoubleOrNull() ?: continue
+                val price = closeStr.replace("$", "").replace(",", "").trim()
+                    .toDoubleOrNull()
+                    ?.takeIf { it.isFinite() && it > 0.0 }
+                    ?: continue
                 points.add(StockHistoryPoint(formattedDate, price))
             }
             points
@@ -492,22 +518,13 @@ class TwseStockHistoryService(
     private fun getLatestChartDateString(market: String): String {
         val timeZone = if (StockMarket.isUs(market)) "America/New_York" else "Asia/Taipei"
         val now = ZonedDateTime.now(ZoneId.of(timeZone))
-        val marketCloseTime = if (StockMarket.isUs(market)) {
-            LocalTime.of(16, 0)
-        } else {
-            LocalTime.of(13, 30)
-        }
-        val isWeekday = now.dayOfWeek in DayOfWeek.MONDAY..DayOfWeek.FRIDAY
-        val latestDate = if (isWeekday && !now.toLocalTime().isBefore(marketCloseTime)) {
-            now.toLocalDate()
-        } else {
-            now.toLocalDate().minusDays(1)
-        }
-        return latestDate.toString()
+        return latestExpectedHistoryDate(now, market).toString()
     }
 
     private fun List<StockHistoryPoint>.filterForChart(latestChartDateStr: String): List<StockHistoryPoint> {
-        return filter { it.date <= latestChartDateStr }
+        return filter {
+            it.date <= latestChartDateStr && it.price.isFinite() && it.price > 0.0
+        }
     }
 
     private fun parseTwseResponse(jsonText: String): List<StockHistoryPoint> {
@@ -526,7 +543,9 @@ class TwseStockHistoryService(
             val rawPrice = row[6].jsonPrimitive.content // "832.00"
 
             val date = parseRocDate(rawDate) ?: continue
-            val price = rawPrice.replace(",", "").toDoubleOrNull() ?: continue
+            val price = rawPrice.replace(",", "").toDoubleOrNull()
+                ?.takeIf { it.isFinite() && it > 0.0 }
+                ?: continue
             points.add(StockHistoryPoint(date, price))
         }
         return points
@@ -562,6 +581,7 @@ class TwseStockHistoryService(
                 .replace(",", "")
                 .trim()
                 .toDoubleOrNull()
+                ?.takeIf { it.isFinite() && it > 0.0 }
                 ?: continue
 
             points.add(

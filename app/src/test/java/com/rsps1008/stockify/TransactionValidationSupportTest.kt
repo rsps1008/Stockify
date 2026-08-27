@@ -36,6 +36,16 @@ class TransactionValidationSupportTest {
     }
 
     @Test
+    fun ordinarySellWithMarginOpeningFieldsIsRejected() {
+        val transaction = ordinarySell().copy(
+            marginLotId = "margin-lot",
+            marginPrincipal = 100.0
+        )
+
+        assertNotNull(TransactionValidationSupport.validateForWrite(transaction))
+    }
+
+    @Test
     fun validOrdinaryBuyAndSellPass() {
         assertNull(TransactionValidationSupport.validateForWrite(ordinaryBuy()))
         assertNull(TransactionValidationSupport.validateForWrite(ordinarySell()))

@@ -422,7 +422,7 @@ fun SettingsScreen() {
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("融資／融券功能（實驗階段）", style = MaterialTheme.typography.titleLarge)
+                        Text("融資／融券功能", style = MaterialTheme.typography.titleLarge)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text("啟用後可記錄台股融資買進、還款、融券賣出、買券還券與融券補償，並估算利息或借券費；此功能不會連線券商。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {

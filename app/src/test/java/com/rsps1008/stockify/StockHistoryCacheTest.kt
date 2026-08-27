@@ -4,11 +4,16 @@ import com.rsps1008.stockify.data.StockHistoryCache
 import com.rsps1008.stockify.data.StockHistoryPoint
 import com.rsps1008.stockify.data.mergeHistoryPointsPreferLatest
 import com.rsps1008.stockify.data.shouldUseHistoryMonthWithoutRefresh
+import com.rsps1008.stockify.data.latestExpectedHistoryDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
 
 class StockHistoryCacheTest {
 
@@ -83,6 +88,45 @@ class StockHistoryCacheTest {
                 latestChartDate = "2026-08-25",
                 points = emptyList(),
                 forceRefreshCurrentMonth = true
+            )
+        )
+    }
+
+    @Test
+    fun latestExpectedHistoryDateSkipsWeekendAndUsesMarketClose() {
+        val taiwanZone = ZoneId.of("Asia/Taipei")
+
+        assertEquals(
+            LocalDate.of(2026, 8, 21),
+            latestExpectedHistoryDate(
+                ZonedDateTime.of(LocalDate.of(2026, 8, 23), LocalTime.of(10, 0), taiwanZone),
+                "TW"
+            )
+        )
+        assertEquals(
+            LocalDate.of(2026, 8, 21),
+            latestExpectedHistoryDate(
+                ZonedDateTime.of(LocalDate.of(2026, 8, 24), LocalTime.of(10, 0), taiwanZone),
+                "TW"
+            )
+        )
+        assertEquals(
+            LocalDate.of(2026, 8, 24),
+            latestExpectedHistoryDate(
+                ZonedDateTime.of(LocalDate.of(2026, 8, 24), LocalTime.of(14, 0), taiwanZone),
+                "TW"
+            )
+        )
+    }
+
+    @Test
+    fun invalidLatestPriceDoesNotCompleteCurrentMonthCache() {
+        assertFalse(
+            shouldUseHistoryMonthWithoutRefresh(
+                month = "202608",
+                latestChartMonth = "202608",
+                latestChartDate = "2026-08-25",
+                points = listOf(StockHistoryPoint("2026-08-25", Double.NaN))
             )
         )
     }

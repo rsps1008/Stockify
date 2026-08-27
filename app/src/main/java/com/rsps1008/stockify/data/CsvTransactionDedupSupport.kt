@@ -48,7 +48,7 @@ object CsvTransactionDedupSupport {
         marketAliases: Map<String, String>
     ): StockTransaction = transaction.copy(
         id = 0,
-        stockCode = transaction.stockCode.trim().uppercase(),
+        stockCode = canonicalStockCode(transaction.stockCode),
         market = marketAliases[StockKey(transaction.market, transaction.stockCode).cacheKey()]
             ?: StockMarket.normalize(transaction.market)
     )

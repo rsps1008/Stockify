@@ -72,14 +72,14 @@ private fun normalizeRealtimeCache(
     cachedData: Map<String, RealtimeStockInfo>,
     stocks: List<Stock>
 ): Map<String, RealtimeStockInfo> {
-    val stocksByCode = stocks.associateBy { it.code.trim().uppercase() }
+    val stocksByCode = stocks.associateBy { canonicalStockCode(it.code) }
     return cachedData.mapNotNull { (rawKey, info) ->
         val parts = rawKey.split(':', limit = 2)
         val key = if (parts.size == 2) {
             stockCacheKey(parts[0], parts[1])
         } else {
             val code = rawKey.trim()
-            val stock = stocksByCode[code.uppercase()]
+            val stock = stocksByCode[canonicalStockCode(code)]
             stock?.toStockKey()?.cacheKey() ?: stockCacheKey(StockMarket.inferFromCode(code), code)
         }
         key to info
@@ -501,10 +501,11 @@ class RealtimeStockDataService(
     }
 
     private suspend fun refreshStockInternal(stockCode: String, requestedMarket: String) {
+        val normalizedCode = canonicalStockCode(stockCode)
         val market = StockMarket.normalize(requestedMarket)
-        val stock = stockDao.getStockByCode(stockCode, market)
+        val stock = stockDao.getStockByCode(normalizedCode, market)
         val outcome = fetchStockInfoForMarket(
-            stockCode,
+            normalizedCode,
             market,
             StockExchange.normalize(stock?.exchange),
             stock?.stockType.orEmpty()
@@ -516,7 +517,7 @@ class RealtimeStockDataService(
 
         outcome.info?.let {
             mergeRealtimeStockInfo(
-                updates = mapOf(stockCacheKey(market, stockCode) to it),
+                updates = mapOf(stockCacheKey(market, normalizedCode) to it),
                 saveAlways = true
             )
         }
@@ -553,17 +554,18 @@ class RealtimeStockDataService(
         stockCode: String,
         market: String = StockMarket.inferFromCode(stockCode),
         forceRefresh: Boolean = false
-    ): RealtimeStockInfo? {
+    ): RealtimeStockInfo? = quoteRefreshMutex.withLock {
+        val normalizedCode = canonicalStockCode(stockCode)
         val normalizedMarket = StockMarket.normalize(market)
-        val cached = _realtimeStockInfo.value[stockCacheKey(normalizedMarket, stockCode)]
+        val cached = _realtimeStockInfo.value[stockCacheKey(normalizedMarket, normalizedCode)]
         if (!forceRefresh && cached != null) {
-            return cached
+            return@withLock cached
         }
 
-        val stock = stockDao.getStockByCode(stockCode, normalizedMarket)
+        val stock = stockDao.getStockByCode(normalizedCode, normalizedMarket)
         val resolvedMarket = StockMarket.normalize(stock?.market ?: normalizedMarket)
-        return fetchStockInfoForMarket(
-            stockCode,
+        fetchStockInfoForMarket(
+            normalizedCode,
             resolvedMarket,
             StockExchange.normalize(stock?.exchange),
             stock?.stockType.orEmpty()

@@ -44,6 +44,7 @@ import com.rsps1008.stockify.data.StockDao
 import com.rsps1008.stockify.data.StockDataFetcher
 import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.StockKey
+import com.rsps1008.stockify.data.canonicalStockCode
 import com.rsps1008.stockify.data.toStockKey
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.StockListRepository
@@ -104,6 +105,22 @@ internal fun resolvePdfImportAccount(
 ): Account {
     return existingAccounts.firstOrNull { it.id == activeAccountId && it.id > 0 }
         ?: Account(id = 1, name = "預設帳戶")
+}
+
+internal fun canonicalizeCsvTransaction(csvTransaction: CsvTransaction): CsvTransaction {
+    val stockCode = canonicalStockCode(csvTransaction.stockCode)
+    val market = StockMarket.normalize(csvTransaction.market)
+    require(market == StockMarket.inferFromCode(stockCode)) {
+        "市場 $market 與股號 $stockCode 推斷的 ${StockMarket.inferFromCode(stockCode)} 不一致"
+    }
+    return csvTransaction.copy(
+        stockCode = stockCode,
+        market = market,
+        transaction = csvTransaction.transaction.copy(
+            stockCode = stockCode,
+            market = market
+        )
+    )
 }
 
 private data class ExistingCsvImportData(
@@ -876,6 +893,7 @@ class SettingsViewModel(
             _isLoading.value = true
             try {
                 val importableItems = PdfStockImportSupport.itemsReadyForImport(preview.items)
+                    .map { item -> item.copy(stockCode = canonicalStockCode(item.stockCode)) }
                 if (importableItems.isEmpty()) {
                     throw IllegalArgumentException("沒有可匯入的股票，請確認庫存股數與目前價格是否有效")
                 }
@@ -894,6 +912,12 @@ class SettingsViewModel(
                     } else {
                         stockDao.insertAccount(importAccount)
                     }
+
+                    repairImportedStockIdentities(
+                        importableItems.map { item ->
+                            StockKey(StockMarket.inferFromCode(item.stockCode), item.stockCode)
+                        }
+                    )
 
                     importableItems.forEachIndexed { index, item ->
                         val market = StockMarket.inferFromCode(item.stockCode)
@@ -1109,7 +1133,10 @@ class SettingsViewModel(
         extraction: com.rsps1008.stockify.data.PdfHoldingExtractionResult
     ): PdfStockImportPreview {
         val requestedStockKeys = extraction.holdings
-            .map { StockKey(StockMarket.inferFromCode(it.stockCode), it.stockCode) }
+            .map {
+                val stockCode = canonicalStockCode(it.stockCode)
+                StockKey(StockMarket.inferFromCode(stockCode), stockCode)
+            }
             .distinctBy { it.cacheKey() }
         val allStocksByKey = requestedStockKeys
             .groupBy { StockMarket.normalize(it.market) }
@@ -1122,18 +1149,19 @@ class SettingsViewModel(
         val items = coroutineScope {
             extraction.holdings.map { holding ->
                 async(Dispatchers.IO) {
-                    val market = StockMarket.inferFromCode(holding.stockCode)
-                    val stock = allStocksByKey[StockKey(market, holding.stockCode).cacheKey()]
+                    val stockCode = canonicalStockCode(holding.stockCode)
+                    val market = StockMarket.inferFromCode(stockCode)
+                    val stock = allStocksByKey[StockKey(market, stockCode).cacheKey()]
                     val currentPrice = priceRequestLimit.withPermit {
                         realtimeStockDataService.fetchCurrentStockInfo(
-                            stockCode = holding.stockCode,
+                            stockCode = stockCode,
                             market = market,
                             forceRefresh = true
                         )?.currentPrice
                     }
 
                     PdfStockImportPreviewItem(
-                        stockCode = holding.stockCode,
+                        stockCode = stockCode,
                         stockName = stock?.name.orEmpty(),
                         balance = holding.balance,
                         currentPrice = currentPrice,
@@ -1177,17 +1205,18 @@ class SettingsViewModel(
         transactions: List<CsvTransaction>,
         deleteOldData: Boolean
     ) {
-        require(transactions.isNotEmpty()) { "CSV 不含可還原的交易資料" }
+        val canonicalTransactions = transactions.map(::canonicalizeCsvTransaction)
+        require(canonicalTransactions.isNotEmpty()) { "CSV 不含可還原的交易資料" }
         val existingImportData = if (deleteOldData) {
             null
         } else {
-            loadExistingCsvImportData(transactions)
+            loadExistingCsvImportData(canonicalTransactions)
         }
         val transactionsToImport = if (deleteOldData) {
-            transactions
+            canonicalTransactions
         } else {
             CsvTransactionDedupSupport.filterNewTransactions(
-                importedTransactions = transactions,
+                importedTransactions = canonicalTransactions,
                 existingTransactions = existingImportData?.transactions.orEmpty(),
                 marketAliases = existingImportData?.marketAliases.orEmpty()
             )
@@ -1219,7 +1248,7 @@ class SettingsViewModel(
                 repairStockKeys = if (deleteOldData) {
                     emptyList()
                 } else {
-                    transactions.map { StockKey(it.market, it.stockCode) }
+                    canonicalTransactions.map { StockKey(it.market, it.stockCode) }
                 }
             )
         }
@@ -1246,7 +1275,7 @@ class SettingsViewModel(
             .distinct()
             .chunked(SQLITE_IN_CHUNK_SIZE)
             .flatMap { stockDao.getStocksByCodesForImportRepair(it) }
-            .groupBy { it.code.trim().uppercase() }
+            .groupBy { canonicalStockCode(it.code) }
         val marketAliases = CsvTransactionDedupSupport.marketRepairAliases(
             importedStockKeys = importedStockKeys,
             existingStocksByCode = existingStocksByCode
@@ -1283,7 +1312,7 @@ class SettingsViewModel(
             existingImportData?.stocksByCode ?: importedCodes
                 .chunked(SQLITE_IN_CHUNK_SIZE)
                 .flatMap { stockDao.getStocksByCodesForImportRepair(it) }
-                .groupBy { it.code.trim().uppercase() }
+                .groupBy { canonicalStockCode(it.code) }
         } else {
             emptyMap()
         }
@@ -1319,7 +1348,7 @@ class SettingsViewModel(
             StockKey(it.market, it.stockCode).cacheKey()
         }
         val existingTransactionsByCode = existingTransactions.groupBy {
-            it.stockCode.trim().uppercase()
+            canonicalStockCode(it.stockCode)
         }
         for (stockKey in allStockKeys) {
             val code = stockKey.code
@@ -1334,7 +1363,7 @@ class SettingsViewModel(
                     ?.let { error -> throw Exception("股票 $code 的$error，匯入被拒絕。") }
             }
 
-            val existingTxs = existingTransactionsByCode[code.trim().uppercase()].orEmpty()
+            val existingTxs = existingTransactionsByCode[canonicalStockCode(code)].orEmpty()
                 .filter { StockMarket.normalize(it.market) == stockKey.normalizedMarket }
             val newTxs = importedForCode.map { it.transaction }
             val mergedTxs = existingTxs + newTxs
@@ -1362,63 +1391,22 @@ class SettingsViewModel(
         transactions: List<CsvTransaction>,
         repairStockKeys: List<StockKey> = emptyList()
     ): Set<StockKey> {
-        val importedTransactionKeys = transactions
+        val canonicalTransactions = transactions.map(::canonicalizeCsvTransaction)
+        val importedTransactionKeys = canonicalTransactions
             .map { StockKey(it.market, it.stockCode) }
             .distinctBy { it.cacheKey() }
         val stockKeys = (importedTransactionKeys + repairStockKeys)
             .distinctBy { it.cacheKey() }
-        val existingStocksByCode = stockKeys
-            .map { it.code }
-            .distinct()
-            .chunked(SQLITE_IN_CHUNK_SIZE)
-            .flatMap { codes -> stockDao.getStocksByCodesForImportRepair(codes) }
-            .groupBy { it.code.trim().uppercase() }
-        val existingStocksByKey = existingStocksByCode.values
-            .flatten()
-            .associateBy { StockKey(it.market, it.code).cacheKey() }
-            .toMutableMap()
+        val repairedStockKeys = repairImportedStockIdentities(stockKeys).toMutableSet()
         val newStocksByKey = linkedMapOf<String, Stock>()
-        val repairedStockKeys = linkedSetOf<StockKey>()
-        val marketAliases = CsvTransactionDedupSupport.marketRepairAliases(
-            importedStockKeys = stockKeys,
-            existingStocksByCode = existingStocksByCode
-        )
-
-        marketAliases.forEach { (legacyKey, targetMarket) ->
-            val legacyStock = existingStocksByCode.values
-                .asSequence()
-                .flatten()
-                .firstOrNull { it.toStockKey().cacheKey() == legacyKey }
-                ?: return@forEach
-            val targetKey = StockKey(targetMarket, legacyStock.code)
-            val existingTargetStock = existingStocksByKey[targetKey.cacheKey()]
-
-            stockDao.updateTransactionMarket(
-                stockCode = legacyStock.code,
-                fromMarket = legacyStock.market,
-                toMarket = targetMarket
-            )
-            if (existingTargetStock == null) {
-                val repairedStock = legacyStock.copy(market = targetMarket)
-                stockDao.updateStock(repairedStock)
-                existingStocksByKey[targetKey.cacheKey()] = repairedStock
-            } else {
-                stockDao.deleteStockByCodeAndMarket(
-                    stockCode = legacyStock.code,
-                    market = legacyStock.market
-                )
-            }
-            existingStocksByKey.remove(legacyKey)
-            repairedStockKeys += targetKey
-        }
 
         importedTransactionKeys.forEach { stockKey ->
-            val code = stockKey.code
+            val code = stockKey.normalizedCode
             val inferredMarket = stockKey.normalizedMarket
-            val existingStock = existingStocksByKey[stockKey.cacheKey()]
+            val existingStock = stockDao.getStockByCode(code, inferredMarket)
             if (existingStock == null) {
-                val stockName = transactions.firstOrNull {
-                    it.stockCode == code && StockMarket.normalize(it.market) == inferredMarket
+                val stockName = canonicalTransactions.firstOrNull {
+                    canonicalStockCode(it.stockCode) == code && StockMarket.normalize(it.market) == inferredMarket
                 }?.stockName.orEmpty()
                 newStocksByKey.putIfAbsent(
                     stockKey.cacheKey(),
@@ -1435,7 +1423,7 @@ class SettingsViewModel(
             stockDao.insertStocks(newStocksByKey.values.toList())
         }
 
-        val accountIds = transactions.map { it.transaction.accountId }.distinct()
+        val accountIds = canonicalTransactions.map { it.transaction.accountId }.distinct()
         val existingAccountsById = accountIds
             .chunked(SQLITE_IN_CHUNK_SIZE)
             .flatMap { stockDao.getAccountsByIds(it) }
@@ -1447,9 +1435,102 @@ class SettingsViewModel(
             stockDao.insertAccounts(newAccounts)
         }
 
-        stockDao.insertTransactions(transactions.map { it.transaction })
-        return transactions
+        stockDao.insertTransactions(canonicalTransactions.map { it.transaction })
+        return canonicalTransactions
             .mapTo(repairedStockKeys) { StockKey(it.market, it.stockCode) }
+    }
+
+    /** Repairs legacy market/code values before an import can create a second logical stock. */
+    private suspend fun repairImportedStockIdentities(stockKeys: Collection<StockKey>): Set<StockKey> {
+        val targetKeys = stockKeys
+            .map { StockKey(it.normalizedMarket, it.normalizedCode) }
+            .distinctBy { it.cacheKey() }
+        if (targetKeys.isEmpty()) return emptySet()
+
+        val existingStocksByCode = targetKeys
+            .map { it.normalizedCode }
+            .distinct()
+            .chunked(SQLITE_IN_CHUNK_SIZE)
+            .flatMap { codes -> stockDao.getStocksByCodesForImportRepair(codes) }
+            .groupBy { canonicalStockCode(it.code) }
+        val repairedStockKeys = linkedSetOf<StockKey>()
+
+        suspend fun mergeHistoryPrices(legacyStock: Stock, targetKey: StockKey) {
+            val sourcePrices = stockDao.getHistoryPricesForImportRepair(
+                stockCode = legacyStock.code,
+                market = legacyStock.market
+            )
+            if (sourcePrices.isNotEmpty()) {
+                val targetDates = stockDao.getHistoryPricesForImportRepair(
+                    stockCode = targetKey.normalizedCode,
+                    market = targetKey.normalizedMarket
+                ).mapTo(hashSetOf()) { it.date }
+                val missingTargetPrices = sourcePrices
+                    .filterNot { it.date in targetDates }
+                    .map {
+                        it.copy(
+                            stockCode = targetKey.normalizedCode,
+                            market = targetKey.normalizedMarket
+                        )
+                    }
+                if (missingTargetPrices.isNotEmpty()) {
+                    stockDao.insertHistoryPrices(missingTargetPrices)
+                }
+            }
+            stockDao.deleteHistoryPricesForImportRepair(legacyStock.code, legacyStock.market)
+        }
+
+        suspend fun mergeLegacyStock(legacyStock: Stock, targetKey: StockKey) {
+            mergeHistoryPrices(legacyStock, targetKey)
+            stockDao.updateTransactionStockIdentity(
+                fromCode = canonicalStockCode(legacyStock.code),
+                fromMarket = legacyStock.market,
+                toCode = targetKey.normalizedCode,
+                toMarket = targetKey.normalizedMarket
+            )
+            stockDao.deleteHistoryPricesForImportRepair(legacyStock.code, legacyStock.market)
+            stockDao.deleteStockByCodeAndMarket(legacyStock.code, legacyStock.market)
+        }
+
+        for (targetKey in targetKeys) {
+            val existingStocks = existingStocksByCode[targetKey.normalizedCode].orEmpty()
+                .distinctBy { it.id }
+            val canonicalStock = existingStocks.firstOrNull {
+                it.market == targetKey.normalizedMarket &&
+                    canonicalStockCode(it.code) == targetKey.normalizedCode &&
+                    it.code == targetKey.normalizedCode
+            }
+
+            if (canonicalStock != null) {
+                existingStocks
+                    .filter { it.id != canonicalStock.id }
+                    .forEach { mergeLegacyStock(it, targetKey) }
+                if (existingStocks.any { it.id != canonicalStock.id }) {
+                    repairedStockKeys += targetKey
+                }
+            } else {
+                val primaryStock = existingStocks.firstOrNull() ?: continue
+                mergeHistoryPrices(primaryStock, targetKey)
+                stockDao.updateTransactionStockIdentity(
+                    fromCode = canonicalStockCode(primaryStock.code),
+                    fromMarket = primaryStock.market,
+                    toCode = targetKey.normalizedCode,
+                    toMarket = targetKey.normalizedMarket
+                )
+                stockDao.deleteHistoryPricesForImportRepair(primaryStock.code, primaryStock.market)
+                stockDao.updateStock(
+                    primaryStock.copy(
+                        code = targetKey.normalizedCode,
+                        market = targetKey.normalizedMarket
+                    )
+                )
+                existingStocks
+                    .drop(1)
+                    .forEach { mergeLegacyStock(it, targetKey) }
+                repairedStockKeys += targetKey
+            }
+        }
+        return repairedStockKeys
     }
 
     fun setFetchInterval(interval: Int) {

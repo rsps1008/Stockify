@@ -11,6 +11,7 @@ import com.rsps1008.stockify.data.StockDao
 import com.rsps1008.stockify.data.HoldingCalculationSupport
 import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.StockTransaction
+import com.rsps1008.stockify.data.canonicalStockCode
 import com.rsps1008.stockify.data.Account
 import com.rsps1008.stockify.data.TransactionCostSupport
 import com.rsps1008.stockify.data.TransactionValidationSupport
@@ -105,9 +106,10 @@ internal fun holdingSharesAtDate(
     valuationDate: Long,
     market: String = StockMarket.inferFromCode(stockCode)
 ): Double {
+    val normalizedStockCode = canonicalStockCode(stockCode)
     val normalizedMarket = StockMarket.normalize(market)
     val scopedTransactions = transactions.filter { transaction ->
-        transaction.stockCode == stockCode &&
+        canonicalStockCode(transaction.stockCode) == normalizedStockCode &&
             StockMarket.normalize(transaction.market) == normalizedMarket &&
             (accountId == 0 || transaction.accountId == accountId)
     }
@@ -262,7 +264,7 @@ class AddTransactionViewModel(
         val candidateId = editedTransaction?.id ?: Int.MAX_VALUE
         viewModelScope.launch {
             val transactions = stockDao.getTransactionsForStock(
-                stockCode,
+                canonicalStockCode(stockCode),
                 StockMarket.normalize(market)
             ).firstOrNull().orEmpty()
                 .filter { it.accountId == accountId && it.id != excludeTransactionId }
@@ -303,7 +305,7 @@ class AddTransactionViewModel(
         val candidateId = editedTransaction?.id ?: Int.MAX_VALUE
         viewModelScope.launch {
             val transactions = stockDao.getTransactionsForStock(
-                stockCode,
+                canonicalStockCode(stockCode),
                 StockMarket.normalize(market)
             ).firstOrNull().orEmpty()
                 .filter { it.accountId == accountId && it.id != excludeTransactionId }
@@ -365,7 +367,7 @@ class AddTransactionViewModel(
     ) {
         viewModelScope.launch {
             try {
-                val result = dividendRepository.fetchLatestCashDividend(stockCode)
+                val result = dividendRepository.fetchLatestCashDividend(canonicalStockCode(stockCode))
                 if (accountId != _selectedAccountId.value) return@launch
                 if (result == null) {
                     onFail()
@@ -406,7 +408,7 @@ class AddTransactionViewModel(
     ) {
         viewModelScope.launch {
             try {
-                val result = dividendRepository.fetchLatestStockDividend(stockCode)
+                val result = dividendRepository.fetchLatestStockDividend(canonicalStockCode(stockCode))
                 if (accountId != _selectedAccountId.value) return@launch
                 if (result == null) {
                     onFail()
@@ -443,7 +445,7 @@ class AddTransactionViewModel(
         market: String = StockMarket.inferFromCode(stockCode)
     ): Double {
         val transactions = stockDao.getTransactionsForStock(
-            stockCode,
+            canonicalStockCode(stockCode),
             StockMarket.normalize(market)
         ).firstOrNull().orEmpty()
         return holdingSharesAtDate(
@@ -486,7 +488,7 @@ class AddTransactionViewModel(
     }
 
     suspend fun getStockByCode(code: String, market: String = StockMarket.inferFromCode(code)): Stock? =
-        stockDao.getStockByCode(code, StockMarket.normalize(market))
+        stockDao.getStockByCode(canonicalStockCode(code), StockMarket.normalize(market))
 
     val feeSettings = combine(
         settingsDataStore.feeDiscountFlow,
@@ -696,12 +698,13 @@ class AddTransactionViewModel(
         ,marginRepaymentLotId: String
         ,marginRepayment: Double, marginSelfFunded: Double, marginSelfFundedOverridden: Boolean, marginActualInterest: Double, shortBorrowPrincipal: Double, shortBorrowAnnualRate: Double, shortLotId: String, shortCoverLotId: String, shortCoverShares: Double, shortCompensationLotId: String, shortCompensation: Double
     ): String? {
-        val inferredMarket = StockMarket.inferFromCode(stockCode)
-        val existingStock = stockDao.getStockByCode(stockCode, inferredMarket)
+        val normalizedStockCode = canonicalStockCode(stockCode)
+        val inferredMarket = StockMarket.inferFromCode(normalizedStockCode)
+        val existingStock = stockDao.getStockByCode(normalizedStockCode, inferredMarket)
         val candidateStock = when {
             existingStock == null -> Stock(
                 name = stockName,
-                code = stockCode,
+                code = normalizedStockCode,
                 market = inferredMarket,
                 industry = ""
             )
@@ -755,7 +758,7 @@ class AddTransactionViewModel(
             stockDao.updateStock(candidateStock)
         }
         stockDao.insertTransaction(transaction)
-        realtimeStockDataService.refreshStock(stockCode, candidateStock.market)
+        realtimeStockDataService.refreshStock(normalizedStockCode, candidateStock.market)
         return null
     }
 
@@ -793,14 +796,15 @@ class AddTransactionViewModel(
         val targetTransactionId = transactionId ?: return EDIT_TRANSACTION_MISSING
         val originalTransaction = stockDao.getTransactionById(targetTransactionId).firstOrNull()
             ?: return markEditTransactionMissing()
-        val targetMarket = StockMarket.inferFromCode(stockCode)
-        val targetStock = stockDao.getStockByCode(stockCode, targetMarket)
+        val normalizedStockCode = canonicalStockCode(stockCode)
+        val targetMarket = StockMarket.inferFromCode(normalizedStockCode)
+        val targetStock = stockDao.getStockByCode(normalizedStockCode, targetMarket)
             ?: return "找不到股票資料，無法更新交易"
         val normalizedTargetStock = targetStock.copy(market = targetMarket)
         val resolvedMarginLotId = resolveMarginOpeningLotId(type, marginLotId)
         val resolvedShortLotId = resolveShortOpeningLotId(type, shortLotId)
         val updatedTransaction = originalTransaction.copy(
-            stockCode = stockCode,
+            stockCode = normalizedStockCode,
             market = normalizedTargetStock.market,
             accountId = _selectedAccountId.value,
             date = date,
@@ -847,7 +851,7 @@ class AddTransactionViewModel(
         if (normalizedTargetStock != targetStock) {
             stockDao.updateStock(normalizedTargetStock)
         }
-        realtimeStockDataService.refreshStock(stockCode, normalizedTargetStock.market)
+        realtimeStockDataService.refreshStock(normalizedStockCode, normalizedTargetStock.market)
         return null
     }
 

@@ -83,7 +83,7 @@ class PdfHoldingImportService {
 
     internal fun parseHoldingRow(row: String): PdfStockHolding? {
         val match = ORDINARY_BALANCE_ROW_REGEX.matchEntire(row) ?: return null
-        val stockCode = match.groupValues[2]
+        val stockCode = canonicalStockCode(match.groupValues[2])
         val balance = match.groupValues[4].replace(",", "").toIntOrNull() ?: return null
         if (balance <= 0) return null
 
@@ -109,7 +109,8 @@ class PdfHoldingImportService {
                 ?: window.asReversed().firstNotNullOfOrNull(::extractBalance)
                 ?: return@forEachIndexed
 
-            holdingsByCode[stockCode] = (holdingsByCode[stockCode] ?: 0) + balance
+            val canonicalCode = canonicalStockCode(stockCode)
+            holdingsByCode[canonicalCode] = (holdingsByCode[canonicalCode] ?: 0) + balance
         }
 
         return holdingsByCode.entries.map { (stockCode, balance) ->

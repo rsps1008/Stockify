@@ -17,6 +17,39 @@ import java.io.ByteArrayOutputStream
 
 class CsvServiceTest {
     @Test
+    fun `csv import canonicalizes stock code casing and whitespace`() {
+        val service = CsvService()
+        val output = ByteArrayOutputStream()
+        service.export(
+            listOf(
+                TransactionWithStock(
+                    transaction = StockTransaction(
+                        stockCode = "AAPL",
+                        market = StockMarket.US,
+                        date = 0L,
+                        recordTime = 0L,
+                        type = "買進",
+                        buyPrice = 100.0,
+                        buyShares = 1.0,
+                        expense = 100.0
+                    ),
+                    stock = Stock(name = "Apple", code = "AAPL", market = StockMarket.US)
+                )
+            ),
+            output
+        )
+        val editedCsv = output.toString(Charsets.UTF_8.name()).replace("AAPL", " aapl ")
+
+        val imported = service.import(
+            ByteArrayInputStream(editedCsv.toByteArray(Charsets.UTF_8))
+        ).single()
+
+        assertEquals("AAPL", imported.stockCode)
+        assertEquals("AAPL", imported.transaction.stockCode)
+        assertEquals(StockMarket.US, imported.transaction.market)
+    }
+
+    @Test
     fun `csv round trip preserves multiline note`() {
         val service = CsvService()
         val note = "第一行，含逗號\n第二行\"含引號\""

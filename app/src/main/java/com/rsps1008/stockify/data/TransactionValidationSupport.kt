@@ -88,9 +88,9 @@ object TransactionValidationSupport {
         }
         if (transaction.buyPrice != 0.0 || transaction.buyShares != 0.0 ||
             transaction.expense != 0.0 || hasDividendOrCorporateActionFields(transaction) ||
-            transaction.hasShortFields()
+            transaction.hasShortFields() || transaction.hasMarginOpeningFields()
         ) {
-            return "賣出包含不適用的買進、支出、公司行動或融券欄位"
+            return "賣出包含不適用的買進、支出、公司行動或融資融券欄位"
         }
         return null
     }
@@ -195,6 +195,14 @@ object TransactionValidationSupport {
             marginPrincipal != 0.0 || marginAnnualRate != 0.0 ||
             marginRepayment != 0.0 || marginSelfFunded != 0.0 ||
             marginSelfFundedOverridden || marginActualInterest != 0.0
+    }
+
+    private fun StockTransaction.hasMarginOpeningFields(): Boolean {
+        return marginLotId.isNotBlank() ||
+            marginPrincipal != 0.0 ||
+            marginAnnualRate != 0.0 ||
+            marginSelfFunded != 0.0 ||
+            marginSelfFundedOverridden
     }
 
     private fun StockTransaction.hasShortFields(): Boolean {

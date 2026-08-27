@@ -231,7 +231,7 @@ class CsvService {
 
     private fun parseTransaction(values: List<String>, headerMap: Map<String, Int>): StockTransaction {
         val type = values[headerMap["交易"]!!]
-        val stockCode = values[headerMap["股號"]!!].trim()
+        val stockCode = canonicalStockCode(values[headerMap["股號"]!!])
         require(stockCode.isNotBlank()) { "股號不可空白" }
         val accountId = parseOptionalInt(values, headerMap, "帳戶ID", 1)
         require(accountId > 0) { "帳戶ID 必須大於 0" }

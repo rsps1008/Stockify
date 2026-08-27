@@ -45,11 +45,11 @@ interface StockDao {
     @Query("DELETE FROM stocks")
     suspend fun deleteAllStocks()
 
-    @Query("SELECT * FROM stocks WHERE market = :market AND code IN (:codes)")
+    @Query("SELECT * FROM stocks WHERE TRIM(market) COLLATE NOCASE = :market AND TRIM(code) COLLATE NOCASE IN (:codes)")
     suspend fun getStocksByMarketAndCodes(market: String, codes: List<String>): List<Stock>
 
     /** Used only by import repair to find a pre-market-boundary master row. */
-    @Query("SELECT * FROM stocks WHERE code IN (:codes)")
+    @Query("SELECT * FROM stocks WHERE TRIM(code) COLLATE NOCASE IN (:codes)")
     suspend fun getStocksByCodesForImportRepair(codes: List<String>): List<Stock>
 
     @Query(
@@ -84,7 +84,7 @@ interface StockDao {
     @Query("SELECT * FROM stock_transactions ORDER BY 日期 DESC, 紀錄時間 DESC, id DESC")
     fun getAllTransactions(): Flow<List<StockTransaction>>
 
-    @Query("SELECT * FROM stock_transactions WHERE 市場 = :market AND 股號 IN (:stockCodes) ORDER BY 日期 DESC, 紀錄時間 DESC, id DESC")
+    @Query("SELECT * FROM stock_transactions WHERE TRIM(市場) COLLATE NOCASE = :market AND TRIM(股號) COLLATE NOCASE IN (:stockCodes) ORDER BY 日期 DESC, 紀錄時間 DESC, id DESC")
     suspend fun getTransactionsForStockCodesAndMarket(market: String, stockCodes: List<String>): List<StockTransaction>
 
     @Query("SELECT IFNULL(MAX(id), 0) FROM stock_transactions")
@@ -151,6 +151,31 @@ interface StockDao {
 
     @Query("UPDATE stock_transactions SET 市場 = :toMarket WHERE 股號 = :stockCode AND 市場 = :fromMarket")
     suspend fun updateTransactionMarket(stockCode: String, fromMarket: String, toMarket: String)
+
+    @Query(
+        """UPDATE stock_transactions
+           SET 股號 = :toCode, 市場 = :toMarket
+           WHERE TRIM(股號) COLLATE NOCASE = :fromCode
+             AND TRIM(市場) COLLATE NOCASE = TRIM(:fromMarket)"""
+    )
+    suspend fun updateTransactionStockIdentity(
+        fromCode: String,
+        fromMarket: String,
+        toCode: String,
+        toMarket: String
+    )
+
+    @Query(
+        """SELECT * FROM stock_history_prices
+           WHERE stockCode = :stockCode AND market = :market"""
+    )
+    suspend fun getHistoryPricesForImportRepair(
+        stockCode: String,
+        market: String
+    ): List<StockHistoryPrice>
+
+    @Query("DELETE FROM stock_history_prices WHERE stockCode = :stockCode AND market = :market")
+    suspend fun deleteHistoryPricesForImportRepair(stockCode: String, market: String)
 
     @Query("DELETE FROM stocks WHERE code = :stockCode AND market = :market")
     suspend fun deleteStockByCodeAndMarket(stockCode: String, market: String)
