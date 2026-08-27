@@ -90,6 +90,8 @@ fun DataManagementScreen() {
     val isLoading by viewModel.isLoading.collectAsState()
     val message by viewModel.message.collectAsState()
     val showImportConfirmDialog by viewModel.showImportConfirmDialog.collectAsState()
+    val showForceImportConfirmDialog by viewModel.showForceImportConfirmDialog.collectAsState()
+    val forceImportReason by viewModel.forceImportReason.collectAsState()
     val showLocalCsvRestoreFeeHintDialog by viewModel.showLocalCsvRestoreFeeHintDialog.collectAsState()
     val downloadBackupFiles by viewModel.downloadBackupFiles.collectAsState()
     val downloadBackupType by viewModel.downloadBackupType.collectAsState()
@@ -307,6 +309,34 @@ fun DataManagementScreen() {
                     TextButton(onClick = viewModel::onImportCancel) {
                         Text("取消")
                     }
+                }
+            }
+        )
+    }
+
+    if (showForceImportConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = viewModel::onForceImportCancel,
+            title = { Text("匯入驗證失敗") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(forceImportReason.orEmpty())
+                    Text(
+                        "仍可選擇強制匯入，但這會略過交易、持股、融資融券與既有資料關聯驗證；雲端帳戶／排序附檔若損壞也可能不會還原。匯入後可能造成持股數、成本、損益、融資融券或報酬率計算錯誤；請先確認沒有其他可用的本地備份。"
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::onForceImportConfirm) {
+                    Text("仍要強制匯入")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::onForceImportCancel) {
+                    Text("取消")
                 }
             }
         )

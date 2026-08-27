@@ -12,7 +12,9 @@ data class CsvTransaction(
     val stockName: String,
     val stockCode: String,
     val market: String = StockMarket.TW,
-    val transaction: StockTransaction
+    val transaction: StockTransaction,
+    val sourceRowNumber: Int? = null,
+    val sourceId: String = ""
 )
 
 internal fun assignProvisionalImportIds(
@@ -181,7 +183,7 @@ class CsvService {
         return records
     }
 
-    fun import(inputStream: InputStream): List<CsvTransaction> {
+    fun import(inputStream: InputStream, validateMarket: Boolean = true): List<CsvTransaction> {
         return inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
             val records = splitCsvRecords(reader.readText())
             val iterator = records.iterator()
@@ -210,19 +212,37 @@ class CsvService {
                 val line = iterator.next()
                 lineNumber++
                 if (line.isBlank()) continue
+                var values: List<String>? = null
                 try {
-                    val values = parseCsvLine(line)
-                    val transaction = parseTransaction(values, headerMap)
-                    val market = parseMarket(values, headerMap, transaction.stockCode)
+                    val parsedValues = parseCsvLine(line)
+                    values = parsedValues
+                    val transaction = parseTransaction(parsedValues, headerMap)
+                    val market = parseMarket(
+                        parsedValues,
+                        headerMap,
+                        transaction.stockCode,
+                        validateMarket
+                    )
                     importedTransactions += CsvTransaction(
-                        stockName = values[headerMap["股名"]!!].trim(),
+                        stockName = parsedValues[headerMap["股名"]!!].trim(),
                         stockCode = transaction.stockCode,
                         market = market,
-                        transaction = transaction.copy(market = market)
+                        transaction = transaction.copy(market = market),
+                        sourceRowNumber = lineNumber,
+                        sourceId = getOptionalValue(parsedValues, headerMap, "id")
                     )
                 } catch (e: Exception) {
+                    val rowContext = values?.let {
+                        listOfNotNull(
+                            getOptionalValue(it, headerMap, "id").takeIf(String::isNotBlank)?.let { id -> "id=$id" },
+                            getOptionalValue(it, headerMap, "股號").trim().takeIf(String::isNotBlank)
+                                ?.let { code -> "股號=$code" },
+                            getOptionalValue(it, headerMap, "交易").trim().takeIf(String::isNotBlank)
+                                ?.let { type -> "交易=$type" }
+                        ).takeIf(List<String>::isNotEmpty)?.joinToString("，")
+                    }?.let { "（$it）" }.orEmpty()
                     val reason = e.message?.takeIf { it.isNotBlank() }?.let { "：$it" }.orEmpty()
-                    throw IllegalArgumentException("CSV 第 $lineNumber 列格式錯誤$reason", e)
+                    throw IllegalArgumentException("CSV 第 $lineNumber 列格式錯誤$rowContext$reason", e)
                 }
             }
             importedTransactions
@@ -320,7 +340,8 @@ class CsvService {
     private fun parseMarket(
         values: List<String>,
         headerMap: Map<String, Int>,
-        stockCode: String
+        stockCode: String,
+        validateMarket: Boolean
     ): String {
         val rawValue = getOptionalValue(values, headerMap, "市場")
         val inferredMarket = StockMarket.inferFromCode(stockCode)
@@ -328,8 +349,10 @@ class CsvService {
         val parsedMarket = rawValue.trim().uppercase()
             .takeIf { it == StockMarket.TW || it == StockMarket.US }
             ?: throw IllegalArgumentException("市場必須是 TW 或 US")
-        require(parsedMarket == inferredMarket) {
-            "市場 $parsedMarket 與股號 $stockCode 推斷的 $inferredMarket 不一致"
+        if (validateMarket) {
+            require(parsedMarket == inferredMarket) {
+                "市場 $parsedMarket 與股號 $stockCode 推斷的 $inferredMarket 不一致"
+            }
         }
         return parsedMarket
     }

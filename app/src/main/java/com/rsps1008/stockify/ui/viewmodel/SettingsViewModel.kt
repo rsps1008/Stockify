@@ -107,11 +107,44 @@ internal fun resolvePdfImportAccount(
         ?: Account(id = 1, name = "預設帳戶")
 }
 
-internal fun canonicalizeCsvTransaction(csvTransaction: CsvTransaction): CsvTransaction {
+internal class CsvImportValidationException(message: String, cause: Throwable? = null) :
+    IllegalArgumentException(message, cause)
+
+internal fun describeCsvImportRow(csvTransaction: CsvTransaction): String {
+    val details = listOfNotNull(
+        csvTransaction.sourceRowNumber?.let { "CSV 第 ${it} 列" },
+        csvTransaction.sourceId.trim().takeIf(String::isNotBlank)?.let { "id=$it" },
+        csvTransaction.stockCode.trim().takeIf(String::isNotBlank)?.let { "股號=$it" },
+        csvTransaction.transaction.type.trim().takeIf(String::isNotBlank)?.let { "交易=$it" },
+        "帳戶=${csvTransaction.transaction.accountId}"
+    )
+    return if (details.isEmpty()) "CSV 資料" else details.joinToString("，", postfix = "）", prefix = "（")
+}
+
+internal fun describeCsvImportRows(rows: Collection<CsvTransaction>): String {
+    if (rows.isEmpty()) return "找不到對應的 CSV 列，可能是既有資料造成"
+    val uniqueRows = rows.distinctBy { it.sourceRowNumber to it.sourceId }
+    val displayed = uniqueRows.take(3)
+    val displayedRows = displayed
+        .joinToString("；", transform = ::describeCsvImportRow)
+    val remainingCount = uniqueRows.size - displayed.size
+    return if (remainingCount > 0) {
+        "相關資料：$displayedRows；另有 $remainingCount 筆相關列"
+    } else {
+        "相關資料：$displayedRows"
+    }
+}
+
+internal fun canonicalizeCsvTransaction(
+    csvTransaction: CsvTransaction,
+    validateMarket: Boolean = true
+): CsvTransaction {
     val stockCode = canonicalStockCode(csvTransaction.stockCode)
     val market = StockMarket.normalize(csvTransaction.market)
-    require(market == StockMarket.inferFromCode(stockCode)) {
-        "市場 $market 與股號 $stockCode 推斷的 ${StockMarket.inferFromCode(stockCode)} 不一致"
+    if (validateMarket) {
+        require(market == StockMarket.inferFromCode(stockCode)) {
+            "市場 $market 與股號 $stockCode 推斷的 ${StockMarket.inferFromCode(stockCode)} 不一致"
+        }
     }
     return csvTransaction.copy(
         stockCode = stockCode,
@@ -164,6 +197,12 @@ class SettingsViewModel(
     private val _showImportConfirmDialog = MutableStateFlow(false)
     val showImportConfirmDialog: StateFlow<Boolean> = _showImportConfirmDialog.asStateFlow()
 
+    private val _showForceImportConfirmDialog = MutableStateFlow(false)
+    val showForceImportConfirmDialog: StateFlow<Boolean> = _showForceImportConfirmDialog.asStateFlow()
+
+    private val _forceImportReason = MutableStateFlow<String?>(null)
+    val forceImportReason: StateFlow<String?> = _forceImportReason.asStateFlow()
+
     private val _showLocalCsvRestoreFeeHintDialog = MutableStateFlow(false)
     val showLocalCsvRestoreFeeHintDialog: StateFlow<Boolean> = _showLocalCsvRestoreFeeHintDialog.asStateFlow()
 
@@ -178,6 +217,8 @@ class SettingsViewModel(
     private var pdfImportUri: Uri? = null
     private var accountsBackupData: ByteArray? = null
     private var holdingsOrderBackupData: ByteArray? = null
+    private var pendingForceImportTransactions: List<CsvTransaction>? = null
+    private var pendingForceImportDeleteOldData = false
 
     private val _googleSignInAccount = MutableStateFlow<GoogleSignInAccount?>(null)
     val googleSignInAccount: StateFlow<GoogleSignInAccount?> = _googleSignInAccount.asStateFlow()
@@ -783,6 +824,8 @@ class SettingsViewModel(
     }
 
     fun onImportRequest(uri: Uri) {
+        clearImportBuffers()
+        clearForceImportState()
         importUri = uri
         viewModelScope.launch {
             if (hasShownLocalCsvRestoreFeeHintThisProcess) {
@@ -801,7 +844,7 @@ class SettingsViewModel(
 
     fun onLocalCsvRestoreFeeHintCancel() {
         _showLocalCsvRestoreFeeHintDialog.value = false
-        importUri = null
+        clearImportBuffers()
     }
 
     fun onImportConfirm(deleteOldData: Boolean) {
@@ -816,10 +859,22 @@ class SettingsViewModel(
 
     fun onImportCancel() {
         _showImportConfirmDialog.value = false
-        importUri = null
-        importData = null
-        accountsBackupData = null
-        holdingsOrderBackupData = null
+        clearForceImportState()
+        clearImportBuffers()
+    }
+
+    fun onForceImportConfirm() {
+        val transactions = pendingForceImportTransactions ?: return
+        val deleteOldData = pendingForceImportDeleteOldData
+        clearForceImportState()
+        _showForceImportConfirmDialog.value = false
+        performForceImport(transactions, deleteOldData)
+    }
+
+    fun onForceImportCancel() {
+        _showForceImportConfirmDialog.value = false
+        clearForceImportState()
+        clearImportBuffers()
     }
 
     fun onPdfImportRequest(uri: Uri) {
@@ -1105,26 +1160,96 @@ class SettingsViewModel(
         }
     }
 
-    private fun performImportFromUri(uri: Uri, deleteOldData: Boolean) {
+    private fun handleImportFailure(
+        error: Exception,
+        parsedTransactions: List<CsvTransaction>?,
+        deleteOldData: Boolean
+    ) {
+        val detail = error.message
+            ?.trim()
+            ?.takeIf(String::isNotBlank)
+            ?: "系統沒有提供詳細原因，請確認備份檔案仍可讀取"
+        _message.value = "匯入失敗：$detail"
+
+        if (error is CsvImportValidationException && !parsedTransactions.isNullOrEmpty()) {
+            pendingForceImportTransactions = parsedTransactions
+            pendingForceImportDeleteOldData = deleteOldData
+            _forceImportReason.value = detail
+            _showForceImportConfirmDialog.value = true
+        } else {
+            clearForceImportState()
+            clearImportBuffers()
+        }
+    }
+
+    private fun performForceImport(
+        transactions: List<CsvTransaction>,
+        deleteOldData: Boolean
+    ) {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                val csvTransactions = withContext(Dispatchers.IO) {
+                importCsvTransactions(
+                    transactions = transactions,
+                    deleteOldData = deleteOldData,
+                    forceImport = true
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val detail = e.message
+                    ?.trim()
+                    ?.takeIf(String::isNotBlank)
+                    ?: "系統沒有提供詳細原因，請確認備份檔案仍可讀取"
+                _message.value = "強制匯入失敗：$detail"
+            } finally {
+                _isLoading.value = false
+                clearForceImportState()
+                clearImportBuffers()
+            }
+        }
+    }
+
+    private fun clearImportBuffers() {
+        importUri = null
+        importData = null
+        accountsBackupData = null
+        holdingsOrderBackupData = null
+    }
+
+    private fun clearForceImportState() {
+        pendingForceImportTransactions = null
+        pendingForceImportDeleteOldData = false
+        _showForceImportConfirmDialog.value = false
+        _forceImportReason.value = null
+    }
+
+    private fun performImportFromUri(uri: Uri, deleteOldData: Boolean) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            var csvTransactions: List<CsvTransaction>? = null
+            try {
+                val parsedTransactions = withContext(Dispatchers.IO) {
                     getApplication<Application>().contentResolver.openInputStream(uri)?.use {
-                        csvService.import(it)
+                        csvService.import(it, validateMarket = false)
                     }
                 } ?: emptyList()
-                importCsvTransactions(csvTransactions, deleteOldData)
+                csvTransactions = parsedTransactions
+                importCsvTransactions(parsedTransactions, deleteOldData)
 
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _message.value = "還原失敗: ${e.message}"
+                handleImportFailure(
+                    error = e,
+                    parsedTransactions = csvTransactions,
+                    deleteOldData = deleteOldData
+                )
             } finally {
                 _isLoading.value = false
-                importUri = null
-                accountsBackupData = null
-                holdingsOrderBackupData = null
+                if (pendingForceImportTransactions == null) {
+                    clearImportBuffers()
+                }
             }
         }
     }
@@ -1180,33 +1305,49 @@ class SettingsViewModel(
     private fun performImportFromByteArray(data: ByteArray, deleteOldData: Boolean) {
         viewModelScope.launch {
             _isLoading.value = true
+            var csvTransactions: List<CsvTransaction>? = null
             try {
-                val csvTransactions = withContext(Dispatchers.IO) {
+                val parsedTransactions = withContext(Dispatchers.IO) {
                     ByteArrayInputStream(data).use { 
-                        csvService.import(it)
+                        csvService.import(it, validateMarket = false)
                     }
                 }
-                importCsvTransactions(csvTransactions, deleteOldData)
+                csvTransactions = parsedTransactions
+                importCsvTransactions(parsedTransactions, deleteOldData)
 
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _message.value = "還原失敗: ${e.message}"
+                handleImportFailure(
+                    error = e,
+                    parsedTransactions = csvTransactions,
+                    deleteOldData = deleteOldData
+                )
             } finally {
                 _isLoading.value = false
-                importData = null
-                accountsBackupData = null
-                holdingsOrderBackupData = null
+                if (pendingForceImportTransactions == null) {
+                    clearImportBuffers()
+                }
             }
         }
     }
 
     private suspend fun importCsvTransactions(
         transactions: List<CsvTransaction>,
-        deleteOldData: Boolean
+        deleteOldData: Boolean,
+        forceImport: Boolean = false
     ) {
-        val canonicalTransactions = transactions.map(::canonicalizeCsvTransaction)
-        require(canonicalTransactions.isNotEmpty()) { "CSV 不含可還原的交易資料" }
+        val canonicalTransactions = transactions.map { csvTransaction ->
+            try {
+                canonicalizeCsvTransaction(csvTransaction, validateMarket = !forceImport)
+            } catch (e: Exception) {
+                throw CsvImportValidationException(
+                    "${describeCsvImportRow(csvTransaction)}：${e.message ?: "市場或股號資料無效"}",
+                    e
+                )
+            }
+        }
+        require(canonicalTransactions.isNotEmpty()) { "CSV 不含可還原的交易資料，請確認選取的是交易備份 CSV" }
         val existingImportData = if (deleteOldData) {
             null
         } else {
@@ -1222,20 +1363,45 @@ class SettingsViewModel(
             )
         }
 
-        validateImportedTransactions(
-            transactionsToImport,
-            includeExistingTransactions = !deleteOldData,
-            existingImportData = existingImportData
-        )
+        if (!forceImport) {
+            validateImportedTransactions(
+                transactionsToImport,
+                includeExistingTransactions = !deleteOldData,
+                existingImportData = existingImportData
+            )
+        }
 
         // Parse optional companion backups before any destructive database work.
-        val parsedAccounts = parseAccountsBackup()
-        val restoredAccounts = if (parsedAccounts.isEmpty()) {
+        // In force mode, preserve the transaction CSV even if an optional cloud
+        // account/order backup is damaged.
+        val companionWarnings = mutableListOf<String>()
+        val restoredAccounts = try {
+            val parsedAccounts = parseAccountsBackup()
+            if (parsedAccounts.isEmpty()) emptyList() else validatedRestoredAccounts(parsedAccounts)
+        } catch (e: Exception) {
+            val detail = e.message?.trim().takeIf { !it.isNullOrBlank() } ?: "格式無法辨識"
+            if (!forceImport) {
+                throw CsvImportValidationException(
+                    "帳戶備份無法還原：$detail；${describeCsvImportRows(transactionsToImport)}；匯入被拒絕。",
+                    e
+                )
+            }
+            companionWarnings += "帳戶備份未還原（$detail）"
             emptyList()
-        } else {
-            validatedRestoredAccounts(parsedAccounts)
         }
-        val restoredOrder = parseHoldingsOrderBackup()
+        val restoredOrder = try {
+            parseHoldingsOrderBackup()
+        } catch (e: Exception) {
+            val detail = e.message?.trim().takeIf { !it.isNullOrBlank() } ?: "格式無法辨識"
+            if (!forceImport) {
+                throw CsvImportValidationException(
+                    "持股排序備份無法還原：$detail；${describeCsvImportRows(transactionsToImport)}；匯入被拒絕。",
+                    e
+                )
+            }
+            companionWarnings += "持股排序備份未還原（$detail）"
+            null
+        }
         val refreshedStockCodes = appDatabase.withTransaction {
             if (deleteOldData) {
                 deleteAllData(restoredAccounts)
@@ -1261,7 +1427,14 @@ class SettingsViewModel(
             )
         }
         refreshImportedStocks(refreshedStockCodes)
-        _message.value = "還原成功，共 ${transactionsToImport.size} 筆紀錄"
+        _message.value = if (forceImport) {
+            val companionWarning = companionWarnings.takeIf { it.isNotEmpty() }
+                ?.joinToString("；", prefix = "另外，", postfix = "。")
+                .orEmpty()
+            "已強制匯入 ${transactionsToImport.size} 筆紀錄。請檢查持股、損益與報酬率，部分資料可能無法正確計算。$companionWarning"
+        } else {
+            "匯入成功，共 ${transactionsToImport.size} 筆紀錄"
+        }
     }
 
     private suspend fun loadExistingCsvImportData(
@@ -1335,14 +1508,22 @@ class SettingsViewModel(
         val validationRows = transactions.zip(validationTransactions) { csvTransaction, transaction ->
             csvTransaction.copy(transaction = transaction)
         }
-        validationTransactions.forEach { transaction ->
+        validationRows.forEach { csvTransaction ->
             com.rsps1008.stockify.data.TransactionValidationSupport
-                .validateForWrite(transaction)
-                ?.let { error -> throw Exception("$error，匯入被拒絕。") }
+                .validateForWrite(csvTransaction.transaction)
+                ?.let { error ->
+                    throw CsvImportValidationException(
+                        "${describeCsvImportRow(csvTransaction)}：$error，匯入被拒絕。"
+                    )
+                }
         }
         com.rsps1008.stockify.data.FinancingTransactionValidationSupport
             .validate(existingTransactions + validationTransactions)
-            ?.let { error -> throw Exception("$error，匯入被拒絕。") }
+            ?.let { error ->
+                throw CsvImportValidationException(
+                    "$error；${describeCsvImportRows(validationRows)}；匯入被拒絕。"
+                )
+            }
 
         val importedRowsByStockKey = validationRows.groupBy {
             StockKey(it.market, it.stockCode).cacheKey()
@@ -1360,7 +1541,11 @@ class SettingsViewModel(
             importedForCode.forEach { csvTransaction ->
                 com.rsps1008.stockify.data.FinancingTransactionValidationSupport
                     .validateFinancingMarket(csvTransaction.transaction, effectiveMarket)
-                    ?.let { error -> throw Exception("股票 $code 的$error，匯入被拒絕。") }
+                    ?.let { error ->
+                        throw CsvImportValidationException(
+                            "${describeCsvImportRow(csvTransaction)}：股票 $code 的$error，匯入被拒絕。"
+                        )
+                    }
             }
 
             val existingTxs = existingTransactionsByCode[canonicalStockCode(code)].orEmpty()
@@ -1372,16 +1557,34 @@ class SettingsViewModel(
             for (accountId in accountIds) {
                 val accountTxs = mergedTxs.filter { it.accountId == accountId }
                 com.rsps1008.stockify.data.FinancingTransactionValidationSupport.validate(accountTxs)?.let { error ->
-                    throw Exception("股票 $code 的$error，匯入被拒絕。")
+                    throw CsvImportValidationException(
+                        "股票 $code、帳戶 $accountId 的$error；${describeCsvImportRows(
+                            importedForCode.filter { it.transaction.accountId == accountId }
+                        )}；匯入被拒絕。"
+                    )
                 }
                 com.rsps1008.stockify.data.HoldingCalculationSupport
                     .validateLongPositionBalances(accountTxs)
-                    ?.let { error -> throw Exception("股票 $code 的$error，匯入被拒絕。") }
+                    ?.let { error ->
+                        throw CsvImportValidationException(
+                            "股票 $code、帳戶 $accountId 的$error；${describeCsvImportRows(
+                                importedForCode.filter { it.transaction.accountId == accountId }
+                            )}；匯入被拒絕。"
+                        )
+                    }
                 if (!com.rsps1008.stockify.data.MarginCalculationSupport.hasValidRepaymentBalances(accountTxs)) {
-                    throw Exception("股票 $code 包含超過剩餘本金的融資還款，匯入被拒絕。")
+                    throw CsvImportValidationException(
+                        "股票 $code、帳戶 $accountId 包含超過剩餘本金的融資還款；${describeCsvImportRows(
+                            importedForCode.filter { it.transaction.accountId == accountId }
+                        )}；匯入被拒絕。"
+                    )
                 }
                 if (!com.rsps1008.stockify.data.ShortSellingCalculationSupport.hasValidCoverBalances(accountTxs)) {
-                    throw Exception("股票 $code 包含超過剩餘股數或無效批次的融券操作，匯入被拒絕。")
+                    throw CsvImportValidationException(
+                        "股票 $code、帳戶 $accountId 包含超過剩餘股數或無效批次的融券操作；${describeCsvImportRows(
+                            importedForCode.filter { it.transaction.accountId == accountId }
+                        )}；匯入被拒絕。"
+                    )
                 }
             }
         }
@@ -1391,7 +1594,9 @@ class SettingsViewModel(
         transactions: List<CsvTransaction>,
         repairStockKeys: List<StockKey> = emptyList()
     ): Set<StockKey> {
-        val canonicalTransactions = transactions.map(::canonicalizeCsvTransaction)
+        // importCsvTransactions canonicalizes rows before validation. Keep the
+        // explicit market from a forced restore instead of inferring it again.
+        val canonicalTransactions = transactions
         val importedTransactionKeys = canonicalTransactions
             .map { StockKey(it.market, it.stockCode) }
             .distinctBy { it.cacheKey() }

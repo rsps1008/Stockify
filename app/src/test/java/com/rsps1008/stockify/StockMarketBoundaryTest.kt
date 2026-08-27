@@ -16,6 +16,14 @@ class StockMarketBoundaryTest {
     }
 
     @Test
+    fun mixedAlphaNumericTaiwanCodeIsNotInferredAsUs() {
+        assertEquals(StockMarket.TW, StockMarket.inferFromCode("00981A"))
+        assertEquals(StockMarket.TW, StockMarket.inferFromCode("AB12"))
+        assertEquals(StockMarket.US, StockMarket.inferFromCode("AAPL"))
+        assertEquals(StockMarket.US, StockMarket.inferFromCode("BRK.B"))
+    }
+
+    @Test
     fun financingLotsDoNotMixSameCodeAcrossMarkets() {
         val transactions = listOf(
             StockTransaction(

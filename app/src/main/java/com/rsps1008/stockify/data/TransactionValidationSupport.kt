@@ -155,10 +155,12 @@ object TransactionValidationSupport {
         if (transaction.stockSplitRatio <= 0.0) {
             return "分割比例必須大於 0"
         }
+        // Older backups may retain a manually entered fee on a split. Preserve
+        // that legacy record; it does not turn the corporate action into a buy.
         if (transaction.buyPrice != 0.0 || transaction.buyShares != 0.0 ||
             transaction.sellPrice != 0.0 || transaction.sellShares != 0.0 ||
-            transaction.fee != 0.0 || transaction.tax != 0.0 ||
-            transaction.income != 0.0 || transaction.expense != 0.0 ||
+            transaction.tax != 0.0 || transaction.income != 0.0 ||
+            transaction.expense != 0.0 ||
             transaction.cashDividend != 0.0 || transaction.exDividendShares != 0.0 ||
             transaction.dividendIncome != 0.0 ||
             transaction.supplementaryHealthInsurancePremium != 0.0 ||
@@ -168,7 +170,7 @@ object TransactionValidationSupport {
             transaction.capitalReductionRatio != 0.0 || transaction.sharesBeforeReduction != 0.0 ||
             transaction.sharesAfterReduction != 0.0 || transaction.cashReturned != 0.0
         ) {
-            return "分割包含不適用的買賣、費稅、金額或融資融券欄位"
+            return "分割包含不適用的買賣、稅、金額或融資融券欄位"
         }
         return null
     }

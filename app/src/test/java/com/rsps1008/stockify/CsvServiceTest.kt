@@ -47,6 +47,30 @@ class CsvServiceTest {
         assertEquals("AAPL", imported.stockCode)
         assertEquals("AAPL", imported.transaction.stockCode)
         assertEquals(StockMarket.US, imported.transaction.market)
+        assertEquals(2, imported.sourceRowNumber)
+        assertEquals("0", imported.sourceId)
+    }
+
+    @Test
+    fun csvParseFailureIncludesRowIdentity() {
+        val service = CsvService()
+        val exported = exportSingleMarginTransaction(service)
+        val lines = exported.lineSequence().toList()
+        val headers = lines.first().split(',')
+        val rateIndex = headers.indexOf("融資年利率")
+        val values = lines[1].split(',').toMutableList()
+        values[rateIndex] = "abc"
+        val invalidCsv = listOf(lines.first(), values.joinToString(",")).joinToString("\n")
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            service.import(ByteArrayInputStream(invalidCsv.toByteArray(Charsets.UTF_8)))
+        }
+
+        assertTrue(error.message.orEmpty().contains("CSV 第 2 列格式錯誤"))
+        assertTrue(error.message.orEmpty().contains("id=0"))
+        assertTrue(error.message.orEmpty().contains("股號=2330"))
+        assertTrue(error.message.orEmpty().contains("交易=融資買進"))
+        assertTrue(error.message.orEmpty().contains("融資年利率 不是有效數字"))
     }
 
     @Test
@@ -255,6 +279,27 @@ class CsvServiceTest {
         assertThrows(IllegalArgumentException::class.java) {
             service.import(ByteArrayInputStream(invalidCsv.toByteArray(Charsets.UTF_8)))
         }
+    }
+
+    @Test
+    fun `csv recovery import retains an explicit contradictory market for later validation`() {
+        val service = CsvService()
+        val exported = exportSingleMarginTransaction(service)
+        val lines = exported.lineSequence().toList()
+        val headers = lines.first().split(',')
+        val marketIndex = headers.indexOf("市場")
+        val values = lines[1].split(',').toMutableList()
+        values[marketIndex] = StockMarket.US
+        val invalidCsv = listOf(lines.first(), values.joinToString(",")).joinToString("\n")
+
+        val imported = service.import(
+            ByteArrayInputStream(invalidCsv.toByteArray(Charsets.UTF_8)),
+            validateMarket = false
+        ).single()
+
+        assertEquals(StockMarket.US, imported.market)
+        assertEquals(2, imported.sourceRowNumber)
+        assertEquals("0", imported.sourceId)
     }
 
     @Test

@@ -1,14 +1,40 @@
 package com.rsps1008.stockify
 
 import com.rsps1008.stockify.data.Account
+import com.rsps1008.stockify.data.CsvTransaction
 import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.StockKey
+import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.ui.viewmodel.requiredExistingTransactionKeysForImport
 import com.rsps1008.stockify.ui.viewmodel.accountsForReplacementRestore
+import com.rsps1008.stockify.ui.viewmodel.describeCsvImportRow
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class SettingsImportSupportTest {
+
+    @Test
+    fun importErrorContextIncludesCsvRowAndTransactionIdentity() {
+        val row = CsvTransaction(
+            stockName = "元大台灣50",
+            stockCode = "0050",
+            market = "TW",
+            transaction = StockTransaction(
+                stockCode = "0050",
+                accountId = 1,
+                date = 1L,
+                recordTime = 1L,
+                type = "分割"
+            ),
+            sourceRowNumber = 136,
+            sourceId = "413"
+        )
+
+        assertEquals(
+            "（CSV 第 136 列，id=413，股號=0050，交易=分割，帳戶=1）",
+            describeCsvImportRow(row)
+        )
+    }
 
     @Test
     fun importValidationLoadsOnlyTargetMarketAndRequiredLegacyRepairMarket() {

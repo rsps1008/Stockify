@@ -115,6 +115,24 @@ class TransactionValidationSupportTest {
     }
 
     @Test
+    fun legacySplitWithFeePassesValidation() {
+        assertNull(
+            TransactionValidationSupport.validateForWrite(
+                StockTransaction(
+                    stockCode = "0050",
+                    date = 7L,
+                    recordTime = 1L,
+                    type = "分割",
+                    fee = 250.0,
+                    stockSplitRatio = 4.0,
+                    sharesBeforeSplit = 3_300.0,
+                    sharesAfterSplit = 13_200.0
+                )
+            )
+        )
+    }
+
+    @Test
     fun corporateActionWithAnotherActionFieldIsRejected() {
         val transaction = StockTransaction(
             stockCode = "2330",
