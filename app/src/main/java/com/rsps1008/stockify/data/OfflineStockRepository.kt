@@ -164,6 +164,13 @@ class OfflineStockRepository(
                 ReturnRateMode.REMAINING_POSITION,
                 ReturnRateMode.CUMULATIVE_INVESTMENT -> if (totalInvestment > 0) (cumulativePL / totalInvestment) * 100 else 0.0
                 ReturnRateMode.XIRR -> {
+                    val xirrZoneId = HistoryChartCalculationSupport.zoneIdForHomeXirr(mode)
+                    val transactionDateMapper: (Long) -> Long = { transactionDate ->
+                        TransactionDateSupport.moveToZoneDateStartMillis(
+                            transactionDate,
+                            xirrZoneId
+                        )
+                    }
                     val holdingSharesByKey = holdingInfos.associate { it.stock.toStockKey().cacheKey() to it.shares }
                     val portfolioCashFlows = filteredStocks.flatMap { stock ->
                         val stockKey = stock.toStockKey().cacheKey()
@@ -178,12 +185,13 @@ class OfflineStockRepository(
                             currentDateMillis = currentDateMillis,
                             currencyRate = rate,
                             marginDayCount = marginDayCount,
+                            transactionDateMapper = transactionDateMapper,
                             transactionsAreOrdered = true
                         )
                     }
                     ReturnRateCalculator.calculateXirrPercentage(
                         cashFlows = portfolioCashFlows,
-                        zoneId = HistoryChartCalculationSupport.zoneIdForHomeXirr(mode)
+                        zoneId = xirrZoneId
                     ) ?: 0.0
                 }
             }
@@ -402,6 +410,7 @@ class OfflineStockRepository(
                 if (denominator > 0) (totalPL / denominator) * 100 else 0.0
             }
             ReturnRateMode.XIRR -> {
+                val xirrZoneId = HistoryChartCalculationSupport.zoneIdForMarket(stock.market)
                 val cashFlows = buildCashFlowsForStock(
                     effectiveTransactions,
                     currentPrice,
@@ -410,11 +419,17 @@ class OfflineStockRepository(
                     marginDayCount = marginDayCount,
                     marginSummary = marginSummary,
                     shortSummary = shortSummary,
+                    transactionDateMapper = { transactionDate ->
+                        TransactionDateSupport.moveToZoneDateStartMillis(
+                            transactionDate,
+                            xirrZoneId
+                        )
+                    },
                     transactionsAreOrdered = true
                 )
                 ReturnRateCalculator.calculateXirrPercentage(
                     cashFlows = cashFlows,
-                    zoneId = HistoryChartCalculationSupport.zoneIdForMarket(stock.market)
+                    zoneId = xirrZoneId
                 ) ?: 0.0
             }
         }
@@ -454,6 +469,7 @@ class OfflineStockRepository(
         marginDayCount: Int = 365,
         marginSummary: MarginSummary? = null,
         shortSummary: ShortSellingSummary? = null,
+        transactionDateMapper: (Long) -> Long = { it },
         transactionsAreOrdered: Boolean = false
     ): List<CashFlow> {
         val effectiveTransactions = if (transactionsAreOrdered) {
@@ -463,15 +479,15 @@ class OfflineStockRepository(
         }
         val cashFlows = effectiveTransactions.mapNotNull { transaction ->
             when (transaction.type) {
-                "買進" -> CashFlow(transaction.date, -transaction.expense * currencyRate)
-                "融資買進" -> CashFlow(transaction.date, -(if (transaction.marginSelfFundedOverridden) transaction.marginSelfFunded else transaction.expense - transaction.marginPrincipal) * currencyRate)
-                "賣出" -> CashFlow(transaction.date, (transaction.income - transaction.marginRepayment - transaction.marginActualInterest) * currencyRate)
-                "融資還款" -> CashFlow(transaction.date, -(transaction.marginRepayment + transaction.marginActualInterest) * currencyRate)
+                "買進" -> CashFlow(transactionDateMapper(transaction.date), -transaction.expense * currencyRate)
+                "融資買進" -> CashFlow(transactionDateMapper(transaction.date), -(if (transaction.marginSelfFundedOverridden) transaction.marginSelfFunded else transaction.expense - transaction.marginPrincipal) * currencyRate)
+                "賣出" -> CashFlow(transactionDateMapper(transaction.date), (transaction.income - transaction.marginRepayment - transaction.marginActualInterest) * currencyRate)
+                "融資還款" -> CashFlow(transactionDateMapper(transaction.date), -(transaction.marginRepayment + transaction.marginActualInterest) * currencyRate)
                 "配息" -> CashFlow(
-                    transaction.date,
+                    transactionDateMapper(transaction.date),
                     HoldingCalculationSupport.resolveDividendIncome(transaction) * currencyRate
                 )
-                "減資" -> CashFlow(transaction.date, transaction.cashReturned * currencyRate)
+                "減資" -> CashFlow(transactionDateMapper(transaction.date), transaction.cashReturned * currencyRate)
                 else -> null
             }
         }.toMutableList()
@@ -488,6 +504,7 @@ class OfflineStockRepository(
             currentPrice = currentPrice,
             dayCount = marginDayCount,
             shortSummary = shortSummary,
+            transactionDateMapper = transactionDateMapper,
             transactionsAreOrdered = true
         ).map { it.copy(amount = it.amount * currencyRate) }
 

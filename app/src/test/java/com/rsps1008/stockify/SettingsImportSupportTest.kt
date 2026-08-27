@@ -34,6 +34,51 @@ class SettingsImportSupportTest {
     }
 
     @Test
+    fun importValidationLoadsAllNonCanonicalLegacyMarketsWhenTargetAlreadyExists() {
+        val transactionKeys = requiredExistingTransactionKeysForImport(
+            importedStockKeys = listOf(StockKey("TW", "2330")),
+            existingStocksByCode = mapOf(
+                "2330" to listOf(
+                    Stock(name = "台積電", code = "2330", market = "TW"),
+                    Stock(name = "台積電 ADR 舊資料", code = "2330", market = "US")
+                )
+            )
+        )
+
+        assertEquals(
+            listOf(StockKey("TW", "2330"), StockKey("US", "2330")),
+            transactionKeys
+        )
+    }
+
+    @Test
+    fun pdfImportUsesTheExistingActiveAccountWhenItIsValid() {
+        assertEquals(
+            Account(id = 2, name = "退休帳戶"),
+            com.rsps1008.stockify.ui.viewmodel.resolvePdfImportAccount(
+                activeAccountId = 2,
+                existingAccounts = listOf(
+                    Account(id = 1, name = "投資帳戶"),
+                    Account(id = 2, name = "退休帳戶")
+                )
+            )
+        )
+    }
+
+    @Test
+    fun pdfImportFallsBackToDefaultAccountForAllAccountsOrDanglingSelection() {
+        val accounts = listOf(Account(id = 2, name = "退休帳戶"))
+        assertEquals(
+            Account(id = 1, name = "預設帳戶"),
+            com.rsps1008.stockify.ui.viewmodel.resolvePdfImportAccount(0, accounts)
+        )
+        assertEquals(
+            Account(id = 1, name = "預設帳戶"),
+            com.rsps1008.stockify.ui.viewmodel.resolvePdfImportAccount(3, accounts)
+        )
+    }
+
+    @Test
     fun replacementRestoreUsesBackedUpAccountsInsteadOfAddingTheDefaultAccount() {
         val restoredAccounts = listOf(
             Account(id = 1, name = "投資帳戶"),

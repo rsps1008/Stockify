@@ -20,22 +20,18 @@ object CsvTransactionDedupSupport {
         existingStocksByCode: Map<String, List<Stock>>
     ): Map<String, String> = buildMap {
         importedStockKeys.forEach { targetKey ->
-            val existingStocks = existingStocksByCode[targetKey.normalizedCode].orEmpty()
-            val hasTargetMarket = existingStocks.any {
-                StockMarket.normalize(it.market) == targetKey.normalizedMarket
-            }
-            val legacyStock = existingStocks
-                .singleOrNull()
-                ?.takeIf {
-                    !hasTargetMarket &&
-                        StockMarket.normalize(it.market) != targetKey.normalizedMarket
-                }
-                ?: return@forEach
+            val canonicalMarket = StockMarket.inferFromCode(targetKey.normalizedCode)
+            if (targetKey.normalizedMarket != canonicalMarket) return@forEach
 
-            put(
-                StockKey(legacyStock.market, targetKey.code).cacheKey(),
-                targetKey.normalizedMarket
-            )
+            val existingStocks = existingStocksByCode[targetKey.normalizedCode].orEmpty()
+            existingStocks
+                .filter { StockMarket.normalize(it.market) != canonicalMarket }
+                .forEach { legacyStock ->
+                    put(
+                        StockKey(legacyStock.market, targetKey.code).cacheKey(),
+                        canonicalMarket
+                    )
+                }
         }
     }
 

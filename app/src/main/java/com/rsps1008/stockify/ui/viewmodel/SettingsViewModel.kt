@@ -82,18 +82,28 @@ internal fun requiredExistingTransactionKeysForImport(
     existingStocksByCode: Map<String, List<Stock>>
 ): List<StockKey> = buildList {
     addAll(importedStockKeys)
-    importedStockKeys.forEach { stockKey ->
-        existingStocksByCode[stockKey.normalizedCode]
-            ?.singleOrNull()
-            ?.takeIf { StockMarket.normalize(it.market) != stockKey.normalizedMarket }
-            ?.let { legacyStock ->
-                add(StockKey(legacyStock.market, stockKey.code))
-            }
-    }
+    val marketAliases = CsvTransactionDedupSupport.marketRepairAliases(
+        importedStockKeys = importedStockKeys,
+        existingStocksByCode = existingStocksByCode
+    )
+    existingStocksByCode.values
+        .asSequence()
+        .flatten()
+        .filter { marketAliases.containsKey(it.toStockKey().cacheKey()) }
+        .map { it.toStockKey() }
+        .forEach(::add)
 }.distinctBy { it.cacheKey() }
 
 internal fun accountsForReplacementRestore(restoredAccounts: List<Account>): List<Account> {
     return restoredAccounts.ifEmpty { listOf(Account(id = 1, name = "預設帳戶")) }
+}
+
+internal fun resolvePdfImportAccount(
+    activeAccountId: Int,
+    existingAccounts: List<Account>
+): Account {
+    return existingAccounts.firstOrNull { it.id == activeAccountId && it.id > 0 }
+        ?: Account(id = 1, name = "預設帳戶")
 }
 
 private data class ExistingCsvImportData(
@@ -872,13 +882,17 @@ class SettingsViewModel(
 
                 val importDate = System.currentTimeMillis()
                 val stockKeysToRefresh = PdfStockImportSupport.stockKeysToRefresh(importableItems)
+                val activeAccountIdBeforeImport = settingsDataStore.activeAccountIdFlow.first()
+                val existingAccounts = stockDao.getAllAccountsFlow().first()
+                val importAccount = resolvePdfImportAccount(
+                    activeAccountId = activeAccountIdBeforeImport,
+                    existingAccounts = existingAccounts
+                )
                 appDatabase.withTransaction {
                     if (replaceExisting) {
-                        deleteAllData()
+                        deleteAllData(listOf(importAccount))
                     } else {
-                        // PDF snapshots use account 1. A prior full-data deletion may have
-                        // removed it, so restore the default account before writing snapshots.
-                        stockDao.insertAccount(Account(id = 1, name = "預設帳戶"))
+                        stockDao.insertAccount(importAccount)
                     }
 
                     importableItems.forEachIndexed { index, item ->
@@ -895,7 +909,7 @@ class SettingsViewModel(
                         val snapshot = StockTransaction(
                             stockCode = stock.code,
                             market = stock.market,
-                            accountId = 1,
+                            accountId = importAccount.id,
                             date = importDate,
                             recordTime = importDate + index,
                             type = "買進",
@@ -916,6 +930,13 @@ class SettingsViewModel(
                         }
                         stockDao.insertTransaction(snapshot)
                     }
+                }
+
+                if (
+                    activeAccountIdBeforeImport > 0 &&
+                    activeAccountIdBeforeImport != importAccount.id
+                ) {
+                    settingsDataStore.setActiveAccountId(importAccount.id)
                 }
 
                 refreshImportedStocks(stockKeysToRefresh)
@@ -1193,7 +1214,14 @@ class SettingsViewModel(
                 stockDao.replaceAccounts(restoredAccounts)
             }
 
-            writeImportedTransactions(transactionsToImport)
+            writeImportedTransactions(
+                transactions = transactionsToImport,
+                repairStockKeys = if (deleteOldData) {
+                    emptyList()
+                } else {
+                    transactions.map { StockKey(it.market, it.stockCode) }
+                }
+            )
         }
 
         applyHoldingsOrderBackup(restoredOrder)
@@ -1330,9 +1358,14 @@ class SettingsViewModel(
         }
     }
 
-    private suspend fun writeImportedTransactions(transactions: List<CsvTransaction>): Set<StockKey> {
-        val stockKeys = transactions
+    private suspend fun writeImportedTransactions(
+        transactions: List<CsvTransaction>,
+        repairStockKeys: List<StockKey> = emptyList()
+    ): Set<StockKey> {
+        val importedTransactionKeys = transactions
             .map { StockKey(it.market, it.stockCode) }
+            .distinctBy { it.cacheKey() }
+        val stockKeys = (importedTransactionKeys + repairStockKeys)
             .distinctBy { it.cacheKey() }
         val existingStocksByCode = stockKeys
             .map { it.code }
@@ -1345,33 +1378,56 @@ class SettingsViewModel(
             .associateBy { StockKey(it.market, it.code).cacheKey() }
             .toMutableMap()
         val newStocksByKey = linkedMapOf<String, Stock>()
+        val repairedStockKeys = linkedSetOf<StockKey>()
+        val marketAliases = CsvTransactionDedupSupport.marketRepairAliases(
+            importedStockKeys = stockKeys,
+            existingStocksByCode = existingStocksByCode
+        )
 
-        stockKeys.forEach { stockKey ->
+        marketAliases.forEach { (legacyKey, targetMarket) ->
+            val legacyStock = existingStocksByCode.values
+                .asSequence()
+                .flatten()
+                .firstOrNull { it.toStockKey().cacheKey() == legacyKey }
+                ?: return@forEach
+            val targetKey = StockKey(targetMarket, legacyStock.code)
+            val existingTargetStock = existingStocksByKey[targetKey.cacheKey()]
+
+            stockDao.updateTransactionMarket(
+                stockCode = legacyStock.code,
+                fromMarket = legacyStock.market,
+                toMarket = targetMarket
+            )
+            if (existingTargetStock == null) {
+                val repairedStock = legacyStock.copy(market = targetMarket)
+                stockDao.updateStock(repairedStock)
+                existingStocksByKey[targetKey.cacheKey()] = repairedStock
+            } else {
+                stockDao.deleteStockByCodeAndMarket(
+                    stockCode = legacyStock.code,
+                    market = legacyStock.market
+                )
+            }
+            existingStocksByKey.remove(legacyKey)
+            repairedStockKeys += targetKey
+        }
+
+        importedTransactionKeys.forEach { stockKey ->
             val code = stockKey.code
             val inferredMarket = stockKey.normalizedMarket
             val existingStock = existingStocksByKey[stockKey.cacheKey()]
             if (existingStock == null) {
-                val staleStock = existingStocksByCode[code.trim().uppercase()]
-                    ?.singleOrNull()
-                    ?.takeIf { StockMarket.normalize(it.market) != inferredMarket }
-                if (staleStock != null) {
-                    stockDao.updateTransactionMarket(code, staleStock.market, inferredMarket)
-                    val repairedStock = staleStock.copy(market = inferredMarket)
-                    stockDao.updateStock(repairedStock)
-                    existingStocksByKey[stockKey.cacheKey()] = repairedStock
-                } else {
-                    val stockName = transactions.firstOrNull {
-                        it.stockCode == code && StockMarket.normalize(it.market) == inferredMarket
-                    }?.stockName.orEmpty()
-                    newStocksByKey.putIfAbsent(
-                        stockKey.cacheKey(),
-                        Stock(
-                            name = stockName,
-                            code = code,
-                            market = inferredMarket
-                        )
+                val stockName = transactions.firstOrNull {
+                    it.stockCode == code && StockMarket.normalize(it.market) == inferredMarket
+                }?.stockName.orEmpty()
+                newStocksByKey.putIfAbsent(
+                    stockKey.cacheKey(),
+                    Stock(
+                        name = stockName,
+                        code = code,
+                        market = inferredMarket
                     )
-                }
+                )
             }
         }
 
@@ -1392,7 +1448,8 @@ class SettingsViewModel(
         }
 
         stockDao.insertTransactions(transactions.map { it.transaction })
-        return transactions.mapTo(linkedSetOf()) { StockKey(it.market, it.stockCode) }
+        return transactions
+            .mapTo(repairedStockKeys) { StockKey(it.market, it.stockCode) }
     }
 
     fun setFetchInterval(interval: Int) {

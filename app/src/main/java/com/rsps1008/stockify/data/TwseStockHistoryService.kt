@@ -20,6 +20,7 @@ import java.util.Calendar
 import java.time.DayOfWeek
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.YearMonth
 import java.time.ZonedDateTime
 import java.util.Locale
 
@@ -39,6 +40,16 @@ internal fun shouldUseHistoryMonthWithoutRefresh(
     if (month == latestChartMonth && forceRefreshCurrentMonth) return false
     return month != latestChartMonth || points.any { it.date == latestChartDate }
 }
+
+internal fun targetHistoryMonths(
+    rangeMonths: Int,
+    currentMonth: YearMonth
+): List<String> = (0..rangeMonths)
+    .map { offset ->
+        val month = currentMonth.minusMonths(offset.toLong())
+        String.format(Locale.US, "%04d%02d", month.year, month.monthValue)
+    }
+    .reversed()
 
 internal fun mergeHistoryPointsPreferLatest(
     points: List<StockHistoryPoint>
@@ -103,7 +114,7 @@ class TwseStockHistoryService(
     ): List<StockHistoryPoint> = withContext(Dispatchers.IO) {
         val normalizedCode = stockCode.uppercase().trim()
         val normalizedMarket = StockMarket.normalize(market)
-        val targetMonths = getTargetMonths(rangeMonths)
+        val targetMonths = getTargetMonths(rangeMonths, normalizedMarket)
         val latestChartDateStr = getLatestChartDateString(normalizedMarket)
         val latestChartMonthStr = latestChartDateStr.take(7).replace("-", "")
         val resultPoints = mutableListOf<StockHistoryPoint>()
@@ -175,7 +186,7 @@ class TwseStockHistoryService(
         market: String,
         forceRefreshCurrentMonth: Boolean
     ): List<StockHistoryPoint> = withContext(Dispatchers.IO) {
-        val targetMonths = getTargetMonths(rangeMonths)
+        val targetMonths = getTargetMonths(rangeMonths, market)
         val total = targetMonths.size
         val resultPoints = mutableListOf<StockHistoryPoint>()
 
@@ -285,7 +296,7 @@ class TwseStockHistoryService(
         market: String,
         forceRefreshCurrentMonth: Boolean
     ): List<StockHistoryPoint> = withContext(Dispatchers.IO) {
-        val targetMonths = getTargetMonths(rangeMonths)
+        val targetMonths = getTargetMonths(rangeMonths, market)
         val resultPoints = mutableListOf<StockHistoryPoint>()
 
         val latestChartDateStr = getLatestChartDateString(StockMarket.US)
@@ -473,19 +484,9 @@ class TwseStockHistoryService(
         }
     }
 
-    private fun getTargetMonths(rangeMonths: Int): List<String> {
-        val list = mutableListOf<String>()
-        val calendar = Calendar.getInstance()
-        
-        for (i in 0..rangeMonths) {
-            val temp = calendar.clone() as Calendar
-            temp.add(Calendar.MONTH, -i)
-            val y = temp.get(Calendar.YEAR)
-            val m = temp.get(Calendar.MONTH) + 1
-            val monthStr = String.format(Locale.US, "%04d%02d", y, m)
-            list.add(monthStr)
-        }
-        return list.reversed() // Oldest month first
+    private fun getTargetMonths(rangeMonths: Int, market: String): List<String> {
+        val timeZone = if (StockMarket.isUs(market)) "America/New_York" else "Asia/Taipei"
+        return targetHistoryMonths(rangeMonths, YearMonth.now(ZoneId.of(timeZone)))
     }
 
     private fun getLatestChartDateString(market: String): String {

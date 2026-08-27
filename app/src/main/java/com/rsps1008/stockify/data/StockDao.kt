@@ -152,6 +152,9 @@ interface StockDao {
     @Query("UPDATE stock_transactions SET 市場 = :toMarket WHERE 股號 = :stockCode AND 市場 = :fromMarket")
     suspend fun updateTransactionMarket(stockCode: String, fromMarket: String, toMarket: String)
 
+    @Query("DELETE FROM stocks WHERE code = :stockCode AND market = :market")
+    suspend fun deleteStockByCodeAndMarket(stockCode: String, market: String)
+
     @Query("DELETE FROM stock_transactions WHERE 帳戶ID = :accountId")
     suspend fun deleteTransactionsByAccountId(accountId: Int)
 

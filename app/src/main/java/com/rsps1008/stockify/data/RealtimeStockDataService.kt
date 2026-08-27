@@ -247,7 +247,7 @@ class RealtimeStockDataService(
     ) {
         quoteRefreshMutex.withLock {
             try {
-                fetchAllStockInfo(
+                fetchAllStockInfoInternal(
                     isContinuous = isContinuous,
                     forceSave = forceSave,
                     refreshRegardlessOfMarketOpen = refreshRegardlessOfMarketOpen
@@ -270,6 +270,18 @@ class RealtimeStockDataService(
 
 
     suspend fun fetchAllStockInfo(
+        isContinuous: Boolean,
+        forceSave: Boolean = false,
+        refreshRegardlessOfMarketOpen: Boolean = false
+    ) = quoteRefreshMutex.withLock {
+        fetchAllStockInfoInternal(
+            isContinuous = isContinuous,
+            forceSave = forceSave,
+            refreshRegardlessOfMarketOpen = refreshRegardlessOfMarketOpen
+        )
+    }
+
+    private suspend fun fetchAllStockInfoInternal(
         isContinuous: Boolean,
         forceSave: Boolean = false,
         refreshRegardlessOfMarketOpen: Boolean = false
@@ -385,7 +397,9 @@ class RealtimeStockDataService(
 
     fun refreshStock(stockCode: String, market: String = StockMarket.inferFromCode(stockCode)) {
         scope.launch {
-            refreshStockInternal(stockCode, market)
+            quoteRefreshMutex.withLock {
+                refreshStockInternal(stockCode, market)
+            }
         }
     }
 
@@ -398,6 +412,12 @@ class RealtimeStockDataService(
     }
 
     suspend fun refreshStocks(stockKeys: Collection<StockKey>) {
+        quoteRefreshMutex.withLock {
+            refreshStocksInternal(stockKeys)
+        }
+    }
+
+    private suspend fun refreshStocksInternal(stockKeys: Collection<StockKey>) {
         val distinctKeys = stockKeys
             .map { StockKey(StockMarket.normalize(it.market), it.normalizedCode) }
             .filter { it.code.isNotEmpty() }

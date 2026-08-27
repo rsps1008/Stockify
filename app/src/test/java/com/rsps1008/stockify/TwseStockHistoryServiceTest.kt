@@ -8,8 +8,21 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.junit.Assert.*
+import java.time.YearMonth
 
 class TwseStockHistoryServiceTest {
+
+    @Test
+    fun targetHistoryMonthsUsesTheMarketMonthBoundary() {
+        assertEquals(
+            listOf("202607", "202608"),
+            targetHistoryMonths(1, YearMonth.of(2026, 8))
+        )
+        assertEquals(
+            listOf("202608", "202609"),
+            targetHistoryMonths(1, YearMonth.of(2026, 9))
+        )
+    }
 
     private val mockDao = object : StockDao {
         override suspend fun insertStocks(stocks: List<Stock>) {}
@@ -65,6 +78,7 @@ class TwseStockHistoryServiceTest {
         override suspend fun deleteTransactionsByStockCode(stockCode: String, market: String) {}
         override suspend fun deleteTransactionsByStockCodeAndAccountId(stockCode: String, market: String, accountId: Int) {}
         override suspend fun updateTransactionMarket(stockCode: String, fromMarket: String, toMarket: String) {}
+        override suspend fun deleteStockByCodeAndMarket(stockCode: String, market: String) {}
         override suspend fun deleteTransactionsByAccountId(accountId: Int) {}
         override suspend fun getHoldingShares(stockCode: String, market: String): Double = 0.0
         override suspend fun insertHistoryPrices(prices: List<StockHistoryPrice>) {
