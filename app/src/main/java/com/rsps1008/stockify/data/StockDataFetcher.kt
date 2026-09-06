@@ -41,6 +41,8 @@ private val requiredUsStockListSources = listOf(
 )
 
 private const val MINIMUM_US_STOCKS_PER_SOURCE = 100
+private const val NASDAQ_TRADER_USER_AGENT =
+    "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
 
 internal fun requireCompleteTaiwanStockLists(
     stocksByMode: Map<String, List<Stock>>
@@ -58,8 +60,11 @@ internal fun parseUsStockListSource(
     source: UsStockListSource
 ): List<Stock> {
     val reader = BufferedReader(StringReader(responseText))
-    val header = reader.readLine()
+    val header = reader.lineSequence()
+        .firstOrNull { it.isNotBlank() }
+        ?.trim()
         ?.removePrefix("\uFEFF")
+        ?.trim()
         ?.split('|')
         ?.takeIf { it.isNotEmpty() }
         ?: throw IllegalStateException("${source.label} 缺少標頭")
@@ -192,7 +197,11 @@ class StockDataFetcher(
         val stocksByCode = linkedMapOf<String, Stock>()
 
         for (source in requiredUsStockListSources) {
-            val responseText = client.get(source.url).bodyAsText()
+            val responseText = client.get(source.url) {
+                // Nasdaq Trader may return an Imperva response instead of its text file to unknown clients.
+                headers.append("User-Agent", NASDAQ_TRADER_USER_AGENT)
+                headers.append("Accept", "text/plain, */*;q=0.8")
+            }.bodyAsText()
             val sourceStocks = parseUsStockListSource(responseText, source)
             sourceStocks.forEach { stock ->
                 stocksByCode.putIfAbsent(stock.code, stock)

@@ -36,6 +36,14 @@ class UsStockListParsingTest {
     }
 
     @Test
+    fun leadingBlankLinesAndBomBeforeTheHeaderAreIgnored() {
+        val stocks = parseUsStockListSource("\n\n\uFEFF$validNasdaqText", nasdaqSource)
+
+        assertEquals(100, stocks.size)
+        assertEquals("STOCK0", stocks.first().code)
+    }
+
+    @Test
     fun missingRequiredColumnRejectsTheEntireSource() {
         assertThrows(IllegalStateException::class.java) {
             parseUsStockListSource(
