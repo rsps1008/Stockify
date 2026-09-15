@@ -69,6 +69,7 @@ import com.rsps1008.stockify.ui.navigation.Screen
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
 import com.rsps1008.stockify.data.Stock
 import com.rsps1008.stockify.data.StockMarket
+import com.rsps1008.stockify.data.calculateStockDividendShares
 import com.rsps1008.stockify.data.formatMarketAmount
 import com.rsps1008.stockify.data.formatShareInputValue
 import kotlinx.coroutines.launch
@@ -531,9 +532,12 @@ fun AddTransactionScreen(
         if (transactionType == "配股") {
             val rate = stockDividendRate.toDoubleOrNull()
             val baseShares = exRightsShares.toDoubleOrNull()
-            // `rate` is treated as stock dividend shares per share.
             if (rate != null && baseShares != null) {
-                val calculatedShares = baseShares * rate
+                val calculatedShares = calculateStockDividendShares(
+                    stockDividend = rate,
+                    exRightsShares = baseShares,
+                    market = transactionMarket
+                )
                 shares = formatShareInputValue(
                     if (isUsStock) calculatedShares else viewModel.roundCalculatedAmount(calculatedShares)
                 )
