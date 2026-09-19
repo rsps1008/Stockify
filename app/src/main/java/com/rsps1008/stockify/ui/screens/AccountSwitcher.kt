@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Wallet
+import androidx.compose.material.icons.filled.Percent
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ButtonDefaults
@@ -49,6 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rsps1008.stockify.data.Account
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,6 +61,8 @@ fun AccountSwitcherBadge(
     onAddAccount: (String) -> Unit,
     onRenameAccount: (Account, String) -> Unit,
     onDeleteAccount: (Account) -> Unit,
+    sharedFeeDiscount: Double,
+    onSetAccountFeeDiscount: (Account, Double?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showSheet by remember { mutableStateOf(false) }
@@ -118,6 +122,8 @@ fun AccountSwitcherBadge(
             onAddAccount = onAddAccount,
             onRenameAccount = onRenameAccount,
             onDeleteAccount = onDeleteAccount,
+            sharedFeeDiscount = sharedFeeDiscount,
+            onSetAccountFeeDiscount = onSetAccountFeeDiscount,
             onDismiss = { showSheet = false }
         )
     }
@@ -132,6 +138,8 @@ fun AccountSwitcherSheet(
     onAddAccount: (String) -> Unit,
     onRenameAccount: (Account, String) -> Unit,
     onDeleteAccount: (Account) -> Unit,
+    sharedFeeDiscount: Double,
+    onSetAccountFeeDiscount: (Account, Double?) -> Unit,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -139,6 +147,7 @@ fun AccountSwitcherSheet(
     var showAddDialog by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf<Account?>(null) }
     var showDeleteDialog by remember { mutableStateOf<Account?>(null) }
+    var showFeeDiscountDialog by remember { mutableStateOf<Account?>(null) }
 
     val activeAccountName = when (activeAccountId) {
         0 -> "全部帳戶"
@@ -217,6 +226,7 @@ fun AccountSwitcherSheet(
                             onSelect = { onAccountSelected(0) },
                             onRename = {},
                             onDelete = {},
+                            onEditFeeDiscount = {},
                             isSystemAccount = true
                         )
                     }
@@ -225,12 +235,13 @@ fun AccountSwitcherSheet(
                 items(accounts, key = { it.id }) { account ->
                     AccountItemRow(
                         name = account.name,
-                        subtitle = if (account.id == 1) "主要帳戶" else "投資帳戶",
+                        subtitle = "${if (account.id == 1) "主要帳戶" else "投資帳戶"}・手續費折數：${account.feeDiscount?.let { formatFeeDiscount(it) } ?: "共用 ${formatFeeDiscount(sharedFeeDiscount)}"}",
                         isSelected = activeAccountId == account.id,
                         isManageMode = isManageMode,
                         onSelect = { onAccountSelected(account.id) },
                         onRename = { showRenameDialog = account },
                         onDelete = { showDeleteDialog = account },
+                        onEditFeeDiscount = { showFeeDiscountDialog = account },
                         isSystemAccount = account.id == 1
                     )
                 }
@@ -349,7 +360,51 @@ fun AccountSwitcherSheet(
             }
         )
     }
+
+    showFeeDiscountDialog?.let { account ->
+        var feeDiscountText by remember(account) {
+            mutableStateOf(account.feeDiscount?.toString().orEmpty())
+        }
+        AlertDialog(
+            onDismissRequest = { showFeeDiscountDialog = null },
+            title = { Text("設定「${account.name}」的手續費折數") },
+            text = {
+                Column {
+                    Text(
+                        "留白會使用共用設定：${formatFeeDiscount(sharedFeeDiscount)}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = feeDiscountText,
+                        onValueChange = { feeDiscountText = it },
+                        label = { Text("手續費折數，例如 0.28") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val trimmed = feeDiscountText.trim()
+                        val value = trimmed.takeIf(String::isNotEmpty)?.toDoubleOrNull()
+                        if (trimmed.isEmpty() || (value != null && value.isFinite() && value >= 0.0)) {
+                            onSetAccountFeeDiscount(account, value)
+                            showFeeDiscountDialog = null
+                        }
+                    }
+                ) { Text("儲存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFeeDiscountDialog = null }) { Text("取消") }
+            }
+        )
+    }
 }
+
+private fun formatFeeDiscount(value: Double): String =
+    String.format(Locale.US, "%.4g", value)
 
 @Composable
 fun AccountItemRow(
@@ -360,6 +415,7 @@ fun AccountItemRow(
     onSelect: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
+    onEditFeeDiscount: () -> Unit,
     isSystemAccount: Boolean
 ) {
     val selectedColor = MaterialTheme.colorScheme.primaryContainer
@@ -424,6 +480,14 @@ fun AccountItemRow(
 
             if (isManageMode) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onEditFeeDiscount, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.Percent,
+                            contentDescription = "設定手續費折數",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
                     IconButton(onClick = onRename, modifier = Modifier.size(36.dp)) {
                         Icon(
                             imageVector = Icons.Default.Edit,

@@ -598,11 +598,11 @@ class SettingsViewModel(
                         it.write(content)
                     } ?: error("無法建立帳戶備份檔案")
                 }
-                _message.value = "本地帳戶名稱備份成功"
+                _message.value = "本地帳戶設定備份成功"
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _message.value = "本地帳戶名稱備份失敗: ${e.message}"
+                _message.value = "本地帳戶設定備份失敗: ${e.message}"
             } finally {
                 _isLoading.value = false
             }
@@ -619,11 +619,11 @@ class SettingsViewModel(
                 withContext(Dispatchers.IO) {
                     writeToDownloads(fileName, "application/json", content)
                 }
-                _message.value = "本地帳戶名稱備份成功，已儲存至 Download/Stockify/$fileName"
+                _message.value = "本地帳戶設定備份成功，已儲存至 Download/Stockify/$fileName"
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _message.value = "本地帳戶名稱備份失敗: ${e.message}"
+                _message.value = "本地帳戶設定備份失敗: ${e.message}"
             } finally {
                 _isLoading.value = false
             }
@@ -645,11 +645,11 @@ class SettingsViewModel(
                 appDatabase.withTransaction {
                     stockDao.replaceAccounts(accounts)
                 }
-                _message.value = "本地帳戶名稱還原成功，共 ${accounts.size} 個帳戶"
+                _message.value = "本地帳戶設定還原成功，共 ${accounts.size} 個帳戶"
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _message.value = "本地帳戶名稱還原失敗: ${e.message}"
+                _message.value = "本地帳戶設定還原失敗: ${e.message}"
             } finally {
                 _isLoading.value = false
             }

@@ -706,6 +706,11 @@ fun SettingsScreen() {
                         Card(modifier = Modifier.fillMaxWidth()) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Text("台股手續費", style = MaterialTheme.typography.titleLarge)
+                                Text(
+                                    "這是共用設定；個別帳戶可在首頁帳戶管理中單獨覆寫。",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                                 Spacer(modifier = Modifier.height(16.dp))
 
                                 var feeDiscountText by remember { mutableStateOf(feeDiscount.toString()) }

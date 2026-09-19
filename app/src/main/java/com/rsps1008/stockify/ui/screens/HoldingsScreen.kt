@@ -137,6 +137,7 @@ fun HoldingsScreen(navController: NavController) {
     val usdToTwdRate by application.exchangeRateService.usdToTwdRate.collectAsState()
     val activeAccountId by viewModel.activeAccountId.collectAsState()
     val accounts by viewModel.accounts.collectAsState()
+    val sharedFeeDiscount by viewModel.sharedFeeDiscount.collectAsState()
 
     LaunchedEffect(viewModel) {
         viewModel.accountOperationError.collect { message ->
@@ -331,7 +332,9 @@ fun HoldingsScreen(navController: NavController) {
                     onAccountSelected = viewModel::selectAccount,
                     onAddAccount = viewModel::addAccount,
                     onRenameAccount = viewModel::renameAccount,
-                    onDeleteAccount = viewModel::deleteAccount
+                    onDeleteAccount = viewModel::deleteAccount,
+                    sharedFeeDiscount = sharedFeeDiscount,
+                    onSetAccountFeeDiscount = viewModel::setAccountFeeDiscount
                 )
             }
 
@@ -919,7 +922,9 @@ fun SummarySection(
     onAccountSelected: (Int) -> Unit,
     onAddAccount: (String) -> Unit,
     onRenameAccount: (Account, String) -> Unit,
-    onDeleteAccount: (Account) -> Unit
+    onDeleteAccount: (Account) -> Unit,
+    sharedFeeDiscount: Double,
+    onSetAccountFeeDiscount: (Account, Double?) -> Unit
 ) {
     var showMarketValue by remember { mutableStateOf(true) }
 
@@ -994,6 +999,8 @@ fun SummarySection(
                     onAddAccount = onAddAccount,
                     onRenameAccount = onRenameAccount,
                     onDeleteAccount = onDeleteAccount,
+                    sharedFeeDiscount = sharedFeeDiscount,
+                    onSetAccountFeeDiscount = onSetAccountFeeDiscount,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .offset(x = 4.dp, y = (-18).dp)

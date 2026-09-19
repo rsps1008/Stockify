@@ -773,7 +773,7 @@ private fun LocalBackupSection(
             )
 
             Spacer(modifier = Modifier.height(12.dp))
-            Text("帳戶資料(帳戶名稱)", style = MaterialTheme.typography.titleMedium)
+            Text("帳戶資料（名稱與手續費設定）", style = MaterialTheme.typography.titleMedium)
             BackupButtonRow(
                 backupText = "備份帳戶",
                 restoreText = "還原帳戶",

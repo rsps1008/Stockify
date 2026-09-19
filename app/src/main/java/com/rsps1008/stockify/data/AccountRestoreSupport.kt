@@ -6,7 +6,10 @@ internal fun validatedRestoredAccounts(accounts: List<Account>): List<Account> {
         require(account.id > 0) { "帳戶 ID 必須大於 0" }
         val name = account.name.trim()
         require(name.isNotEmpty()) { "帳戶名稱不可空白" }
-        account.copy(name = name)
+        val feeDiscount = account.feeDiscount?.also {
+            require(it.isFinite() && it >= 0.0) { "帳戶手續費折數必須是大於等於 0 的有效數字" }
+        }
+        account.copy(name = name, feeDiscount = feeDiscount)
     }
     require(normalized.map { it.id }.distinct().size == normalized.size) { "帳戶備份含有重複 ID" }
     return normalized

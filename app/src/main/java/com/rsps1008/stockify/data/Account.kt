@@ -10,5 +10,7 @@ import kotlinx.serialization.Serializable
 data class Account(
     @PrimaryKey(autoGenerate = true)
     val id: Int = 0,
-    val name: String
+    val name: String,
+    /** Null means this account uses the shared Taiwan fee discount setting. */
+    val feeDiscount: Double? = null
 )

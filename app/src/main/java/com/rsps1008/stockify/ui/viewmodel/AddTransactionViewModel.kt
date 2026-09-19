@@ -13,6 +13,7 @@ import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.canonicalStockCode
 import com.rsps1008.stockify.data.Account
+import com.rsps1008.stockify.data.effectiveFeeDiscount
 import com.rsps1008.stockify.data.TransactionCostSupport
 import com.rsps1008.stockify.data.TransactionValidationSupport
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
@@ -490,8 +491,16 @@ class AddTransactionViewModel(
     suspend fun getStockByCode(code: String, market: String = StockMarket.inferFromCode(code)): Stock? =
         stockDao.getStockByCode(canonicalStockCode(code), StockMarket.normalize(market))
 
-    val feeSettings = combine(
+    private val selectedFeeDiscount = combine(
         settingsDataStore.feeDiscountFlow,
+        accounts,
+        selectedAccountId
+    ) { sharedFeeDiscount, accountList, accountId ->
+        effectiveFeeDiscount(accountId, accountList, sharedFeeDiscount)
+    }
+
+    val feeSettings = combine(
+        selectedFeeDiscount,
         settingsDataStore.minFeeRegularFlow,
         settingsDataStore.minFeeOddLotFlow
     ) { discount, minRegular, minOdd ->
