@@ -9,7 +9,18 @@ internal fun validatedRestoredAccounts(accounts: List<Account>): List<Account> {
         val feeDiscount = account.feeDiscount?.also {
             require(it.isFinite() && it >= 0.0) { "帳戶手續費折數必須是大於等於 0 的有效數字" }
         }
-        account.copy(name = name, feeDiscount = feeDiscount)
+        val minFeeRegular = account.minFeeRegular?.also {
+            require(it >= 0) { "帳戶整股最低手續費不可小於 0" }
+        }
+        val minFeeOddLot = account.minFeeOddLot?.also {
+            require(it >= 0) { "帳戶零股最低手續費不可小於 0" }
+        }
+        account.copy(
+            name = name,
+            feeDiscount = feeDiscount,
+            minFeeRegular = minFeeRegular,
+            minFeeOddLot = minFeeOddLot
+        )
     }
     require(normalized.map { it.id }.distinct().size == normalized.size) { "帳戶備份含有重複 ID" }
     return normalized

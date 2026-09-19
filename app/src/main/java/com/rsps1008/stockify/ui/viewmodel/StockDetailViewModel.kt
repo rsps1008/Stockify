@@ -25,7 +25,8 @@ import com.rsps1008.stockify.data.ShortSellingSummary
 import com.rsps1008.stockify.data.HistoryChartCalculationSupport
 import com.rsps1008.stockify.data.TransactionDateSupport
 import com.rsps1008.stockify.data.TransactionCostSupport
-import com.rsps1008.stockify.data.accountFeeDiscounts
+import com.rsps1008.stockify.data.AccountFeeSettings
+import com.rsps1008.stockify.data.accountFeeSettings
 import com.rsps1008.stockify.ui.screens.HoldingInfo
 import com.rsps1008.stockify.ui.screens.TransactionUiState
 import kotlinx.coroutines.Dispatchers
@@ -87,8 +88,8 @@ sealed interface DeleteTransactionsState {
 
 private data class DetailSettingsBundle(
     val preDeductSellFees: Boolean,
-    val feeDiscounts: Map<Int, Double>,
-    val sharedFeeDiscount: Double,
+    val feeSettingsByAccount: Map<Int, AccountFeeSettings>,
+    val sharedFeeSettings: AccountFeeSettings,
     val minFeeRegular: Int,
     val minFeeOddLot: Int,
     val returnRateMode: ReturnRateMode,
@@ -149,15 +150,35 @@ class StockDetailViewModel(
         settingsDataStore.returnRateModeFlow,
         settingsDataStore.marginDayCountFlow
     ) { preDeduct, sharedFeeDiscount, minFeeRegular, mode, marginDayCount ->
-        DetailSettingsBundle(preDeduct, emptyMap(), sharedFeeDiscount, minFeeRegular, 0, mode, marginDayCount)
+        DetailSettingsBundle(
+            preDeductSellFees = preDeduct,
+            feeSettingsByAccount = emptyMap(),
+            sharedFeeSettings = AccountFeeSettings(sharedFeeDiscount, minFeeRegular, 0),
+            minFeeRegular = minFeeRegular,
+            minFeeOddLot = 0,
+            returnRateMode = mode,
+            marginDayCount = marginDayCount
+        )
     }
 
     private val settingsCombined = baseSettingsCombined
-        .combine(stockDao.getAllAccountsFlow()) { settings, accounts ->
-            settings.copy(feeDiscounts = accountFeeDiscounts(accounts, settings.sharedFeeDiscount))
-        }
         .combine(settingsDataStore.minFeeOddLotFlow) { settings, minFeeOddLot ->
             settings.copy(minFeeOddLot = minFeeOddLot)
+        }
+        .combine(stockDao.getAllAccountsFlow()) { settings, accounts ->
+            settings.copy(
+                feeSettingsByAccount = accountFeeSettings(
+                    accounts,
+                    settings.sharedFeeSettings.feeDiscount,
+                    settings.minFeeRegular,
+                    settings.minFeeOddLot
+                ),
+                sharedFeeSettings = AccountFeeSettings(
+                    settings.sharedFeeSettings.feeDiscount,
+                    settings.minFeeRegular,
+                    settings.minFeeOddLot
+                )
+            )
         }
 
     val historyState: StateFlow<HistoryState> = combine(
@@ -176,9 +197,6 @@ class StockDetailViewModel(
                 )
             }
             val firstTxTime = stockTransactions.minOfOrNull { it.date }
-            val minFeeRegular = settings.minFeeRegular.toDouble()
-            val minFeeOddLot = settings.minFeeOddLot.toDouble()
-
             val personalPoints = mutableListOf<PersonalHistoryPoint>()
             val stockType = stock?.stockType ?: ""
             val market = stock?.market ?: StockMarket.inferFromCode(stockCode)
@@ -250,10 +268,8 @@ class StockDetailViewModel(
                     replay = replay,
                     preDeductSellFees = settings.preDeductSellFees,
                     returnRateMode = settings.returnRateMode,
-                    feeDiscounts = settings.feeDiscounts,
-                    sharedFeeDiscount = settings.sharedFeeDiscount,
-                    minFeeRegular = minFeeRegular,
-                    minFeeOddLot = minFeeOddLot,
+                    feeSettingsByAccount = settings.feeSettingsByAccount,
+                    sharedFeeSettings = settings.sharedFeeSettings,
                     market = market,
                     stockType = stockType,
                     dayEnd = dayEnd,
@@ -360,10 +376,8 @@ class StockDetailViewModel(
         replay: LongPositionReplaySummary,
         preDeductSellFees: Boolean,
         returnRateMode: ReturnRateMode,
-        feeDiscounts: Map<Int, Double>,
-        sharedFeeDiscount: Double,
-        minFeeRegular: Double,
-        minFeeOddLot: Double,
+        feeSettingsByAccount: Map<Int, AccountFeeSettings>,
+        sharedFeeSettings: AccountFeeSettings,
         market: String,
         stockType: String,
         dayEnd: Long,
@@ -414,11 +428,9 @@ class StockDetailViewModel(
             val sellFee = estimateTaiwanSellFee(
                 transactions = txs,
                 currentPrice = ptPrice,
-                feeDiscounts = feeDiscounts,
-                sharedFeeDiscount = sharedFeeDiscount,
-                valuationDate = valuationDate,
-                minFeeRegular = minFeeRegular,
-                minFeeOddLot = minFeeOddLot
+                feeSettingsByAccount = feeSettingsByAccount,
+                sharedFeeSettings = sharedFeeSettings,
+                valuationDate = valuationDate
             )
             val taxRate = if (stockType == "ETF") 0.001 else 0.003
             val sellTax = marketValue * taxRate
@@ -531,11 +543,9 @@ class StockDetailViewModel(
     private fun estimateTaiwanSellFee(
         transactions: List<StockTransaction>,
         currentPrice: Double,
-        feeDiscounts: Map<Int, Double>,
-        sharedFeeDiscount: Double,
-        valuationDate: Long,
-        minFeeRegular: Double,
-        minFeeOddLot: Double
+        feeSettingsByAccount: Map<Int, AccountFeeSettings>,
+        sharedFeeSettings: AccountFeeSettings,
+        valuationDate: Long
     ): Double = transactions
         .groupBy { it.accountId }
         .values
@@ -551,13 +561,14 @@ class StockDetailViewModel(
             )
             val accountShares = accountReplay.shares
             if (accountShares <= 0.0) return@sumOf 0.0
+            val feeSettings = feeSettingsByAccount[accountTransactions.first().accountId] ?: sharedFeeSettings
             val minimumFee = TransactionCostSupport.minimumTaiwanSellFee(
                 shares = accountShares,
-                minFeeRegular = minFeeRegular,
-                minFeeOddLot = minFeeOddLot
+                minFeeRegular = feeSettings.minFeeRegular.toDouble(),
+                minFeeOddLot = feeSettings.minFeeOddLot.toDouble()
             )
             (accountShares * currentPrice * 0.001425 *
-                (feeDiscounts[accountTransactions.first().accountId] ?: sharedFeeDiscount))
+                feeSettings.feeDiscount)
                 .coerceAtLeast(minimumFee)
         }
 

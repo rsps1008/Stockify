@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Add
@@ -47,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rsps1008.stockify.data.Account
@@ -62,7 +64,9 @@ fun AccountSwitcherBadge(
     onRenameAccount: (Account, String) -> Unit,
     onDeleteAccount: (Account) -> Unit,
     sharedFeeDiscount: Double,
-    onSetAccountFeeDiscount: (Account, Double?) -> Unit,
+    sharedMinFeeRegular: Int,
+    sharedMinFeeOddLot: Int,
+    onSetAccountFeeSettings: (Account, Double?, Int?, Int?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showSheet by remember { mutableStateOf(false) }
@@ -123,7 +127,9 @@ fun AccountSwitcherBadge(
             onRenameAccount = onRenameAccount,
             onDeleteAccount = onDeleteAccount,
             sharedFeeDiscount = sharedFeeDiscount,
-            onSetAccountFeeDiscount = onSetAccountFeeDiscount,
+            sharedMinFeeRegular = sharedMinFeeRegular,
+            sharedMinFeeOddLot = sharedMinFeeOddLot,
+            onSetAccountFeeSettings = onSetAccountFeeSettings,
             onDismiss = { showSheet = false }
         )
     }
@@ -139,7 +145,9 @@ fun AccountSwitcherSheet(
     onRenameAccount: (Account, String) -> Unit,
     onDeleteAccount: (Account) -> Unit,
     sharedFeeDiscount: Double,
-    onSetAccountFeeDiscount: (Account, Double?) -> Unit,
+    sharedMinFeeRegular: Int,
+    sharedMinFeeOddLot: Int,
+    onSetAccountFeeSettings: (Account, Double?, Int?, Int?) -> Unit,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -235,7 +243,7 @@ fun AccountSwitcherSheet(
                 items(accounts, key = { it.id }) { account ->
                     AccountItemRow(
                         name = account.name,
-                        subtitle = "${if (account.id == 1) "主要帳戶" else "投資帳戶"}・手續費折數：${account.feeDiscount?.let { formatFeeDiscount(it) } ?: "共用 ${formatFeeDiscount(sharedFeeDiscount)}"}",
+                        subtitle = "${if (account.id == 1) "主要帳戶" else "投資帳戶"}・折數 ${account.feeDiscount?.let { formatFeeDiscount(it) } ?: "共用 ${formatFeeDiscount(sharedFeeDiscount)}"}・整股 ${account.minFeeRegular ?: "共用 $sharedMinFeeRegular"} 元・零股 ${account.minFeeOddLot ?: "共用 $sharedMinFeeOddLot"} 元",
                         isSelected = activeAccountId == account.id,
                         isManageMode = isManageMode,
                         onSelect = { onAccountSelected(account.id) },
@@ -365,13 +373,19 @@ fun AccountSwitcherSheet(
         var feeDiscountText by remember(account) {
             mutableStateOf(account.feeDiscount?.toString().orEmpty())
         }
+        var minFeeRegularText by remember(account) {
+            mutableStateOf(account.minFeeRegular?.toString().orEmpty())
+        }
+        var minFeeOddLotText by remember(account) {
+            mutableStateOf(account.minFeeOddLot?.toString().orEmpty())
+        }
         AlertDialog(
             onDismissRequest = { showFeeDiscountDialog = null },
-            title = { Text("設定「${account.name}」的手續費折數") },
+            title = { Text("設定「${account.name}」的手續費") },
             text = {
                 Column {
                     Text(
-                        "留白會使用共用設定：${formatFeeDiscount(sharedFeeDiscount)}",
+                        "各欄留白會使用共用設定：折數 ${formatFeeDiscount(sharedFeeDiscount)}、整股最低 ${sharedMinFeeRegular} 元、零股最低 ${sharedMinFeeOddLot} 元",
                         style = MaterialTheme.typography.bodySmall
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -379,6 +393,25 @@ fun AccountSwitcherSheet(
                         value = feeDiscountText,
                         onValueChange = { feeDiscountText = it },
                         label = { Text("手續費折數，例如 0.28") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = minFeeRegularText,
+                        onValueChange = { minFeeRegularText = it },
+                        label = { Text("整股最低手續費（元）") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = minFeeOddLotText,
+                        onValueChange = { minFeeOddLotText = it },
+                        label = { Text("零股最低手續費（元）") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -389,8 +422,15 @@ fun AccountSwitcherSheet(
                     onClick = {
                         val trimmed = feeDiscountText.trim()
                         val value = trimmed.takeIf(String::isNotEmpty)?.toDoubleOrNull()
-                        if (trimmed.isEmpty() || (value != null && value.isFinite() && value >= 0.0)) {
-                            onSetAccountFeeDiscount(account, value)
+                        val regularText = minFeeRegularText.trim()
+                        val regular = regularText.takeIf(String::isNotEmpty)?.toIntOrNull()
+                        val oddLotText = minFeeOddLotText.trim()
+                        val oddLot = oddLotText.takeIf(String::isNotEmpty)?.toIntOrNull()
+                        val valid = (trimmed.isEmpty() || (value != null && value.isFinite() && value >= 0.0)) &&
+                            (regularText.isEmpty() || (regular != null && regular >= 0)) &&
+                            (oddLotText.isEmpty() || (oddLot != null && oddLot >= 0))
+                        if (valid) {
+                            onSetAccountFeeSettings(account, value, regular, oddLot)
                             showFeeDiscountDialog = null
                         }
                     }
@@ -483,7 +523,7 @@ fun AccountItemRow(
                     IconButton(onClick = onEditFeeDiscount, modifier = Modifier.size(36.dp)) {
                         Icon(
                             imageVector = Icons.Default.Percent,
-                            contentDescription = "設定手續費折數",
+                            contentDescription = "設定帳戶手續費",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(19.dp)
                         )

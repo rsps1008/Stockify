@@ -1,7 +1,8 @@
 package com.rsps1008.stockify
 
 import com.rsps1008.stockify.data.Account
-import com.rsps1008.stockify.data.effectiveFeeDiscount
+import com.rsps1008.stockify.data.AccountFeeSettings
+import com.rsps1008.stockify.data.effectiveFeeSettings
 import com.rsps1008.stockify.data.resolvedActiveAccountId
 import com.rsps1008.stockify.data.validatedRestoredAccounts
 import org.junit.Assert.assertEquals
@@ -49,15 +50,30 @@ class AccountRestoreSupportTest {
         ).single()
 
         assertEquals(null, restored.feeDiscount)
-        assertEquals(0.28, effectiveFeeDiscount(1, listOf(restored), 0.28), 0.0)
+        assertEquals(
+            AccountFeeSettings(0.28, 1, 1),
+            effectiveFeeSettings(1, listOf(restored), AccountFeeSettings(0.28, 1, 1))
+        )
     }
 
     @Test
     fun accountFeeDiscountOverridesSharedSettingAndCanBeCleared() {
-        val account = Account(id = 2, name = "長期投資", feeDiscount = 0.18)
+        val account = Account(
+            id = 2,
+            name = "長期投資",
+            feeDiscount = 0.18,
+            minFeeRegular = 2,
+            minFeeOddLot = 3
+        )
 
-        assertEquals(0.18, effectiveFeeDiscount(2, listOf(account), 0.28), 0.0)
-        assertEquals(0.28, effectiveFeeDiscount(1, listOf(account), 0.28), 0.0)
+        assertEquals(
+            AccountFeeSettings(0.18, 2, 3),
+            effectiveFeeSettings(2, listOf(account), AccountFeeSettings(0.28, 1, 1))
+        )
+        assertEquals(
+            AccountFeeSettings(0.28, 1, 1),
+            effectiveFeeSettings(1, listOf(account), AccountFeeSettings(0.28, 1, 1))
+        )
     }
 
     @Test
@@ -68,12 +84,23 @@ class AccountRestoreSupportTest {
         assertThrows(IllegalArgumentException::class.java) {
             validatedRestoredAccounts(listOf(Account(id = 1, name = "帳戶", feeDiscount = Double.NaN)))
         }
+        assertThrows(IllegalArgumentException::class.java) {
+            validatedRestoredAccounts(listOf(Account(id = 1, name = "帳戶", minFeeRegular = -1)))
+        }
     }
 
     @Test
     fun accountBackupIncludesOverrideAndReadsLegacyJson() {
         val currentJson = Json.encodeToString(
-            listOf(Account(id = 2, name = "長期投資", feeDiscount = 0.18))
+            listOf(
+                Account(
+                    id = 2,
+                    name = "長期投資",
+                    feeDiscount = 0.18,
+                    minFeeRegular = 2,
+                    minFeeOddLot = 3
+                )
+            )
         )
         val restoredCurrent = Json.decodeFromString<List<Account>>(currentJson).single()
         val restoredLegacy = Json.decodeFromString<List<Account>>(
@@ -82,6 +109,8 @@ class AccountRestoreSupportTest {
 
         assertTrue(currentJson.contains("feeDiscount"))
         assertEquals(0.18, restoredCurrent.feeDiscount ?: -1.0, 0.0)
+        assertEquals(2, restoredCurrent.minFeeRegular)
+        assertEquals(3, restoredCurrent.minFeeOddLot)
         assertEquals(null, restoredLegacy.feeDiscount)
     }
 }

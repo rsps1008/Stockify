@@ -138,6 +138,8 @@ fun HoldingsScreen(navController: NavController) {
     val activeAccountId by viewModel.activeAccountId.collectAsState()
     val accounts by viewModel.accounts.collectAsState()
     val sharedFeeDiscount by viewModel.sharedFeeDiscount.collectAsState()
+    val sharedMinFeeRegular by viewModel.sharedMinFeeRegular.collectAsState()
+    val sharedMinFeeOddLot by viewModel.sharedMinFeeOddLot.collectAsState()
 
     LaunchedEffect(viewModel) {
         viewModel.accountOperationError.collect { message ->
@@ -334,7 +336,9 @@ fun HoldingsScreen(navController: NavController) {
                     onRenameAccount = viewModel::renameAccount,
                     onDeleteAccount = viewModel::deleteAccount,
                     sharedFeeDiscount = sharedFeeDiscount,
-                    onSetAccountFeeDiscount = viewModel::setAccountFeeDiscount
+                    sharedMinFeeRegular = sharedMinFeeRegular,
+                    sharedMinFeeOddLot = sharedMinFeeOddLot,
+                    onSetAccountFeeSettings = viewModel::setAccountFeeSettings
                 )
             }
 
@@ -924,7 +928,9 @@ fun SummarySection(
     onRenameAccount: (Account, String) -> Unit,
     onDeleteAccount: (Account) -> Unit,
     sharedFeeDiscount: Double,
-    onSetAccountFeeDiscount: (Account, Double?) -> Unit
+    sharedMinFeeRegular: Int,
+    sharedMinFeeOddLot: Int,
+    onSetAccountFeeSettings: (Account, Double?, Int?, Int?) -> Unit
 ) {
     var showMarketValue by remember { mutableStateOf(true) }
 
@@ -1000,7 +1006,9 @@ fun SummarySection(
                     onRenameAccount = onRenameAccount,
                     onDeleteAccount = onDeleteAccount,
                     sharedFeeDiscount = sharedFeeDiscount,
-                    onSetAccountFeeDiscount = onSetAccountFeeDiscount,
+                    sharedMinFeeRegular = sharedMinFeeRegular,
+                    sharedMinFeeOddLot = sharedMinFeeOddLot,
+                    onSetAccountFeeSettings = onSetAccountFeeSettings,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .offset(x = 4.dp, y = (-18).dp)

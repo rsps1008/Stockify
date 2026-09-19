@@ -21,10 +21,8 @@ class OfflineStockRepository(
         val preDeductSellFees: Boolean,
         val returnRateMode: ReturnRateMode,
         val marginDayCount: Int,
-        val feeDiscounts: Map<Int, Double>,
-        val sharedFeeDiscount: Double,
-        val minFeeRegular: Int,
-        val minFeeOddLot: Int
+        val feeSettingsByAccount: Map<Int, AccountFeeSettings>,
+        val sharedFeeSettings: AccountFeeSettings
     )
 
     private val valuationClock = valuationClockFlow()
@@ -69,7 +67,13 @@ class OfflineStockRepository(
             val minFeeOddLot = values[10] as Int
             val accounts = values[11] as List<Account>
             val currentDateMillis = values[12] as Long
-            val feeDiscounts = accountFeeDiscounts(accounts, sharedFeeDiscount)
+            val sharedFeeSettings = AccountFeeSettings(sharedFeeDiscount, minFeeRegular, minFeeOddLot)
+            val feeSettingsByAccount = accountFeeSettings(
+                accounts,
+                sharedFeeDiscount,
+                minFeeRegular,
+                minFeeOddLot
+            )
             val transactions = allTransactions
 
             val transactionsByStock = transactions
@@ -108,10 +112,8 @@ class OfflineStockRepository(
                     dailyChangePercentage = dailyChangePercentage,
                     limitState = limitState,
                     preDeductSellFees = preDeductSellFees,
-                    feeDiscounts = feeDiscounts,
-                    sharedFeeDiscount = sharedFeeDiscount,
-                    minFeeRegular = minFeeRegular,
-                    minFeeOddLot = minFeeOddLot,
+                    feeSettingsByAccount = feeSettingsByAccount,
+                    sharedFeeSettings = sharedFeeSettings,
                     returnRateMode = returnRateMode,
                     currentDateMillis = currentDateMillis,
                     marginDayCount = marginDayCount
@@ -239,6 +241,7 @@ class OfflineStockRepository(
             settingsDataStore.marginDayCountFlow,
             settingsDataStore.feeDiscountFlow,
             settingsDataStore.minFeeRegularFlow,
+            settingsDataStore.minFeeOddLotFlow,
             stockDao.getAllAccountsFlow()
         ) { values ->
             val preDeductSellFees = values[0] as Boolean
@@ -246,22 +249,22 @@ class OfflineStockRepository(
             val marginDayCount = values[2] as Int
             val sharedFeeDiscount = values[3] as Double
             val minFeeRegular = values[4] as Int
-            val accounts = values[5] as List<Account>
+            val minFeeOddLot = values[5] as Int
+            val accounts = values[6] as List<Account>
             HoldingInfoSettings(
                 preDeductSellFees = preDeductSellFees,
                 returnRateMode = returnRateMode,
                 marginDayCount = marginDayCount,
-                feeDiscounts = accountFeeDiscounts(accounts, sharedFeeDiscount),
-                sharedFeeDiscount = sharedFeeDiscount,
-                minFeeRegular = minFeeRegular,
-                minFeeOddLot = 0
+                feeSettingsByAccount = accountFeeSettings(
+                    accounts,
+                    sharedFeeDiscount,
+                    minFeeRegular,
+                    minFeeOddLot
+                ),
+                sharedFeeSettings = AccountFeeSettings(sharedFeeDiscount, minFeeRegular, minFeeOddLot)
             )
         }
-        val holdingInfoSettingsFlow = baseHoldingInfoSettingsFlow.combine(
-            settingsDataStore.minFeeOddLotFlow
-        ) { settings, minFeeOddLot ->
-            settings.copy(minFeeOddLot = minFeeOddLot)
-        }
+        val holdingInfoSettingsFlow = baseHoldingInfoSettingsFlow
 
         return combine(
             stockFlow,
@@ -273,9 +276,7 @@ class OfflineStockRepository(
             val preDeductSellFees = settings.preDeductSellFees
             val returnRateMode = settings.returnRateMode
             val marginDayCount = settings.marginDayCount
-            val feeDiscounts = settings.feeDiscounts
-            val minFeeRegular = settings.minFeeRegular
-            val minFeeOddLot = settings.minFeeOddLot
+            val feeSettingsByAccount = settings.feeSettingsByAccount
             stock?.let {
                 val realtimeKey = it.toStockKey().cacheKey()
                 val realtime = realTimeData[realtimeKey]
@@ -291,10 +292,8 @@ class OfflineStockRepository(
                     dailyChangePercentage = dailyChangePercentage,
                     limitState = limitState,
                     preDeductSellFees = preDeductSellFees,
-                    feeDiscounts = feeDiscounts,
-                    sharedFeeDiscount = settings.sharedFeeDiscount,
-                    minFeeRegular = minFeeRegular,
-                    minFeeOddLot = minFeeOddLot,
+                    feeSettingsByAccount = feeSettingsByAccount,
+                    sharedFeeSettings = settings.sharedFeeSettings,
                     returnRateMode = returnRateMode,
                     currentDateMillis = currentDateMillis,
                     marginDayCount = marginDayCount
@@ -330,10 +329,8 @@ class OfflineStockRepository(
         dailyChangePercentage: Double,
         limitState: LimitState,
         preDeductSellFees: Boolean,
-        feeDiscounts: Map<Int, Double>,
-        sharedFeeDiscount: Double,
-        minFeeRegular: Int,
-        minFeeOddLot: Int,
+        feeSettingsByAccount: Map<Int, AccountFeeSettings>,
+        sharedFeeSettings: AccountFeeSettings,
         returnRateMode: ReturnRateMode,
         currentDateMillis: Long,
         marginDayCount: Int
@@ -402,11 +399,9 @@ class OfflineStockRepository(
             val sellFee = estimateTaiwanSellFee(
                 transactions = effectiveTransactions,
                 currentPrice = currentPrice,
-                feeDiscounts = feeDiscounts,
-                sharedFeeDiscount = sharedFeeDiscount,
+                feeSettingsByAccount = feeSettingsByAccount,
+                sharedFeeSettings = sharedFeeSettings,
                 valuationDate = currentDateMillis,
-                minFeeRegular = minFeeRegular,
-                minFeeOddLot = minFeeOddLot
             )
             val taxRate = if (stock.stockType == "ETF") 0.001 else 0.003
             val sellTax = marketValue * taxRate
@@ -481,11 +476,9 @@ class OfflineStockRepository(
     private fun estimateTaiwanSellFee(
         transactions: List<StockTransaction>,
         currentPrice: Double,
-        feeDiscounts: Map<Int, Double>,
-        sharedFeeDiscount: Double,
-        valuationDate: Long,
-        minFeeRegular: Int,
-        minFeeOddLot: Int
+        feeSettingsByAccount: Map<Int, AccountFeeSettings>,
+        sharedFeeSettings: AccountFeeSettings,
+        valuationDate: Long
     ): Double = transactions
         .groupBy { it.accountId }
         .values
@@ -502,12 +495,13 @@ class OfflineStockRepository(
             val shares = replay.shares
             if (shares <= 0.0) return@sumOf 0.0
             val marketValue = shares * currentPrice
+            val feeSettings = feeSettingsByAccount[accountTransactions.first().accountId] ?: sharedFeeSettings
             val minimumFee = TransactionCostSupport.minimumTaiwanSellFee(
                 shares = shares,
-                minFeeRegular = minFeeRegular.toDouble(),
-                minFeeOddLot = minFeeOddLot.toDouble()
+                minFeeRegular = feeSettings.minFeeRegular.toDouble(),
+                minFeeOddLot = feeSettings.minFeeOddLot.toDouble()
             )
-            (marketValue * 0.001425 * (feeDiscounts[accountTransactions.first().accountId] ?: sharedFeeDiscount))
+            (marketValue * 0.001425 * feeSettings.feeDiscount)
                 .coerceAtLeast(minimumFee)
         }
 

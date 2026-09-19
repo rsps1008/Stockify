@@ -12,5 +12,9 @@ data class Account(
     val id: Int = 0,
     val name: String,
     /** Null means this account uses the shared Taiwan fee discount setting. */
-    val feeDiscount: Double? = null
+    val feeDiscount: Double? = null,
+    /** Null means this account uses the shared regular-lot minimum fee. */
+    val minFeeRegular: Int? = null,
+    /** Null means this account uses the shared odd-lot minimum fee. */
+    val minFeeOddLot: Int? = null
 )

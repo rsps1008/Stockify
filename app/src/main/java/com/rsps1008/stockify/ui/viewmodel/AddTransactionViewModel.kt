@@ -13,7 +13,8 @@ import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.StockTransaction
 import com.rsps1008.stockify.data.canonicalStockCode
 import com.rsps1008.stockify.data.Account
-import com.rsps1008.stockify.data.effectiveFeeDiscount
+import com.rsps1008.stockify.data.AccountFeeSettings
+import com.rsps1008.stockify.data.effectiveFeeSettings
 import com.rsps1008.stockify.data.TransactionCostSupport
 import com.rsps1008.stockify.data.TransactionValidationSupport
 import com.rsps1008.stockify.data.dividend.YahooDividendRepository
@@ -491,20 +492,22 @@ class AddTransactionViewModel(
     suspend fun getStockByCode(code: String, market: String = StockMarket.inferFromCode(code)): Stock? =
         stockDao.getStockByCode(canonicalStockCode(code), StockMarket.normalize(market))
 
-    private val selectedFeeDiscount = combine(
+    private val selectedFeeSettings = combine(
         settingsDataStore.feeDiscountFlow,
+        settingsDataStore.minFeeRegularFlow,
+        settingsDataStore.minFeeOddLotFlow,
         accounts,
         selectedAccountId
-    ) { sharedFeeDiscount, accountList, accountId ->
-        effectiveFeeDiscount(accountId, accountList, sharedFeeDiscount)
+    ) { sharedFeeDiscount, sharedMinFeeRegular, sharedMinFeeOddLot, accountList, accountId ->
+        effectiveFeeSettings(
+            accountId = accountId,
+            accounts = accountList,
+            shared = AccountFeeSettings(sharedFeeDiscount, sharedMinFeeRegular, sharedMinFeeOddLot)
+        )
     }
 
-    val feeSettings = combine(
-        selectedFeeDiscount,
-        settingsDataStore.minFeeRegularFlow,
-        settingsDataStore.minFeeOddLotFlow
-    ) { discount, minRegular, minOdd ->
-        Triple(discount, minRegular, minOdd)
+    val feeSettings = selectedFeeSettings.map { settings ->
+        Triple(settings.feeDiscount, settings.minFeeRegular, settings.minFeeOddLot)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), Triple(0.28, 1, 1))
 
     fun calculateBuyCosts(price: Double, shares: Double, market: String = StockMarket.TW) {
