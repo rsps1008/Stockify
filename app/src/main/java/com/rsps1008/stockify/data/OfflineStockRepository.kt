@@ -53,6 +53,7 @@ class OfflineStockRepository(
             settingsDataStore.minFeeOddLotFlow,
             stockDao.getAllAccountsFlow(),
             valuationClock,
+            settingsDataStore.partialSalesAsRealizedFlow,
         ) { values ->
             val stocks = values[0] as List<Stock>
             val allTransactions = values[1] as List<StockTransaction>
@@ -67,6 +68,7 @@ class OfflineStockRepository(
             val minFeeOddLot = values[10] as Int
             val accounts = values[11] as List<Account>
             val currentDateMillis = values[12] as Long
+            val partialSalesAsRealized = values[13] as Boolean
             val sharedFeeSettings = AccountFeeSettings(sharedFeeDiscount, minFeeRegular, minFeeOddLot)
             val feeSettingsByAccount = accountFeeSettings(
                 accounts,
@@ -116,7 +118,8 @@ class OfflineStockRepository(
                     sharedFeeSettings = sharedFeeSettings,
                     returnRateMode = returnRateMode,
                     currentDateMillis = currentDateMillis,
-                    marginDayCount = marginDayCount
+                    marginDayCount = marginDayCount,
+                    includeProfitLossBreakdown = partialSalesAsRealized
                 )
             }
 
@@ -333,7 +336,8 @@ class OfflineStockRepository(
         sharedFeeSettings: AccountFeeSettings,
         returnRateMode: ReturnRateMode,
         currentDateMillis: Long,
-        marginDayCount: Int
+        marginDayCount: Int,
+        includeProfitLossBreakdown: Boolean = false
     ): HoldingInfo {
         val effectiveTransactions = HoldingCalculationSupport.transactionsAtOrBefore(
             transactions,
@@ -394,6 +398,7 @@ class OfflineStockRepository(
             shortCumulativeInvestment = shortSummary.cumulativeOpenedPrincipal
         )
         var totalPL = marketValue - costBasis
+        var estimatedExitCost = 0.0
 
         if (preDeductSellFees && marketValue > 0.0 && !StockMarket.isUs(stock.market)) {
             val sellFee = estimateTaiwanSellFee(
@@ -405,13 +410,26 @@ class OfflineStockRepository(
             )
             val taxRate = if (stock.stockType == "ETF") 0.001 else 0.003
             val sellTax = marketValue * taxRate
-            totalPL -= (sellFee + sellTax)
+            estimatedExitCost = sellFee + sellTax
+            totalPL -= estimatedExitCost
         }
 
         val shortIncome = effectiveTransactions.filter { it.type == "融券賣出" }.sumOf { it.income }
         val shortCoverExpense = effectiveTransactions.filter { it.type == "買券還券" }.sumOf { it.expense }
         totalPL += shortIncome - shortCoverExpense - shortMarketLiability - shortSummary.accruedBorrowFee - shortSummary.compensationExpense
         totalPL -= marginSummary.totalInterestExpense
+
+        val profitLossBreakdown = if (includeProfitLossBreakdown) {
+            ProfitLossBreakdownSupport.calculate(
+                transactions = effectiveTransactions,
+                valuationDate = currentDateMillis,
+                legacyTotalProfitLoss = totalPL,
+                marginSummary = marginSummary,
+                marginDayCount = marginDayCount
+            )
+        } else {
+            null
+        }
 
         val totalPLPercentage = when (returnRateMode) {
             ReturnRateMode.REMAINING_POSITION -> {
@@ -470,6 +488,7 @@ class OfflineStockRepository(
             ,shortMarketLiability = shortMarketLiability
             ,shortAccruedBorrowFee = shortSummary.accruedBorrowFee
             ,shortCompensationExpense = shortSummary.compensationExpense
+            ,profitLossBreakdown = profitLossBreakdown
         )
     }
 

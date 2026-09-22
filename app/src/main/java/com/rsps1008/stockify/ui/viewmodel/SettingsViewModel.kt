@@ -271,6 +271,9 @@ class SettingsViewModel(
     val preDeductSellFees: StateFlow<Boolean> = settingsDataStore.preDeductSellFeesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), true)
 
+    val partialSalesAsRealized: StateFlow<Boolean> = settingsDataStore.partialSalesAsRealizedFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), false)
+
     val returnRateMode: StateFlow<ReturnRateMode> = settingsDataStore.returnRateModeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), ReturnRateMode.REMAINING_POSITION)
 
@@ -1828,6 +1831,12 @@ class SettingsViewModel(
     fun setPreDeductSellFees(preDeduct: Boolean) {
         viewModelScope.launch {
             settingsDataStore.setPreDeductSellFees(preDeduct)
+        }
+    }
+
+    fun setPartialSalesAsRealized(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsDataStore.setPartialSalesAsRealized(enabled)
         }
     }
 

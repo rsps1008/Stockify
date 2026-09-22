@@ -66,6 +66,7 @@ class SettingsDataStore private constructor(
     private val minFeeOddLotKey = intPreferencesKey("min_fee_odd_lot")
     private val dividendFeeKey = intPreferencesKey("dividend_fee")
     private val preDeductSellFeesKey = booleanPreferencesKey("pre_deduct_sell_fees")
+    private val partialSalesAsRealizedKey = booleanPreferencesKey("partial_sales_as_realized")
     private val useCumulativeReturnRateKey = booleanPreferencesKey("use_cumulative_return_rate")
     private val returnRateModeKey = stringPreferencesKey("return_rate_mode")
     private val realtimeStockInfoCacheKey = stringPreferencesKey("realtime_stock_info_cache")
@@ -147,6 +148,11 @@ class SettingsDataStore private constructor(
     val preDeductSellFeesFlow: Flow<Boolean> = dataStoreInstance.data
         .map { preferences ->
             preferences[preDeductSellFeesKey] ?: true
+        }
+
+    val partialSalesAsRealizedFlow: Flow<Boolean> = dataStoreInstance.data
+        .map { preferences ->
+            preferences[partialSalesAsRealizedKey] ?: false
         }
 
     val returnRateModeFlow: Flow<ReturnRateMode> = dataStoreInstance.data
@@ -584,6 +590,12 @@ class SettingsDataStore private constructor(
     suspend fun setRealizedHoldingsOrder(order: List<String>) {
         dataStoreInstance.edit {
             it[realizedHoldingsOrderKey] = order.joinToString("|")
+        }
+    }
+
+    suspend fun setPartialSalesAsRealized(enabled: Boolean) {
+        dataStoreInstance.edit {
+            it[partialSalesAsRealizedKey] = enabled
         }
     }
 

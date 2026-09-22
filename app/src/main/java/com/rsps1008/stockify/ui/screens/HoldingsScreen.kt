@@ -125,6 +125,7 @@ fun HoldingsScreen(navController: NavController) {
     val homeDisplayMode by viewModel.homeDisplayMode.collectAsState()
     val holdingsOrder by viewModel.holdingsOrder.collectAsState()
     val realizedHoldingsOrder by viewModel.realizedHoldingsOrder.collectAsState()
+    val partialSalesAsRealized by viewModel.partialSalesAsRealized.collectAsState()
     val holdingsReorderHintShown by viewModel.holdingsReorderHintShown.collectAsState()
     val persistedSortMode by viewModel.homeHoldingsSortMode.collectAsState()
     val persistedSortColumnName by viewModel.homeHoldingsSortColumn.collectAsState()
@@ -146,16 +147,12 @@ fun HoldingsScreen(navController: NavController) {
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
-    val activeHoldings = uiState.holdings.filter {
-        it.shares > 1e-6 ||
-            it.shortOutstandingShares > 1e-6 ||
-            it.marginOutstandingPrincipal > 1e-6 ||
-            it.marginAccruedInterest > 1e-6
-    }
+    val holdingSections = buildHoldingSections(uiState.holdings, partialSalesAsRealized)
+    val activeHoldings = holdingSections.unrealized
     var orderedActiveHoldings by remember { mutableStateOf(emptyList<HoldingInfo>()) }
     val unrealizedCount = activeHoldings.size
     val unrealizedPL = sumDisplayPL(activeHoldings, homeDisplayMode, usdToTwdRate)
-    val zeroHoldings = uiState.holdings - activeHoldings.toSet()
+    val zeroHoldings = holdingSections.realized
     var orderedZeroHoldings by remember { mutableStateOf(emptyList<HoldingInfo>()) }
     val clearedCount = zeroHoldings.size
     val realizedPL = sumDisplayPL(zeroHoldings, homeDisplayMode, usdToTwdRate)
@@ -515,6 +512,57 @@ private fun HoldingInfo.holdingOrderKey(): String =
 
 private fun HoldingInfo.realizedHoldingReorderKey(): String =
     "realized-${holdingOrderKey()}"
+
+internal data class HoldingSections(
+    val unrealized: List<HoldingInfo>,
+    val realized: List<HoldingInfo>
+)
+
+internal fun buildHoldingSections(
+    holdings: List<HoldingInfo>,
+    partialSalesAsRealized: Boolean
+): HoldingSections {
+    val legacyActive = holdings.filter { holding ->
+        holding.shares > 1e-6 ||
+            holding.shortOutstandingShares > 1e-6 ||
+            holding.marginOutstandingPrincipal > 1e-6 ||
+            holding.marginAccruedInterest > 1e-6
+    }
+    if (!partialSalesAsRealized) {
+        return HoldingSections(
+            unrealized = legacyActive,
+            realized = holdings - legacyActive.toSet()
+        )
+    }
+    return HoldingSections(
+        unrealized = legacyActive.map { it.asUnrealizedSlice() },
+        realized = holdings.mapNotNull { it.asRealizedSliceOrNull() }
+    )
+}
+
+private fun HoldingInfo.asUnrealizedSlice(): HoldingInfo {
+    val breakdown = profitLossBreakdown ?: return this
+    return copy(
+        averageCost = breakdown.unrealizedAverageCost,
+        totalPL = breakdown.unrealizedProfitLoss,
+        totalPLPercentage = breakdown.unrealizedPercentage,
+        isRealizedSlice = false
+    )
+}
+
+private fun HoldingInfo.asRealizedSliceOrNull(): HoldingInfo? {
+    val breakdown = profitLossBreakdown ?: return null
+    if (!breakdown.hasRealizedActivity) return null
+    return copy(
+        shares = breakdown.soldShares + breakdown.coveredShortShares,
+        averageCost = breakdown.realizedBuyAverage,
+        buyAverage = breakdown.realizedBuyAverage,
+        sellAverage = breakdown.realizedSellAverage,
+        totalPL = breakdown.realizedProfitLoss,
+        totalPLPercentage = breakdown.realizedPercentage,
+        isRealizedSlice = true
+    )
+}
 
 private fun sumDisplayPL(
     holdings: List<HoldingInfo>,
@@ -1440,7 +1488,28 @@ fun ZeroHoldingCard(
                         minTextSize = 11f
                     )
 
-                    Text(text = "${formatShareCount(holding.shares)}股", style = MaterialTheme.typography.bodySmall)
+                    if (holding.isRealizedSlice) {
+                        val breakdown = holding.profitLossBreakdown
+                        if (breakdown != null && breakdown.soldShares > 1e-6) {
+                            Text(
+                                text = "已賣 ${formatShareCount(breakdown.soldShares)}股",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        if (breakdown != null && breakdown.coveredShortShares > 1e-6) {
+                            Text(
+                                text = "已還券 ${formatShareCount(breakdown.coveredShortShares)}股",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        if (breakdown == null ||
+                            (breakdown.soldShares <= 1e-6 && breakdown.coveredShortShares <= 1e-6)
+                        ) {
+                            Text(text = "現金損益", style = MaterialTheme.typography.bodySmall)
+                        }
+                    } else {
+                        Text(text = "${formatShareCount(holding.shares)}股", style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
 

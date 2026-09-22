@@ -189,6 +189,13 @@ class HoldingsViewModel(
             initialValue = emptyList()
         )
 
+    val partialSalesAsRealized: StateFlow<Boolean> = settingsDataStore.partialSalesAsRealizedFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000L),
+            initialValue = false
+        )
+
     val holdingsReorderHintShown: StateFlow<Boolean> = settingsDataStore.holdingsReorderHintShownFlow
         .stateIn(
             scope = viewModelScope,

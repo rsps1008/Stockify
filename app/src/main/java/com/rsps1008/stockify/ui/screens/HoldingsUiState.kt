@@ -1,6 +1,7 @@
 package com.rsps1008.stockify.ui.screens
 
 import com.rsps1008.stockify.data.LimitState
+import com.rsps1008.stockify.data.ProfitLossBreakdown
 import com.rsps1008.stockify.data.Stock
 
 data class HoldingsUiState(
@@ -44,5 +45,7 @@ data class HoldingInfo(
     val shortOutstandingShares: Double = 0.0,
     val shortMarketLiability: Double = 0.0,
     val shortAccruedBorrowFee: Double = 0.0,
-    val shortCompensationExpense: Double = 0.0
+    val shortCompensationExpense: Double = 0.0,
+    val profitLossBreakdown: ProfitLossBreakdown? = null,
+    val isRealizedSlice: Boolean = false
 )

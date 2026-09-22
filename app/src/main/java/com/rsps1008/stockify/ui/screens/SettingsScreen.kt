@@ -87,6 +87,7 @@ fun SettingsScreen() {
     val minFeeOddLot by viewModel.minFeeOddLot.collectAsState()
     val dividendFee by viewModel.dividendFee.collectAsState()
     val preDeductSellFees by viewModel.preDeductSellFees.collectAsState()
+    val partialSalesAsRealized by viewModel.partialSalesAsRealized.collectAsState()
     val returnRateMode by viewModel.returnRateMode.collectAsState()
     val calculationRoundingMode by viewModel.calculationRoundingMode.collectAsState()
     val fetchInterval by viewModel.fetchInterval.collectAsState()
@@ -302,6 +303,25 @@ fun SettingsScreen() {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("損益計算設定", style = MaterialTheme.typography.titleLarge)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("部分賣出列入已實現", style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    "首頁會將已賣出、已還券及已領取現金股利等現金損益，與剩餘部位拆開顯示。",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = partialSalesAsRealized,
+                                onCheckedChange = viewModel::setPartialSalesAsRealized
+                            )
+                        }
                         Spacer(modifier = Modifier.height(16.dp))
                         val returnRateModeOptions = remember {
                             mapOf(

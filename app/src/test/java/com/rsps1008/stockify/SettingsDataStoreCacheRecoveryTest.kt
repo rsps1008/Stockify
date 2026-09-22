@@ -14,6 +14,7 @@ import kotlinx.coroutines.runBlocking
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -39,6 +40,20 @@ class SettingsDataStoreCacheRecoveryTest {
             settingsDataStore.realtimeStockInfoCacheFlow.first()
         )
         assertNull(settingsDataStore.taiwanWeightedIndexCacheFlow.first())
+
+        scope.cancel()
+    }
+
+    @Test
+    fun partialSalesAsRealizedDefaultsToOffAndPersistsExplicitChoice() = runBlocking {
+        val testFile = File(tempFolder.root, "partial-sales.preferences_pb")
+        val scope = CoroutineScope(Dispatchers.IO + Job())
+        val dataStore = PreferenceDataStoreFactory.create(scope = scope, produceFile = { testFile })
+        val settingsDataStore = SettingsDataStore(dataStore)
+
+        assertFalse(settingsDataStore.partialSalesAsRealizedFlow.first())
+        settingsDataStore.setPartialSalesAsRealized(true)
+        assertEquals(true, settingsDataStore.partialSalesAsRealizedFlow.first())
 
         scope.cancel()
     }
