@@ -89,6 +89,7 @@
 - 維持既有 Material 3 結構，優先小而精準的調整；區分外層 margin 與元件內 padding，不要順手重排附近版面。
 - 底部分頁 header 維持一致外層 `16.dp` padding 與 `6.dp` 標題間距。文字大小由 `StockifyTheme` 的 `LocalDensity.fontScale` 全域套用。
 - `MainActivity` 外層 `Scaffold` 使用 `contentWindowInsets = WindowInsets(0, 0, 0, 0)`；BottomAppBar 吸收導覽列 inset。無 TopAppBar 主頁套 `statusBarsPadding()`，次頁由 TopAppBar 吸收狀態列，避免重複 inset。
+- NavGraph 套用外層 padding 後須消耗對應 inset，並處理水平 safeDrawing 安全區；隱藏 BottomAppBar 的交易表單須自行處理 navigation bar 與 IME inset，鎖定頁須處理四邊 safeDrawing 安全區。
 - 底部五個 top-level tab 使用 NavHost 預設 transition；切換時清除 detail back stack，不用 `restoreState` 回到明細頁。
 - 首頁三種市場模式為台股、美股、合併；個股卡與詳情維持原幣，合併總計換算台幣。
 - 未實現與已實現清單排序 key 使用 `market:code`，分別保存。表頭排序有三態並記憶最後狀態；只有無表頭排序時允許長按拖曳。

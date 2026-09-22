@@ -31,8 +31,8 @@ reorderable = "3.1.0"
 
 # 測試
 junit = "4.13.2"
-junitVersion = "1.1.5"
-espressoCore = "3.5.1"
+junitVersion = "1.3.0"
+espressoCore = "3.7.0"
 
 # Plugin 工具
 ksp = "2.2.10-2.0.2"
