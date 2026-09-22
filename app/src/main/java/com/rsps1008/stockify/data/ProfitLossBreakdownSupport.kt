@@ -67,7 +67,8 @@ object ProfitLossBreakdownSupport {
         valuationDate: Long,
         legacyTotalProfitLoss: Double,
         marginSummary: MarginSummary,
-        marginDayCount: Int
+        marginDayCount: Int,
+        includeDividendIncome: Boolean = true
     ): ProfitLossBreakdown {
         val orderedTransactions = HoldingCalculationSupport.transactionsAtOrBefore(transactions, valuationDate)
         val longStates = mutableMapOf<PositionKey, LongState>()
@@ -128,9 +129,11 @@ object ProfitLossBreakdownSupport {
                 "配股" -> longState.shares += transaction.dividendShares
 
                 "配息" -> {
-                    val dividendIncome = HoldingCalculationSupport.resolveDividendIncome(transaction)
-                    realizedProfitLoss += dividendIncome
-                    hasRealizedActivity = hasRealizedActivity || abs(dividendIncome) > POSITION_EPSILON
+                    if (includeDividendIncome) {
+                        val dividendIncome = HoldingCalculationSupport.resolveDividendIncome(transaction)
+                        realizedProfitLoss += dividendIncome
+                        hasRealizedActivity = hasRealizedActivity || abs(dividendIncome) > POSITION_EPSILON
+                    }
                 }
 
                 "分割", "減資" -> {

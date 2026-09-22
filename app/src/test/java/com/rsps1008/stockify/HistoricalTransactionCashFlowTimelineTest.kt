@@ -65,4 +65,28 @@ class HistoricalTransactionCashFlowTimelineTest {
             timeline.cashFlowsAt(1_000L)
         )
     }
+
+    @Test
+    fun excludedDividendIsOmittedWhileLegacyIncomeFallbackRemainsAvailableByDefault() {
+        val dividend = StockTransaction(
+            stockCode = "2330",
+            date = 2_000L,
+            recordTime = 2_000L,
+            type = "配息",
+            dividendIncome = 0.0,
+            income = 250.0
+        )
+
+        val included = HistoricalTransactionCashFlowTimeline(listOf(dividend))
+        val excluded = HistoricalTransactionCashFlowTimeline(
+            transactions = listOf(dividend),
+            includeDividendIncome = false
+        )
+
+        assertEquals(
+            listOf(com.rsps1008.stockify.data.CashFlow(2_000L, 250.0)),
+            included.cashFlowsAt(2_000L)
+        )
+        assertEquals(emptyList<com.rsps1008.stockify.data.CashFlow>(), excluded.cashFlowsAt(2_000L))
+    }
 }

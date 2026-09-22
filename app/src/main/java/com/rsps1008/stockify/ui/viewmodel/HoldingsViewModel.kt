@@ -79,7 +79,8 @@ private data class HomeSettingsBundle(
     val minFeeRegular: Int,
     val minFeeOddLot: Int,
     val returnRateMode: ReturnRateMode,
-    val marginDayCount: Int
+    val marginDayCount: Int,
+    val excludeDividendIncomeFromReturns: Boolean
 )
 
 private data class HomeHistoryCalculationBundle(
@@ -368,11 +369,15 @@ class HoldingsViewModel(
             minFeeRegular = minFeeRegular,
             minFeeOddLot = 0,
             returnRateMode = mode,
-            marginDayCount = marginDayCount
+            marginDayCount = marginDayCount,
+            excludeDividendIncomeFromReturns = false
         )
     }
 
     private val settingsCombined = baseSettingsCombined
+        .combine(settingsDataStore.excludeDividendIncomeFromReturnsFlow) { settings, exclude ->
+            settings.copy(excludeDividendIncomeFromReturns = exclude)
+        }
         .combine(settingsDataStore.minFeeOddLotFlow) { settings, minFeeOddLot ->
             settings.copy(minFeeOddLot = minFeeOddLot)
         }
@@ -506,7 +511,8 @@ class HoldingsViewModel(
                         transactions = transactions,
                         currencyRate = currencyRate,
                         transactionDateMapper = transactionDateMapper,
-                        transactionsAreOrdered = true
+                        transactionsAreOrdered = true,
+                        includeDividendIncome = !settings.excludeDividendIncomeFromReturns
                     )
                 }
             } else {
@@ -590,6 +596,7 @@ class HoldingsViewModel(
                         valuationDate = transactionCutoff,
                         replay = replay,
                         preDeductSellFees = settings.preDeductSellFees,
+                        excludeDividendIncomeFromReturns = settings.excludeDividendIncomeFromReturns,
                         feeSettingsByAccount = settings.feeSettingsByAccount,
                         sharedFeeSettings = AccountFeeSettings(
                             settings.feeDiscount,
@@ -628,7 +635,8 @@ class HoldingsViewModel(
                             marginSummary = stats.marginSummary,
                             shortSummary = stats.shortSummary,
                             historicalCashFlowTimeline = historicalCashFlowTimelinesByStock[stockKey],
-                            historicalShortXirrTimeline = historicalShortXirrTimelinesByStock[stockKey]
+                            historicalShortXirrTimeline = historicalShortXirrTimelinesByStock[stockKey],
+                            includeDividendIncome = !settings.excludeDividendIncomeFromReturns
                         )
                     }
                 }
@@ -847,6 +855,7 @@ class HoldingsViewModel(
         valuationDate: Long,
         replay: LongPositionReplaySummary,
         preDeductSellFees: Boolean,
+        excludeDividendIncomeFromReturns: Boolean,
         feeSettingsByAccount: Map<Int, AccountFeeSettings>,
         sharedFeeSettings: AccountFeeSettings,
         market: String,
@@ -863,7 +872,12 @@ class HoldingsViewModel(
         val totalSellNetIncome = replay.totalSellNetIncome
         val sellAmountBeforeFee = replay.sellAmountBeforeFee
         val totalDividendIncome = replay.totalDividendIncome
-        val costBasis = totalBuyExpense - totalSellIncome - totalDividendIncome
+        val costBasis = HoldingCalculationSupport.performanceCostBasis(
+            totalBuyExpense,
+            totalSellIncome,
+            totalDividendIncome,
+            excludeDividendIncomeFromReturns
+        )
         val totalSellFeeAndTax = (sellAmountBeforeFee - totalSellNetIncome).coerceAtLeast(0.0)
         val longInvestment = if (hasMarginPurchase) {
             marginSummary.selfFundedCapital + totalSellFeeAndTax
@@ -875,7 +889,12 @@ class HoldingsViewModel(
             costBasis = costBasis,
             longInvestment = longInvestment,
             financedRemainingInvestment = if (hasMarginPurchase) {
-                (-marginSummary.cashBalance).coerceAtLeast(0.0)
+                val performanceCashBalance = HoldingCalculationSupport.performanceMarginCashBalance(
+                    marginSummary.cashBalance,
+                    totalDividendIncome,
+                    excludeDividendIncomeFromReturns
+                )
+                (-performanceCashBalance).coerceAtLeast(0.0)
             } else {
                 null
             },
@@ -955,7 +974,8 @@ class HoldingsViewModel(
         marginSummary: MarginSummary,
         shortSummary: ShortSellingSummary,
         historicalCashFlowTimeline: HistoricalTransactionCashFlowTimeline?,
-        historicalShortXirrTimeline: ShortSellingCalculationSupport.HistoricalXirrTimeline?
+        historicalShortXirrTimeline: ShortSellingCalculationSupport.HistoricalXirrTimeline?,
+        includeDividendIncome: Boolean
     ): List<CashFlow> {
         val cashFlows = historicalCashFlowTimeline
             ?.cashFlowsAt(transactionCutoffMillis)
@@ -966,10 +986,14 @@ class HoldingsViewModel(
                     "融資買進" -> CashFlow(transaction.date, -(if (transaction.marginSelfFundedOverridden) transaction.marginSelfFunded else transaction.expense - transaction.marginPrincipal) * currencyRate)
                     "賣出" -> CashFlow(transaction.date, (transaction.income - transaction.marginRepayment - transaction.marginActualInterest) * currencyRate)
                     "融資還款" -> CashFlow(transaction.date, -(transaction.marginRepayment + transaction.marginActualInterest) * currencyRate)
-                    "配息" -> CashFlow(
-                        transaction.date,
-                        HoldingCalculationSupport.resolveDividendIncome(transaction) * currencyRate
-                    )
+                    "配息" -> if (includeDividendIncome) {
+                        CashFlow(
+                            transaction.date,
+                            HoldingCalculationSupport.resolveDividendIncome(transaction) * currencyRate
+                        )
+                    } else {
+                        null
+                    }
                     "減資" -> CashFlow(transaction.date, transaction.cashReturned * currencyRate)
                     else -> null
                 }

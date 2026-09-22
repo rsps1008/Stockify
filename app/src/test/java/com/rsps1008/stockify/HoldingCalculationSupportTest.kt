@@ -491,4 +491,48 @@ class HoldingCalculationSupportTest {
 
         assertNotNull(HoldingCalculationSupport.validateLongPositionBalances(transactions))
     }
+
+    @Test
+    fun dividendPerformanceHelpersKeepLegacyResultsWhenExclusionIsOff() {
+        assertEquals(
+            7_500.0,
+            HoldingCalculationSupport.performanceCostBasis(
+                totalBuyExpense = 10_000.0,
+                totalSellIncome = 2_000.0,
+                totalDividendIncome = 500.0
+            ),
+            0.0
+        )
+        assertEquals(
+            -7_500.0,
+            HoldingCalculationSupport.performanceMarginCashBalance(
+                cashBalance = -7_500.0,
+                totalDividendIncome = 500.0
+            ),
+            0.0
+        )
+    }
+
+    @Test
+    fun dividendPerformanceHelpersExcludeOnlyDividendWhenEnabled() {
+        assertEquals(
+            8_000.0,
+            HoldingCalculationSupport.performanceCostBasis(
+                totalBuyExpense = 10_000.0,
+                totalSellIncome = 2_000.0,
+                totalDividendIncome = 500.0,
+                excludeDividendIncome = true
+            ),
+            0.0
+        )
+        assertEquals(
+            -8_000.0,
+            HoldingCalculationSupport.performanceMarginCashBalance(
+                cashBalance = -7_500.0,
+                totalDividendIncome = 500.0,
+                excludeDividendIncome = true
+            ),
+            0.0
+        )
+    }
 }

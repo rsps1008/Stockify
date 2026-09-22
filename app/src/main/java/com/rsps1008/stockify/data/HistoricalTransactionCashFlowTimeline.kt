@@ -8,7 +8,8 @@ internal class HistoricalTransactionCashFlowTimeline(
     transactions: List<StockTransaction>,
     private val currencyRate: Double = 1.0,
     private val transactionDateMapper: (Long) -> Long = { it },
-    transactionsAreOrdered: Boolean = false
+    transactionsAreOrdered: Boolean = false,
+    private val includeDividendIncome: Boolean = true
 ) {
     private val orderedTransactions = if (transactionsAreOrdered) {
         transactions
@@ -45,7 +46,11 @@ internal class HistoricalTransactionCashFlowTimeline(
             }) * currencyRate
             "賣出" -> (transaction.income - transaction.marginRepayment - transaction.marginActualInterest) * currencyRate
             "融資還款" -> -(transaction.marginRepayment + transaction.marginActualInterest) * currencyRate
-            "配息" -> HoldingCalculationSupport.resolveDividendIncome(transaction) * currencyRate
+            "配息" -> if (includeDividendIncome) {
+                HoldingCalculationSupport.resolveDividendIncome(transaction) * currencyRate
+            } else {
+                return null
+            }
             "減資" -> transaction.cashReturned * currencyRate
             else -> return null
         }

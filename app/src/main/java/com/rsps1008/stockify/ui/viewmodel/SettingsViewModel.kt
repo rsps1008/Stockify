@@ -274,6 +274,10 @@ class SettingsViewModel(
     val partialSalesAsRealized: StateFlow<Boolean> = settingsDataStore.partialSalesAsRealizedFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), false)
 
+    val excludeDividendIncomeFromReturns: StateFlow<Boolean> =
+        settingsDataStore.excludeDividendIncomeFromReturnsFlow
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), false)
+
     val returnRateMode: StateFlow<ReturnRateMode> = settingsDataStore.returnRateModeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), ReturnRateMode.REMAINING_POSITION)
 
@@ -1837,6 +1841,12 @@ class SettingsViewModel(
     fun setPartialSalesAsRealized(enabled: Boolean) {
         viewModelScope.launch {
             settingsDataStore.setPartialSalesAsRealized(enabled)
+        }
+    }
+
+    fun setExcludeDividendIncomeFromReturns(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsDataStore.setExcludeDividendIncomeFromReturns(enabled)
         }
     }
 

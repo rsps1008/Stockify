@@ -57,4 +57,18 @@ class SettingsDataStoreCacheRecoveryTest {
 
         scope.cancel()
     }
+
+    @Test
+    fun excludeDividendIncomeFromReturnsDefaultsToOffAndPersistsExplicitChoice() = runBlocking {
+        val testFile = File(tempFolder.root, "exclude-dividends.preferences_pb")
+        val scope = CoroutineScope(Dispatchers.IO + Job())
+        val dataStore = PreferenceDataStoreFactory.create(scope = scope, produceFile = { testFile })
+        val settingsDataStore = SettingsDataStore(dataStore)
+
+        assertFalse(settingsDataStore.excludeDividendIncomeFromReturnsFlow.first())
+        settingsDataStore.setExcludeDividendIncomeFromReturns(true)
+        assertEquals(true, settingsDataStore.excludeDividendIncomeFromReturnsFlow.first())
+
+        scope.cancel()
+    }
 }

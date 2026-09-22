@@ -19,6 +19,7 @@ class OfflineStockRepository(
 
     private data class HoldingInfoSettings(
         val preDeductSellFees: Boolean,
+        val excludeDividendIncomeFromReturns: Boolean,
         val returnRateMode: ReturnRateMode,
         val marginDayCount: Int,
         val feeSettingsByAccount: Map<Int, AccountFeeSettings>,
@@ -54,6 +55,7 @@ class OfflineStockRepository(
             stockDao.getAllAccountsFlow(),
             valuationClock,
             settingsDataStore.partialSalesAsRealizedFlow,
+            settingsDataStore.excludeDividendIncomeFromReturnsFlow,
         ) { values ->
             val stocks = values[0] as List<Stock>
             val allTransactions = values[1] as List<StockTransaction>
@@ -69,6 +71,7 @@ class OfflineStockRepository(
             val accounts = values[11] as List<Account>
             val currentDateMillis = values[12] as Long
             val partialSalesAsRealized = values[13] as Boolean
+            val excludeDividendIncomeFromReturns = values[14] as Boolean
             val sharedFeeSettings = AccountFeeSettings(sharedFeeDiscount, minFeeRegular, minFeeOddLot)
             val feeSettingsByAccount = accountFeeSettings(
                 accounts,
@@ -119,7 +122,8 @@ class OfflineStockRepository(
                     returnRateMode = returnRateMode,
                     currentDateMillis = currentDateMillis,
                     marginDayCount = marginDayCount,
-                    includeProfitLossBreakdown = partialSalesAsRealized
+                    includeProfitLossBreakdown = partialSalesAsRealized,
+                    excludeDividendIncomeFromReturns = excludeDividendIncomeFromReturns
                 )
             }
 
@@ -195,6 +199,7 @@ class OfflineStockRepository(
                             currentDateMillis = currentDateMillis,
                             currencyRate = rate,
                             marginDayCount = marginDayCount,
+                            includeDividendIncome = !excludeDividendIncomeFromReturns,
                             transactionDateMapper = transactionDateMapper,
                             transactionsAreOrdered = true
                         )
@@ -256,6 +261,7 @@ class OfflineStockRepository(
             val accounts = values[6] as List<Account>
             HoldingInfoSettings(
                 preDeductSellFees = preDeductSellFees,
+                excludeDividendIncomeFromReturns = false,
                 returnRateMode = returnRateMode,
                 marginDayCount = marginDayCount,
                 feeSettingsByAccount = accountFeeSettings(
@@ -268,6 +274,9 @@ class OfflineStockRepository(
             )
         }
         val holdingInfoSettingsFlow = baseHoldingInfoSettingsFlow
+            .combine(settingsDataStore.excludeDividendIncomeFromReturnsFlow) { settings, exclude ->
+                settings.copy(excludeDividendIncomeFromReturns = exclude)
+            }
 
         return combine(
             stockFlow,
@@ -299,7 +308,8 @@ class OfflineStockRepository(
                     sharedFeeSettings = settings.sharedFeeSettings,
                     returnRateMode = returnRateMode,
                     currentDateMillis = currentDateMillis,
-                    marginDayCount = marginDayCount
+                    marginDayCount = marginDayCount,
+                    excludeDividendIncomeFromReturns = settings.excludeDividendIncomeFromReturns
                 )
             }
         }.flowOn(Dispatchers.Default)
@@ -337,7 +347,8 @@ class OfflineStockRepository(
         returnRateMode: ReturnRateMode,
         currentDateMillis: Long,
         marginDayCount: Int,
-        includeProfitLossBreakdown: Boolean = false
+        includeProfitLossBreakdown: Boolean = false,
+        excludeDividendIncomeFromReturns: Boolean = false
     ): HoldingInfo {
         val effectiveTransactions = HoldingCalculationSupport.transactionsAtOrBefore(
             transactions,
@@ -358,7 +369,12 @@ class OfflineStockRepository(
         val buySharesTotal = replay.buySharesTotal
         val buyCostTotal = replay.buyCostTotal
         val sellAverage = if (sellSharesTotal > 0) sellAmountBeforeFee / sellSharesTotal else 0.0
-        val costBasis = totalBuyExpense - totalSellIncome - totalDividendIncome
+        val costBasis = HoldingCalculationSupport.performanceCostBasis(
+            totalBuyExpense,
+            totalSellIncome,
+            totalDividendIncome,
+            excludeDividendIncomeFromReturns
+        )
         val totalSellFeeAndTax = (sellAmountBeforeFee - totalSellNetIncome).coerceAtLeast(0.0)
         val totalInvestment = totalBuyExpense + totalSellFeeAndTax
         val averageCost = if (shares > 0) costBasis / shares else 0.0
@@ -388,7 +404,12 @@ class OfflineStockRepository(
             costBasis = costBasis,
             longInvestment = longInvestment,
             financedRemainingInvestment = if (hasMarginPurchase) {
-                (-marginSummary.cashBalance).coerceAtLeast(0.0)
+                val performanceCashBalance = HoldingCalculationSupport.performanceMarginCashBalance(
+                    marginSummary.cashBalance,
+                    totalDividendIncome,
+                    excludeDividendIncomeFromReturns
+                )
+                (-performanceCashBalance).coerceAtLeast(0.0)
             } else {
                 null
             },
@@ -425,7 +446,8 @@ class OfflineStockRepository(
                 valuationDate = currentDateMillis,
                 legacyTotalProfitLoss = totalPL,
                 marginSummary = marginSummary,
-                marginDayCount = marginDayCount
+                marginDayCount = marginDayCount,
+                includeDividendIncome = !excludeDividendIncomeFromReturns
             )
         } else {
             null
@@ -450,6 +472,7 @@ class OfflineStockRepository(
                     marginDayCount = marginDayCount,
                     marginSummary = marginSummary,
                     shortSummary = shortSummary,
+                    includeDividendIncome = !excludeDividendIncomeFromReturns,
                     transactionDateMapper = { transactionDate ->
                         TransactionDateSupport.moveToZoneDateStartMillis(
                             transactionDate,
@@ -533,6 +556,7 @@ class OfflineStockRepository(
         marginDayCount: Int = 365,
         marginSummary: MarginSummary? = null,
         shortSummary: ShortSellingSummary? = null,
+        includeDividendIncome: Boolean = true,
         transactionDateMapper: (Long) -> Long = { it },
         transactionsAreOrdered: Boolean = false
     ): List<CashFlow> {
@@ -547,10 +571,14 @@ class OfflineStockRepository(
                 "融資買進" -> CashFlow(transactionDateMapper(transaction.date), -(if (transaction.marginSelfFundedOverridden) transaction.marginSelfFunded else transaction.expense - transaction.marginPrincipal) * currencyRate)
                 "賣出" -> CashFlow(transactionDateMapper(transaction.date), (transaction.income - transaction.marginRepayment - transaction.marginActualInterest) * currencyRate)
                 "融資還款" -> CashFlow(transactionDateMapper(transaction.date), -(transaction.marginRepayment + transaction.marginActualInterest) * currencyRate)
-                "配息" -> CashFlow(
-                    transactionDateMapper(transaction.date),
-                    HoldingCalculationSupport.resolveDividendIncome(transaction) * currencyRate
-                )
+                "配息" -> if (includeDividendIncome) {
+                    CashFlow(
+                        transactionDateMapper(transaction.date),
+                        HoldingCalculationSupport.resolveDividendIncome(transaction) * currencyRate
+                    )
+                } else {
+                    null
+                }
                 "減資" -> CashFlow(transactionDateMapper(transaction.date), transaction.cashReturned * currencyRate)
                 else -> null
             }

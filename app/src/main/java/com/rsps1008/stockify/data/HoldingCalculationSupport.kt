@@ -268,6 +268,20 @@ object HoldingCalculationSupport {
         }
     }
 
+    fun performanceCostBasis(
+        totalBuyExpense: Double,
+        totalSellIncome: Double,
+        totalDividendIncome: Double,
+        excludeDividendIncome: Boolean = false
+    ): Double = totalBuyExpense - totalSellIncome -
+        if (excludeDividendIncome) 0.0 else totalDividendIncome
+
+    fun performanceMarginCashBalance(
+        cashBalance: Double,
+        totalDividendIncome: Double,
+        excludeDividendIncome: Boolean = false
+    ): Double = cashBalance - if (excludeDividendIncome) totalDividendIncome else 0.0
+
     fun remainingPositionDenominator(
         shares: Double,
         costBasis: Double,

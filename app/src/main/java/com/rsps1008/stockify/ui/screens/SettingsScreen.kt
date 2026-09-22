@@ -88,6 +88,7 @@ fun SettingsScreen() {
     val dividendFee by viewModel.dividendFee.collectAsState()
     val preDeductSellFees by viewModel.preDeductSellFees.collectAsState()
     val partialSalesAsRealized by viewModel.partialSalesAsRealized.collectAsState()
+    val excludeDividendIncomeFromReturns by viewModel.excludeDividendIncomeFromReturns.collectAsState()
     val returnRateMode by viewModel.returnRateMode.collectAsState()
     val calculationRoundingMode by viewModel.calculationRoundingMode.collectAsState()
     val fetchInterval by viewModel.fetchInterval.collectAsState()
@@ -310,9 +311,9 @@ fun SettingsScreen() {
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("部分賣出列入已實現", style = MaterialTheme.typography.bodyLarge)
+                                Text("部分賣出列入已實現(實驗功能)", style = MaterialTheme.typography.bodyLarge)
                                 Text(
-                                    "首頁會將已賣出、已還券及已領取現金股利等現金損益，與剩餘部位拆開顯示。",
+                                    "賣出的股票以移動平均成本放入已實現。",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -323,6 +324,25 @@ fun SettingsScreen() {
                             )
                         }
                         Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("損益與報酬排除股息收入", style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    "從損益與報酬計算排除現金股息。",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = excludeDividendIncomeFromReturns,
+                                onCheckedChange = viewModel::setExcludeDividendIncomeFromReturns
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
                         val returnRateModeOptions = remember {
                             mapOf(
                                 ReturnRateMode.REMAINING_POSITION to "剩餘部位報酬 (剩餘成本)",
@@ -330,11 +350,15 @@ fun SettingsScreen() {
                                 ReturnRateMode.XIRR to "年化報酬 (XIRR)"
                             )
                         }
-                        val returnRateModeDescriptions = remember {
+                        val returnRateModeDescriptions = remember(excludeDividendIncomeFromReturns) {
                             mapOf(
                                 ReturnRateMode.REMAINING_POSITION to "有持股時，以目前還留在該股票中的有效成本作為分母，適合評估目前在倉部位的資金運用效率；若已全數賣出，則會自動退回以歷來投入成本作為分母，避免清倉後出現不直覺的 0% 或 -100%。",
                                 ReturnRateMode.CUMULATIVE_INVESTMENT to "以這檔股票歷來累計投入的總成本作為分母。部分賣出回收資金後，分母仍維持最大投入金額，報酬率呈現會較穩健保守。",
-                                ReturnRateMode.XIRR to "根據每筆買進、賣出、配息、減資的實際發生日期與資金流向，計算考慮時間價值權重的年化報酬率（XIRR），最符合實際資金的時間價值。"
+                                ReturnRateMode.XIRR to if (excludeDividendIncomeFromReturns) {
+                                    "根據每筆買進、賣出、減資的實際發生日期與資金流向計算年化報酬率（XIRR）；目前已排除現金配息。"
+                                } else {
+                                    "根據每筆買進、賣出、配息、減資的實際發生日期與資金流向，計算考慮時間價值權重的年化報酬率（XIRR），最符合實際資金的時間價值。"
+                                }
                             )
                         }
                         var expandedReturnRateMode by remember { mutableStateOf(false) }
@@ -727,7 +751,7 @@ fun SettingsScreen() {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Text("台股手續費", style = MaterialTheme.typography.titleLarge)
                                 Text(
-                                    "這是共用設定；個別帳戶可在首頁帳戶管理中單獨覆寫。",
+                                    "此區為共用設定；個別帳戶手續費可在首頁右上的帳戶管理中各自設置。",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

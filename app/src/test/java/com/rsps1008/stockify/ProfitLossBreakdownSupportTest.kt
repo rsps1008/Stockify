@@ -72,6 +72,31 @@ class ProfitLossBreakdownSupportTest {
     }
 
     @Test
+    fun excludedDividendDoesNotCreateRealizedActivityOrChangeTheDividendExcludedTotal() {
+        val transactions = listOf(
+            buy(date = 1L, price = 100.0, shares = 100.0, expense = 10_000.0),
+            StockTransaction(
+                stockCode = "2330", date = 2L, recordTime = 2L, type = "配息",
+                dividendIncome = 500.0
+            )
+        )
+
+        val result = ProfitLossBreakdownSupport.calculate(
+            transactions = transactions,
+            valuationDate = 2L,
+            legacyTotalProfitLoss = 1_000.0,
+            marginSummary = MarginSummary(),
+            marginDayCount = 365,
+            includeDividendIncome = false
+        )
+
+        assertEquals(0.0, result.realizedProfitLoss, 0.0)
+        assertEquals(1_000.0, result.unrealizedProfitLoss, 0.0)
+        assertFalse(result.hasRealizedActivity)
+        assertEquals(1_000.0, result.realizedProfitLoss + result.unrealizedProfitLoss, 0.0)
+    }
+
+    @Test
     fun lossReductionWithoutCashKeepsTotalCostAndDoesNotCreateRealizedLoss() {
         val transactions = listOf(
             buy(date = 1L, price = 100.0, shares = 100.0, expense = 10_000.0),

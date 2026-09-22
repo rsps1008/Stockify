@@ -67,6 +67,7 @@ class SettingsDataStore private constructor(
     private val dividendFeeKey = intPreferencesKey("dividend_fee")
     private val preDeductSellFeesKey = booleanPreferencesKey("pre_deduct_sell_fees")
     private val partialSalesAsRealizedKey = booleanPreferencesKey("partial_sales_as_realized")
+    private val excludeDividendIncomeFromReturnsKey = booleanPreferencesKey("exclude_dividend_income_from_returns")
     private val useCumulativeReturnRateKey = booleanPreferencesKey("use_cumulative_return_rate")
     private val returnRateModeKey = stringPreferencesKey("return_rate_mode")
     private val realtimeStockInfoCacheKey = stringPreferencesKey("realtime_stock_info_cache")
@@ -153,6 +154,11 @@ class SettingsDataStore private constructor(
     val partialSalesAsRealizedFlow: Flow<Boolean> = dataStoreInstance.data
         .map { preferences ->
             preferences[partialSalesAsRealizedKey] ?: false
+        }
+
+    val excludeDividendIncomeFromReturnsFlow: Flow<Boolean> = dataStoreInstance.data
+        .map { preferences ->
+            preferences[excludeDividendIncomeFromReturnsKey] ?: false
         }
 
     val returnRateModeFlow: Flow<ReturnRateMode> = dataStoreInstance.data
@@ -596,6 +602,12 @@ class SettingsDataStore private constructor(
     suspend fun setPartialSalesAsRealized(enabled: Boolean) {
         dataStoreInstance.edit {
             it[partialSalesAsRealizedKey] = enabled
+        }
+    }
+
+    suspend fun setExcludeDividendIncomeFromReturns(enabled: Boolean) {
+        dataStoreInstance.edit {
+            it[excludeDividendIncomeFromReturnsKey] = enabled
         }
     }
 

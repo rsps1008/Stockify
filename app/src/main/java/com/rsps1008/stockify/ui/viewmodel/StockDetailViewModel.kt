@@ -93,7 +93,8 @@ private data class DetailSettingsBundle(
     val minFeeRegular: Int,
     val minFeeOddLot: Int,
     val returnRateMode: ReturnRateMode,
-    val marginDayCount: Int
+    val marginDayCount: Int,
+    val excludeDividendIncomeFromReturns: Boolean
 )
 
 private data class HistoricalPointCalculationResult(
@@ -157,11 +158,15 @@ class StockDetailViewModel(
             minFeeRegular = minFeeRegular,
             minFeeOddLot = 0,
             returnRateMode = mode,
-            marginDayCount = marginDayCount
+            marginDayCount = marginDayCount,
+            excludeDividendIncomeFromReturns = false
         )
     }
 
     private val settingsCombined = baseSettingsCombined
+        .combine(settingsDataStore.excludeDividendIncomeFromReturnsFlow) { settings, exclude ->
+            settings.copy(excludeDividendIncomeFromReturns = exclude)
+        }
         .combine(settingsDataStore.minFeeOddLotFlow) { settings, minFeeOddLot ->
             settings.copy(minFeeOddLot = minFeeOddLot)
         }
@@ -229,7 +234,8 @@ class StockDetailViewModel(
                 HistoricalTransactionCashFlowTimeline(
                     transactions = stockTransactions,
                     transactionDateMapper = transactionDateMapper,
-                    transactionsAreOrdered = true
+                    transactionsAreOrdered = true,
+                    includeDividendIncome = !settings.excludeDividendIncomeFromReturns
                 )
             } else {
                 null
@@ -267,6 +273,7 @@ class StockDetailViewModel(
                     valuationDate = transactionCutoff,
                     replay = replay,
                     preDeductSellFees = settings.preDeductSellFees,
+                    excludeDividendIncomeFromReturns = settings.excludeDividendIncomeFromReturns,
                     returnRateMode = settings.returnRateMode,
                     feeSettingsByAccount = settings.feeSettingsByAccount,
                     sharedFeeSettings = settings.sharedFeeSettings,
@@ -375,6 +382,7 @@ class StockDetailViewModel(
         valuationDate: Long,
         replay: LongPositionReplaySummary,
         preDeductSellFees: Boolean,
+        excludeDividendIncomeFromReturns: Boolean,
         returnRateMode: ReturnRateMode,
         feeSettingsByAccount: Map<Int, AccountFeeSettings>,
         sharedFeeSettings: AccountFeeSettings,
@@ -398,7 +406,12 @@ class StockDetailViewModel(
         val totalSellNetIncome = replay.totalSellNetIncome
         val sellAmountBeforeFee = replay.sellAmountBeforeFee
         val totalDividendIncome = replay.totalDividendIncome
-        val costBasis = totalBuyExpense - totalSellIncome - totalDividendIncome
+        val costBasis = HoldingCalculationSupport.performanceCostBasis(
+            totalBuyExpense,
+            totalSellIncome,
+            totalDividendIncome,
+            excludeDividendIncomeFromReturns
+        )
         val totalSellFeeAndTax = (sellAmountBeforeFee - totalSellNetIncome).coerceAtLeast(0.0)
         val longInvestment = if (hasMarginPurchase) {
             marginSummary.selfFundedCapital + totalSellFeeAndTax
@@ -410,7 +423,12 @@ class StockDetailViewModel(
             costBasis = costBasis,
             longInvestment = longInvestment,
             financedRemainingInvestment = if (hasMarginPurchase) {
-                (-marginSummary.cashBalance).coerceAtLeast(0.0)
+                val performanceCashBalance = HoldingCalculationSupport.performanceMarginCashBalance(
+                    marginSummary.cashBalance,
+                    totalDividendIncome,
+                    excludeDividendIncomeFromReturns
+                )
+                (-performanceCashBalance).coerceAtLeast(0.0)
             } else {
                 null
             },
@@ -458,7 +476,8 @@ class StockDetailViewModel(
                         marginSummary = marginSummary,
                         shortSummary = shortSummary,
                         historicalCashFlowTimeline = historicalCashFlowTimeline,
-                        historicalShortXirrTimeline = historicalShortXirrTimeline
+                        historicalShortXirrTimeline = historicalShortXirrTimeline,
+                        includeDividendIncome = !excludeDividendIncomeFromReturns
                     ),
                     guess = xirrGuessRate ?: 0.1,
                     zoneId = HistoryChartCalculationSupport.zoneIdForMarket(market)
@@ -490,7 +509,8 @@ class StockDetailViewModel(
         marginSummary: MarginSummary,
         shortSummary: ShortSellingSummary,
         historicalCashFlowTimeline: HistoricalTransactionCashFlowTimeline?,
-        historicalShortXirrTimeline: ShortSellingCalculationSupport.HistoricalXirrTimeline?
+        historicalShortXirrTimeline: ShortSellingCalculationSupport.HistoricalXirrTimeline?,
+        includeDividendIncome: Boolean
     ): List<CashFlow> {
         val cashFlows = historicalCashFlowTimeline
             ?.cashFlowsAt(transactionCutoffMillis)
@@ -510,10 +530,14 @@ class StockDetailViewModel(
                         transaction.date,
                         -(transaction.marginRepayment + transaction.marginActualInterest)
                     )
-                    "配息" -> CashFlow(
-                        transaction.date,
-                        HoldingCalculationSupport.resolveDividendIncome(transaction)
-                    )
+                    "配息" -> if (includeDividendIncome) {
+                        CashFlow(
+                            transaction.date,
+                            HoldingCalculationSupport.resolveDividendIncome(transaction)
+                        )
+                    } else {
+                        null
+                    }
                     "減資" -> CashFlow(transaction.date, transaction.cashReturned)
                     else -> null
                 }
