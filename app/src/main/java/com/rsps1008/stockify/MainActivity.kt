@@ -35,8 +35,10 @@ import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -49,9 +51,13 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.rsps1008.stockify.data.TextSizeMode
+import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.ui.navigation.NavGraph
 import com.rsps1008.stockify.ui.navigation.Screen
 import com.rsps1008.stockify.ui.screens.AppLockScreen
+import com.rsps1008.stockify.ui.screens.UPDATE_HIGHLIGHTS_VERSION
+import com.rsps1008.stockify.ui.screens.UpdateHighlightsDialog
+import com.rsps1008.stockify.ui.screens.shouldShowUpdateHighlights
 import com.rsps1008.stockify.ui.theme.StockifyTheme
 import kotlinx.coroutines.launch
 
@@ -102,9 +108,9 @@ class MainActivity : AppCompatActivity() {
             ) {
                 when (appLockEnabled) {
                     null -> Surface(modifier = Modifier.fillMaxSize()) {}
-                    false -> MainScreen(navController)
+                    false -> MainScreen(navController, dataStore)
                     true -> if (appLockSession.unlocked) {
-                        MainScreen(navController)
+                        MainScreen(navController, dataStore)
                     } else {
                         AppLockScreen(
                             activity = this@MainActivity,
@@ -140,7 +146,14 @@ class AppLockSessionViewModel : ViewModel() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(navController: NavHostController) {
+fun MainScreen(
+    navController: NavHostController,
+    settingsDataStore: SettingsDataStore
+) {
+    val lastShownUpdateVersion by settingsDataStore.lastUpdateHighlightsVersionFlow
+        .collectAsState(initial = BuildConfig.VERSION_NAME)
+    val coroutineScope = rememberCoroutineScope()
+    var updateHighlightsDismissedForSession by rememberSaveable { mutableStateOf(false) }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
     val isAddTransactionScreen = currentDestination?.hierarchy?.any {
@@ -261,6 +274,20 @@ fun MainScreen(navController: NavHostController) {
         NavGraph(
             navController = navController,
             modifier = Modifier.padding(innerPadding)
+        )
+    }
+
+    if (!updateHighlightsDismissedForSession &&
+        shouldShowUpdateHighlights(BuildConfig.VERSION_NAME, lastShownUpdateVersion)
+    ) {
+        UpdateHighlightsDialog(
+            onDismiss = { updateHighlightsDismissedForSession = true },
+            onDismissUntilNextVersion = {
+                updateHighlightsDismissedForSession = true
+                coroutineScope.launch {
+                    settingsDataStore.setLastUpdateHighlightsVersion(UPDATE_HIGHLIGHTS_VERSION)
+                }
+            }
         )
     }
 }

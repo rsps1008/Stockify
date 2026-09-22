@@ -111,6 +111,7 @@ class SettingsDataStore private constructor(
     private val appLockPinSaltKey = stringPreferencesKey("app_lock_pin_salt")
     private val appLockPinHashKey = stringPreferencesKey("app_lock_pin_hash")
     private val appLockBiometricEnabledKey = booleanPreferencesKey("app_lock_biometric_enabled")
+    private val lastUpdateHighlightsVersionKey = stringPreferencesKey("last_update_highlights_version")
 
     val fetchIntervalFlow: Flow<Int> = dataStoreInstance.data
         .map { preferences ->
@@ -159,6 +160,11 @@ class SettingsDataStore private constructor(
     val excludeDividendIncomeFromReturnsFlow: Flow<Boolean> = dataStoreInstance.data
         .map { preferences ->
             preferences[excludeDividendIncomeFromReturnsKey] ?: false
+        }
+
+    val lastUpdateHighlightsVersionFlow: Flow<String?> = dataStoreInstance.data
+        .map { preferences ->
+            preferences[lastUpdateHighlightsVersionKey]
         }
 
     val returnRateModeFlow: Flow<ReturnRateMode> = dataStoreInstance.data
@@ -608,6 +614,12 @@ class SettingsDataStore private constructor(
     suspend fun setExcludeDividendIncomeFromReturns(enabled: Boolean) {
         dataStoreInstance.edit {
             it[excludeDividendIncomeFromReturnsKey] = enabled
+        }
+    }
+
+    suspend fun setLastUpdateHighlightsVersion(versionName: String) {
+        dataStoreInstance.edit {
+            it[lastUpdateHighlightsVersionKey] = versionName
         }
     }
 

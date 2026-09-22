@@ -71,4 +71,18 @@ class SettingsDataStoreCacheRecoveryTest {
 
         scope.cancel()
     }
+
+    @Test
+    fun updateHighlightsVersionStartsEmptyAndPersistsDismissedVersion() = runBlocking {
+        val testFile = File(tempFolder.root, "update-highlights.preferences_pb")
+        val scope = CoroutineScope(Dispatchers.IO + Job())
+        val dataStore = PreferenceDataStoreFactory.create(scope = scope, produceFile = { testFile })
+        val settingsDataStore = SettingsDataStore(dataStore)
+
+        assertNull(settingsDataStore.lastUpdateHighlightsVersionFlow.first())
+        settingsDataStore.setLastUpdateHighlightsVersion("1.6.8")
+        assertEquals("1.6.8", settingsDataStore.lastUpdateHighlightsVersionFlow.first())
+
+        scope.cancel()
+    }
 }
