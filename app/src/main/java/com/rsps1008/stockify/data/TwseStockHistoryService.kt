@@ -17,6 +17,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.util.Calendar
+import java.time.Clock
 import java.time.DayOfWeek
 import java.time.LocalTime
 import java.time.ZoneId
@@ -113,7 +114,8 @@ internal class StockHistoryCache {
 
 class TwseStockHistoryService(
     private val client: HttpClient,
-    private val stockDao: StockDao
+    private val stockDao: StockDao,
+    private val clock: Clock = Clock.systemUTC()
 ) {
 
     private fun historyCacheKey(market: String, stockCode: String, month: String): String =
@@ -209,16 +211,16 @@ class TwseStockHistoryService(
         market: String,
         forceRefreshCurrentMonth: Boolean
     ): List<StockHistoryPoint> = withContext(Dispatchers.IO) {
-        val targetMonths = getTargetMonths(rangeMonths, market)
-        val total = targetMonths.size
-        val resultPoints = mutableListOf<StockHistoryPoint>()
-
         val latestChartDateStr = getLatestChartDateString(StockMarket.TW)
         val latestChartMonthStr = latestChartDateStr.take(7).replace("-", "")
+        val targetMonths = getTargetMonths(rangeMonths, market).filter { it <= latestChartMonthStr }
+        val total = targetMonths.size
+        val resultPoints = mutableListOf<StockHistoryPoint>()
+        val missingMonths = mutableListOf<String>()
         val cacheGeneration = cache.currentGeneration()
 
-        for ((index, monthStr) in targetMonths.withIndex()) {
-            onProgress(index + 1, total)
+        // Wider ranges begin with older missing months, so count all reusable months first.
+        for (monthStr in targetMonths) {
             val cacheKey = historyCacheKey(market, stockCode, monthStr)
             val cached = cache.get(cacheKey)
 
@@ -234,10 +236,6 @@ class TwseStockHistoryService(
                 ) {
                     continue
                 }
-            }
-
-            if (monthStr > latestChartMonthStr) {
-                continue
             }
 
             val monthPrefix = "${monthStr.substring(0, 4)}-${monthStr.substring(4, 6)}"
@@ -257,7 +255,16 @@ class TwseStockHistoryService(
                     continue
                 }
             }
+            missingMonths += monthStr
+        }
 
+        val cachedMonthCount = total - missingMonths.size
+        if (missingMonths.isEmpty() && total > 0) {
+            onProgress(total, total)
+        }
+        for ((index, monthStr) in missingMonths.withIndex()) {
+            onProgress(cachedMonthCount + index + 1, total)
+            val cacheKey = historyCacheKey(market, stockCode, monthStr)
             // 上市／上櫃使用 TWSE；興櫃使用 TPEx 月歷史行情 API。
             val dateParam = "${monthStr}01" // YYYYMM01
             val isEmerging = StockExchange.isEmerging(exchange)
@@ -303,7 +310,7 @@ class TwseStockHistoryService(
             }
 
             // Add delay to prevent TWSE from blocking us
-            if (index < total - 1) {
+            if (index < missingMonths.lastIndex) {
                 delay(500L)
             }
         }
@@ -379,7 +386,9 @@ class TwseStockHistoryService(
             val assetClass = if (stockType.equals("ETF", ignoreCase = true)) "etf" else "stocks"
 
             // Compute date range
-            val calendar = Calendar.getInstance(java.util.TimeZone.getTimeZone("America/New_York"))
+            val calendar = Calendar.getInstance(java.util.TimeZone.getTimeZone("America/New_York")).apply {
+                timeInMillis = clock.millis()
+            }
             val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply {
                 timeZone = java.util.TimeZone.getTimeZone("America/New_York")
             }
@@ -512,12 +521,12 @@ class TwseStockHistoryService(
 
     private fun getTargetMonths(rangeMonths: Int, market: String): List<String> {
         val timeZone = if (StockMarket.isUs(market)) "America/New_York" else "Asia/Taipei"
-        return targetHistoryMonths(rangeMonths, YearMonth.now(ZoneId.of(timeZone)))
+        return targetHistoryMonths(rangeMonths, YearMonth.now(clock.withZone(ZoneId.of(timeZone))))
     }
 
     private fun getLatestChartDateString(market: String): String {
         val timeZone = if (StockMarket.isUs(market)) "America/New_York" else "Asia/Taipei"
-        val now = ZonedDateTime.now(ZoneId.of(timeZone))
+        val now = ZonedDateTime.now(clock.withZone(ZoneId.of(timeZone)))
         return latestExpectedHistoryDate(now, market).toString()
     }
 
