@@ -311,7 +311,7 @@ fun SettingsScreen() {
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("部分賣出列入已實現(實驗功能)", style = MaterialTheme.typography.bodyLarge)
+                                Text("部分賣出列入已實現", style = MaterialTheme.typography.bodyLarge)
                                 Text(
                                     "賣出的股票以移動平均成本放入已實現。",
                                     style = MaterialTheme.typography.bodySmall,
