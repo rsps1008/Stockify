@@ -12,7 +12,8 @@ import kotlinx.coroutines.flow.stateIn
 data class TransactionListSnapshot(
     val stocks: List<Stock> = emptyList(),
     val transactions: List<StockTransaction> = emptyList(),
-    val accountId: Int = 0
+    val accountId: Int = 0,
+    val isLoaded: Boolean = false
 )
 
 /**
@@ -44,7 +45,8 @@ class TransactionListRepository(
         TransactionListSnapshot(
             stocks = stocks,
             transactions = scopedTransactions.second,
-            accountId = scopedTransactions.first
+            accountId = scopedTransactions.first,
+            isLoaded = true
         )
     }.stateIn(
         scope = applicationScope,

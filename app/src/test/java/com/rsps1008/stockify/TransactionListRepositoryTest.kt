@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.lang.reflect.Proxy
 
@@ -35,18 +37,41 @@ class TransactionListRepositoryTest {
         val scope = CoroutineScope(Job() + Dispatchers.Unconfined)
         try {
             val repository = TransactionListRepository(stockDao, activeAccountId, scope)
+            assertFalse(repository.snapshot.value.isLoaded)
 
             val selectedSnapshot = withTimeout(1_000L) {
-                repository.snapshot.first { it.accountId == 2 }
+                repository.snapshot.first { it.isLoaded && it.accountId == 2 }
             }
             assertEquals(accountTransactions[2], selectedSnapshot.transactions)
             assertEquals(listOf(2), accountIdsQueried)
 
             activeAccountId.value = 0
             val allSnapshot = withTimeout(1_000L) {
-                repository.snapshot.first { it.accountId == 0 }
+                repository.snapshot.first { it.isLoaded && it.accountId == 0 }
             }
             assertEquals(allTransactions, allSnapshot.transactions)
+        } finally {
+            scope.coroutineContext[Job]?.cancel()
+        }
+    }
+
+    @Test
+    fun emptyRoomResultIsLoadedAndLaterInsertsAndDeletesStayObservable() = runBlocking {
+        val transactions = MutableStateFlow(emptyList<StockTransaction>())
+        val stockDao = proxyStockDao(transactions, emptyMap(), mutableListOf())
+        val scope = CoroutineScope(Job() + Dispatchers.Unconfined)
+        try {
+            val repository = TransactionListRepository(stockDao, flowOf(0), scope)
+            val empty = withTimeout(1_000) { repository.snapshot.first { it.isLoaded } }
+            assertTrue(empty.transactions.isEmpty())
+
+            transactions.value = listOf(
+                StockTransaction(id = 1, stockCode = "2330", date = 0L, recordTime = 1L, type = "買進")
+            )
+            withTimeout(1_000) { repository.snapshot.first { it.transactions.size == 1 } }
+            transactions.value = emptyList()
+            val cleared = withTimeout(1_000) { repository.snapshot.first { it.isLoaded && it.transactions.isEmpty() } }
+            assertTrue(cleared.isLoaded)
         } finally {
             scope.coroutineContext[Job]?.cancel()
         }

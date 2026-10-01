@@ -1,8 +1,9 @@
 package com.rsps1008.stockify.ui.screens
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,17 +11,32 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -30,12 +46,11 @@ import com.rsps1008.stockify.StockifyApplication
 import com.rsps1008.stockify.ui.navigation.Screen
 import com.rsps1008.stockify.ui.theme.StockifyAppTheme
 import com.rsps1008.stockify.ui.viewmodel.TransactionsViewModel
+import com.rsps1008.stockify.ui.viewmodel.TransactionsUiState
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import com.rsps1008.stockify.data.formatMarketAmount
 import com.rsps1008.stockify.data.formatShareCount
 import java.util.Locale
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.statusBarsPadding
 
 @Composable
 fun TransactionsScreen(navController: NavController) {
@@ -47,55 +62,163 @@ fun TransactionsScreen(navController: NavController) {
             transactionListRepository = application.transactionListRepository
         )
     )
-    val transactionSections by viewModel.transactionSections.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsState()
 
-    Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(top = 16.dp),
-            contentAlignment = Alignment.TopCenter
-        ) {
-            SampledResourceImage(
-                resId = R.drawable.stockify,
-                contentDescription = "Stockify Logo",
-                modifier = Modifier.fillMaxWidth(0.35f)
-            )
+    TransactionsContent(
+        uiState = uiState,
+        searchQuery = searchQuery,
+        onSearchQueryChange = viewModel::updateSearchQuery,
+        onAddTransaction = { navController.navigate(Screen.AddTransaction.createRoute()) },
+        onTransactionClick = { navController.navigate(Screen.TransactionDetail.createRoute(it)) }
+    )
+}
+
+@Composable
+internal fun TransactionsContent(
+    uiState: TransactionsUiState,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    onAddTransaction: () -> Unit,
+    onTransactionClick: (Int) -> Unit
+) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
+        TransactionsBody(
+            uiState = uiState,
+            searchQuery = searchQuery,
+            onSearchQueryChange = onSearchQueryChange,
+            onAddTransaction = onAddTransaction,
+            onTransactionClick = onTransactionClick,
+            compactLayout = maxHeight < 400.dp
+        )
+    }
+}
+
+@Composable
+private fun TransactionsBody(
+    uiState: TransactionsUiState,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    onAddTransaction: () -> Unit,
+    onTransactionClick: (Int) -> Unit,
+    compactLayout: Boolean
+) {
+    val focusManager = LocalFocusManager.current
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (!compactLayout) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 16.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                SampledResourceImage(
+                    resId = R.drawable.stockify,
+                    contentDescription = "Stockify Logo",
+                    modifier = Modifier.fillMaxWidth(0.35f).height(40.dp)
+                )
+            }
+        } else {
+            Spacer(modifier = Modifier.height(16.dp))
         }
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-        ) {
-            TransactionsListHeader()
-        }
-
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .padding(horizontal = 16.dp)
-        ) {
-            transactionSections.forEach { section ->
-                item {
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = onSearchQueryChange,
+            label = { Text("搜尋交易") },
+            placeholder = { Text("代號、名稱、類型、筆記或日期") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { onSearchQueryChange("") }) {
+                        Icon(Icons.Default.Close, contentDescription = "清除搜尋")
+                    }
+                }
+            },
+            supportingText = {
+                if (!uiState.isLoading) {
                     Text(
-                        text = section.date,
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .padding(horizontal = 8.dp, vertical = 8.dp)
+                        if (uiState.query.isBlank()) "共 ${uiState.totalCount} 筆交易"
+                        else "找到 ${uiState.resultCount} 筆，共 ${uiState.totalCount} 筆"
                     )
                 }
-                items(
-                    items = section.transactions,
-                    key = { it.transaction.id }
-                ) { transaction ->
-                    TransactionRow(transaction, navController)
+            },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+        )
+
+        if (uiState.isLoading || uiState.sections.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxWidth().weight(1f).padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = when {
+                            uiState.isLoading -> "正在載入交易紀錄…"
+                            uiState.totalCount == 0 -> "目前帳戶尚無交易紀錄"
+                            else -> "找不到符合的交易"
+                        },
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (!uiState.isLoading) {
+                        TextButton(onClick = {
+                            focusManager.clearFocus()
+                            if (uiState.totalCount == 0) onAddTransaction() else onSearchQueryChange("")
+                        }) {
+                            Text(if (uiState.totalCount == 0) "新增交易" else "清除搜尋條件")
+                        }
+                    }
+                }
+            }
+        } else {
+            if (!compactLayout) {
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                    TransactionsListHeader()
+                }
+            }
+            key(uiState.accountId, uiState.query) {
+                val listState = rememberLazyListState()
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(horizontal = 16.dp)
+                ) {
+                    if (compactLayout) {
+                        item(key = "columns", contentType = "columns") {
+                            TransactionsListHeader()
+                        }
+                    }
+                    uiState.sections.forEach { section ->
+                        item(key = "date:${section.date}", contentType = "date") {
+                            Text(
+                                text = section.date,
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .padding(horizontal = 8.dp, vertical = 8.dp)
+                            )
+                        }
+                        items(
+                            items = section.transactions,
+                            key = { it.transaction.id },
+                            contentType = { "transaction" }
+                        ) { transaction ->
+                            TransactionRow(transaction) {
+                                focusManager.clearFocus()
+                                onTransactionClick(it)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -118,7 +241,7 @@ private fun TransactionsListHeader() {
 }
 
 @Composable
-private fun TransactionRow(transaction: TransactionUiState, navController: NavController) {
+private fun TransactionRow(transaction: TransactionUiState, onTransactionClick: (Int) -> Unit) {
     val amountText = when (transaction.transaction.type) {
         "買進" -> formatMarketAmount(-transaction.transaction.expense, transaction.market)
         "融資買進" -> {
@@ -158,7 +281,7 @@ private fun TransactionRow(transaction: TransactionUiState, navController: NavCo
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { navController.navigate(Screen.TransactionDetail.createRoute(transaction.transaction.id)) }
+            .clickable { onTransactionClick(transaction.transaction.id) }
             .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
