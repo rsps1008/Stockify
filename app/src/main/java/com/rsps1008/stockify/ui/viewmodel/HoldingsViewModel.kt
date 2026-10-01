@@ -1024,13 +1024,19 @@ class HoldingsViewModel(
         }
     }
 
+    private val _isRefreshingQuotes = MutableStateFlow(false)
+    val isRefreshingQuotes: StateFlow<Boolean> = _isRefreshingQuotes
+
     fun refreshAllHoldingsQuotes() {
+        if (_isRefreshingQuotes.value) return
+        _isRefreshingQuotes.value = true
+        fetchPortfolioHistory(selectedHomeHistoryRange.value, forceRefreshCurrentMonth = true)
         viewModelScope.launch {
-            realtimeStockDataService.refreshAllHeldStockInfo()
-            fetchPortfolioHistory(
-                selectedHomeHistoryRange.value,
-                forceRefreshCurrentMonth = true
-            )
+            try {
+                realtimeStockDataService.refreshAllHeldStockInfo()
+            } finally {
+                _isRefreshingQuotes.value = false
+            }
         }
     }
 

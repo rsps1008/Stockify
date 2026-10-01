@@ -123,6 +123,19 @@ class RealtimeStockDataService(
     private val preferredStockDataSource = MutableStateFlow("TWSE")
     private val preferredUsStockDataSource = MutableStateFlow("Nasdaq")
 
+    private val client = HttpClient(CIO) {
+        engine {
+            requestTimeout = 5000
+        }
+    }
+
+    private val holidayCache = TaiwanHolidayCache(loadYear = { year ->
+        val response = client.get("https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/$year.json").body<String>()
+        Json.decodeFromString<List<TaiwanHolidayItem>>(response).associate {
+            LocalDate.parse(it.date, DateTimeFormatter.BASIC_ISO_DATE) to it.isHoliday
+        }
+    })
+
     init {
         scope.launch {
             settingsDataStore.stockDataSourceFlow
@@ -148,31 +161,6 @@ class RealtimeStockDataService(
         }
         startFetching()
     }
-
-    private val client = HttpClient(CIO) {
-        engine {
-            requestTimeout = 5000
-        }
-    }
-
-    data class FetchResult(
-        val key: String,
-        val code: String,
-        val info: RealtimeStockInfo?,
-        val fallbackUsed: Boolean,
-        val certificateFailure: Boolean
-    )
-
-    private data class FetchOutcome(
-        val info: RealtimeStockInfo?,
-        val fallbackUsed: Boolean,
-        val certificateFailure: Boolean = false
-    )
-
-    private data class TwseBatchFetchOutcome(
-        val infos: Map<String, RealtimeStockInfo>,
-        val certificateFailure: Boolean
-    )
 
     private fun getTwFetchers(): Pair<StockInfoFetcher, StockInfoFetcher> {
         val preferredSource = preferredStockDataSource.value
@@ -228,7 +216,7 @@ class RealtimeStockDataService(
             refreshRegardlessOfMarketOpen = true
         )
 
-        settingsDataStore.fetchIntervalFlow.collectLatest { interval ->
+        settingsDataStore.fetchIntervalFlow.distinctUntilChanged().collectLatest { interval ->
             while (currentCoroutineContext().isActive) {
                 if (!isAnyMarketOpen()) {
                     delay(30_000L)
@@ -291,79 +279,14 @@ class RealtimeStockDataService(
             .filter { it.toStockKey().cacheKey() in openKeys }
         if (stocks.isEmpty()) return
 
-        val stockGroups = stocks.groupBy {
-            StockMarket.normalize(it.market) to StockExchange.normalize(it.exchange)
-        }
-
-        val results = coroutineScope {
-            stockGroups.flatMap { (group, marketStocks) ->
-                val market = group.first
-                val exchange = group.second
-                if (!refreshRegardlessOfMarketOpen && !shouldRefreshMarket(market)) {
-                    Log.d(
-                        "RealtimeStockDataService",
-                        "Skipping $market realtime stock info because market is closed"
-                    )
-                    emptyList()
-                } else {
-                    Log.d(
-                        "RealtimeStockDataService",
-                        "Fetching $market/$exchange realtime stock info"
-                    )
-
-                    if (StockMarket.isTw(market) &&
-                        !StockExchange.isEmerging(exchange) &&
-                        preferredStockDataSource.value == "TWSE"
-                    ) {
-                        val batchOutcome = fetchTwseBatchSafely(marketStocks)
-                        val twseInfos = batchOutcome.infos
-                        mapWithStockRequestLimit(marketStocks) { stock ->
-                            val twseInfo = twseInfos[stock.code]
-                            val outcome = if (twseInfo != null) {
-                                FetchOutcome(info = twseInfo, fallbackUsed = false)
-                            } else {
-                                val fallback = fetchWithFetcher(yahooFetcher, stock.code, stock.stockType)
-                                fallback.copy(
-                                    fallbackUsed = true,
-                                    certificateFailure = fallback.certificateFailure || batchOutcome.certificateFailure
-                                )
-                            }
-                            FetchResult(
-                                key = stock.toStockKey().cacheKey(),
-                                code = stock.code,
-                                info = outcome.info,
-                                fallbackUsed = outcome.fallbackUsed,
-                                certificateFailure = outcome.certificateFailure
-                            )
-                        }
-                    } else {
-                        mapWithStockRequestLimit(marketStocks) { stock ->
-                            val outcome = fetchStockInfoForMarket(
-                                stockCode = stock.code,
-                                market = market,
-                                exchange = exchange,
-                                stockType = stock.stockType
-                            )
-                            FetchResult(
-                                key = stock.toStockKey().cacheKey(),
-                                code = stock.code,
-                                info = outcome.info,
-                                fallbackUsed = outcome.fallbackUsed,
-                                certificateFailure = outcome.certificateFailure
-                            )
-                        }
-                    }
-                }
+        val eligibleStocks = stocks.groupBy { StockMarket.normalize(it.market) }
+            .flatMap { (market, marketStocks) ->
+                if (refreshRegardlessOfMarketOpen || shouldRefreshMarket(market)) marketStocks else emptyList()
             }
-        }
-
-        val fallbackCount = results.count { it.fallbackUsed }
-        val successCount = results.count { it.info != null }
-        val certificateFailureCount = results.count { it.certificateFailure }
-
-        val fetchedInfos = results.mapNotNull { result ->
-            result.info?.let { result.key to it }
-        }.toMap()
+        val results = fetchAndPublishQuotes(eligibleStocks)
+        val fallbackCount = results.count { it.outcome.fallbackUsed }
+        val successCount = results.count { it.outcome.info != null }
+        val certificateFailureCount = results.count { it.outcome.certificateFailure }
 
         if (fallbackCount > 0) {
             val fallbackNoticeEnabled = settingsDataStore.fallbackNoticeEnabledFlow.first()
@@ -389,7 +312,7 @@ class RealtimeStockDataService(
         }
 
         mergeRealtimeStockInfo(
-            updates = fetchedInfos,
+            updates = emptyMap(),
             isContinuous = isContinuous,
             forceSave = forceSave
         )
@@ -432,52 +355,29 @@ class RealtimeStockDataService(
                     .chunked(STOCK_LOOKUP_CHUNK_SIZE)
                     .flatMap { codes -> stockDao.getStocksByMarketAndCodes(market, codes) }
             }
-        val batchableTaiwanStocks = stocks.filter {
-            StockMarket.isTw(it.market) && !StockExchange.isEmerging(it.exchange)
-        }
-        val fetchedInfos = mutableMapOf<String, RealtimeStockInfo>()
-        var certificateFailure = false
-
-        if (batchableTaiwanStocks.isNotEmpty() && preferredStockDataSource.value == "TWSE") {
-            val batchOutcome = fetchTwseBatchSafely(batchableTaiwanStocks)
-            val twseInfos = batchOutcome.infos
-            batchableTaiwanStocks.forEach { stock ->
-                twseInfos[stock.code]?.let { fetchedInfos[stock.toStockKey().cacheKey()] = it }
-            }
-            certificateFailure = batchOutcome.certificateFailure
-
-            val missingStocks = batchableTaiwanStocks.filter { it.code !in twseInfos }
-            mapWithStockRequestLimit(missingStocks) { stock ->
-                stock.toStockKey().cacheKey() to fetchWithFetcher(yahooFetcher, stock.code, stock.stockType)
-            }.forEach { (key, outcome) ->
-                certificateFailure = certificateFailure || outcome.certificateFailure
-                outcome.info?.let { fetchedInfos[key] = it }
-            }
-        }
-
-        val remainingStocks = stocks.filterNot { it in batchableTaiwanStocks }
-        mapWithStockRequestLimit(remainingStocks) { stock ->
-            stock.toStockKey().cacheKey() to fetchStockInfoForMarket(
-                stock.code,
-                StockMarket.normalize(stock.market),
-                StockExchange.normalize(stock.exchange),
-                stock.stockType
-            )
-        }.forEach { (key, outcome) ->
-            certificateFailure = certificateFailure || outcome.certificateFailure
-            outcome.info?.let { fetchedInfos[key] = it }
-        }
-
-        if (certificateFailure) {
+        val results = fetchAndPublishQuotes(stocks)
+        if (results.any { it.outcome.certificateFailure }) {
             notifyCertificateFailureIfNeeded()
         }
-
-        mergeRealtimeStockInfo(updates = fetchedInfos, saveAlways = true)
+        mergeRealtimeStockInfo(updates = emptyMap(), saveAlways = true)
     }
 
-    private suspend fun fetchTwseBatchSafely(stocks: List<Stock>): TwseBatchFetchOutcome {
+    private suspend fun fetchAndPublishQuotes(stocks: List<Stock>): List<QuoteFetchResult> =
+        refreshQuotesIncrementally(
+            stocks = stocks,
+            useTwseBatches = preferredStockDataSource.value == "TWSE",
+            fetchBatch = ::fetchTwseBatchSafely,
+            fetchSingle = { stock ->
+                fetchStockInfoForMarket(stock.code, StockMarket.normalize(stock.market),
+                    StockExchange.normalize(stock.exchange), stock.stockType)
+            },
+            fetchTaiwanFallback = { stock -> fetchWithFetcher(yahooFetcher, stock.code, stock.stockType) },
+            publish = { updates -> mergeRealtimeStockInfo(updates) }
+        )
+
+    private suspend fun fetchTwseBatchSafely(stocks: List<Stock>): QuoteBatchOutcome {
         return try {
-            TwseBatchFetchOutcome(
+            QuoteBatchOutcome(
                 infos = twseFetcher.fetchStockInfoListByExchange(stocks),
                 certificateFailure = false
             )
@@ -489,14 +389,14 @@ class RealtimeStockDataService(
                 "TWSE batch certificate validation failed; falling back per stock",
                 e
             )
-            TwseBatchFetchOutcome(emptyMap(), certificateFailure = true)
+            QuoteBatchOutcome(emptyMap(), certificateFailure = true)
         } catch (e: Exception) {
             Log.e(
                 "RealtimeStockDataService",
                 "TWSE batch failed; falling back per stock",
                 e
             )
-            TwseBatchFetchOutcome(emptyMap(), certificateFailure = false)
+            QuoteBatchOutcome(emptyMap(), certificateFailure = false)
         }
     }
 
@@ -530,7 +430,8 @@ class RealtimeStockDataService(
         saveAlways: Boolean = false
     ) {
         realtimeInfoMutex.withLock {
-            val mergedInfos = mergeRealtimeStockInfoMaps(_realtimeStockInfo.value, updates)
+            val mergedInfos = if (updates.isEmpty()) _realtimeStockInfo.value
+                else mergeRealtimeStockInfoMaps(_realtimeStockInfo.value, updates)
             _realtimeStockInfo.value = mergedInfos
 
             val shouldSave = when {
@@ -554,22 +455,26 @@ class RealtimeStockDataService(
         stockCode: String,
         market: String = StockMarket.inferFromCode(stockCode),
         forceRefresh: Boolean = false
-    ): RealtimeStockInfo? = quoteRefreshMutex.withLock {
-        val normalizedCode = canonicalStockCode(stockCode)
-        val normalizedMarket = StockMarket.normalize(market)
-        val cached = _realtimeStockInfo.value[stockCacheKey(normalizedMarket, normalizedCode)]
-        if (!forceRefresh && cached != null) {
-            return@withLock cached
-        }
+    ): RealtimeStockInfo? {
+        val key = stockCacheKey(market, stockCode)
+        if (!forceRefresh) _realtimeStockInfo.value[key]?.let { return it }
+        return quoteRefreshMutex.withLock {
+            val normalizedCode = canonicalStockCode(stockCode)
+            val normalizedMarket = StockMarket.normalize(market)
+            val cached = _realtimeStockInfo.value[stockCacheKey(normalizedMarket, normalizedCode)]
+            if (!forceRefresh && cached != null) {
+                return@withLock cached
+            }
 
-        val stock = stockDao.getStockByCode(normalizedCode, normalizedMarket)
-        val resolvedMarket = StockMarket.normalize(stock?.market ?: normalizedMarket)
-        fetchStockInfoForMarket(
-            normalizedCode,
-            resolvedMarket,
-            StockExchange.normalize(stock?.exchange),
-            stock?.stockType.orEmpty()
-        ).info
+            val stock = stockDao.getStockByCode(normalizedCode, normalizedMarket)
+            val resolvedMarket = StockMarket.normalize(stock?.market ?: normalizedMarket)
+            fetchStockInfoForMarket(
+                normalizedCode,
+                resolvedMarket,
+                StockExchange.normalize(stock?.exchange),
+                stock?.stockType.orEmpty()
+            ).info
+        }
     }
 
     private suspend fun fetchStockInfoForMarket(
@@ -577,7 +482,7 @@ class RealtimeStockDataService(
         market: String,
         exchange: String = StockExchange.UNKNOWN,
         stockType: String = ""
-    ): FetchOutcome {
+    ): QuoteFetchOutcome {
         return if (StockMarket.isUs(market)) {
             val (primaryFetcher, secondaryFetcher) = getUsFetchers()
             Log.d(
@@ -642,7 +547,7 @@ class RealtimeStockDataService(
         if (!inTime) return false
 
         // 2. 檢查是否是假日（讀取 20XX.json）
-        if (isTaiwanHoliday(date)) return false
+        if (holidayCache.isHoliday(date)) return false
 
         return true
     }
@@ -669,30 +574,6 @@ class RealtimeStockDataService(
         val isHoliday: Boolean,
         val description: String
     )
-
-    private suspend fun isTaiwanHoliday(date: LocalDate): Boolean {
-        val year = date.year
-
-        val url = "https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/${year}.json"
-
-        return try {
-            val json = client.get(url).body<String>()
-            val list = Json.decodeFromString<List<TaiwanHolidayItem>>(json)
-            val today = date.format(DateTimeFormatter.ofPattern("yyyyMMdd"))
-            val item = list.find { it.date == today }
-            /*Log.d(
-                "RealtimeStockDataService",
-                "json假日資料 → ${item?.isHoliday} 假日"
-            )*/
-            item?.isHoliday == true
-        } catch (e: Exception) {
-            Log.e(
-                "RealtimeStockDataService",
-                "若抓不到假日資料 → 視為非假日"
-            )
-            false   // 若抓不到資料 → 視為非假日（保守作法）
-        }
-    }
 
     private fun delayUntilNextAlignedFetch(intervalSeconds: Int): Long {
         if (intervalSeconds <= 0) return 0L
@@ -729,7 +610,7 @@ class RealtimeStockDataService(
         primaryFetcher: StockInfoFetcher,
         secondaryFetcher: StockInfoFetcher,
         stockType: String = ""
-    ): FetchOutcome {
+    ): QuoteFetchOutcome {
         var primaryCertificateFailure = false
         val primaryInfo = try {
             primaryFetcher.fetchStockInfo(stockCode, stockType)
@@ -752,7 +633,7 @@ class RealtimeStockDataService(
             null
         }
         if (primaryInfo != null) {
-            return FetchOutcome(info = primaryInfo, fallbackUsed = false)
+            return QuoteFetchOutcome(info = primaryInfo, fallbackUsed = false)
         }
 
         Log.e(
@@ -786,13 +667,13 @@ class RealtimeStockDataService(
                 "RealtimeStockDataService",
                 "Fallback succeeded for $stockCode using ${secondaryFetcher.javaClass.simpleName}"
             )
-            FetchOutcome(info = secondaryInfo, fallbackUsed = true)
+            QuoteFetchOutcome(info = secondaryInfo, fallbackUsed = true)
         } else {
             Log.e(
                 "RealtimeStockDataService",
                 "Fallback also failed for $stockCode → no data"
             )
-            FetchOutcome(
+            QuoteFetchOutcome(
                 info = null,
                 fallbackUsed = true,
                 certificateFailure = primaryCertificateFailure || secondaryCertificateFailure
@@ -804,17 +685,17 @@ class RealtimeStockDataService(
         fetcher: StockInfoFetcher,
         stockCode: String,
         stockType: String
-    ): FetchOutcome {
+    ): QuoteFetchOutcome {
         return try {
-            FetchOutcome(fetcher.fetchStockInfo(stockCode, stockType), fallbackUsed = false)
+            QuoteFetchOutcome(fetcher.fetchStockInfo(stockCode, stockType), fallbackUsed = false)
         } catch (e: CancellationException) {
             throw e
         } catch (e: CertificateValidationException) {
             Log.e("RealtimeStockDataService", "Source certificate validation failed for $stockCode", e)
-            FetchOutcome(info = null, fallbackUsed = false, certificateFailure = true)
+            QuoteFetchOutcome(info = null, fallbackUsed = false, certificateFailure = true)
         } catch (e: Exception) {
             Log.e("RealtimeStockDataService", "Source failed unexpectedly for $stockCode", e)
-            FetchOutcome(info = null, fallbackUsed = false)
+            QuoteFetchOutcome(info = null, fallbackUsed = false)
         }
     }
 

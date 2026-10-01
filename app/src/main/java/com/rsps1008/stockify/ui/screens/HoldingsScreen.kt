@@ -122,6 +122,7 @@ fun HoldingsScreen(navController: NavController) {
         )
     )
     val uiState by viewModel.uiState.collectAsState()
+    val isRefreshingQuotes by viewModel.isRefreshingQuotes.collectAsState()
     val homeDisplayMode by viewModel.homeDisplayMode.collectAsState()
     val holdingsOrder by viewModel.holdingsOrder.collectAsState()
     val realizedHoldingsOrder by viewModel.realizedHoldingsOrder.collectAsState()
@@ -326,6 +327,7 @@ fun HoldingsScreen(navController: NavController) {
                     currentMode = homeDisplayMode,
                     onModeSelected = viewModel::setHomeDisplayMode,
                     onRefreshClick = viewModel::refreshAllHoldingsQuotes,
+                    isRefreshingQuotes = isRefreshingQuotes,
                     activeAccountId = activeAccountId,
                     accounts = accounts,
                     onAccountSelected = viewModel::selectAccount,
@@ -969,6 +971,7 @@ fun SummarySection(
     currentMode: String,
     onModeSelected: (String) -> Unit,
     onRefreshClick: () -> Unit,
+    isRefreshingQuotes: Boolean,
     activeAccountId: Int,
     accounts: List<Account>,
     onAccountSelected: (Int) -> Unit,
@@ -1002,12 +1005,12 @@ fun SummarySection(
                         Row(
                             modifier = Modifier
                                 .offset(y = 2.dp)
-                                .clickable { onRefreshClick() },
+                                .clickable(enabled = !isRefreshingQuotes, onClickLabel = "更新報價") { onRefreshClick() },
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
                             AnimatedContent(
-                                targetState = lastUpdatedText,
+                                targetState = if (isRefreshingQuotes) "更新中…" else lastUpdatedText,
                                 transitionSpec = { fadeIn() togetherWith fadeOut() },
                                 contentAlignment = Alignment.BottomEnd
                             ) { time ->
@@ -1018,9 +1021,14 @@ fun SummarySection(
                                 )
                             }
 
-                            Icon(
+                            if (isRefreshingQuotes) {
+                                androidx.compose.material3.CircularProgressIndicator(
+                                    modifier = Modifier.size(12.dp),
+                                    strokeWidth = 1.5.dp
+                                )
+                            } else Icon(
                                 imageVector = Icons.Filled.Refresh,
-                                contentDescription = "Refresh quotes",
+                                contentDescription = "更新報價",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.height(10.dp)
                             )

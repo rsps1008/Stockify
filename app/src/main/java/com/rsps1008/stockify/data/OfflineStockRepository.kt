@@ -5,6 +5,10 @@ import com.rsps1008.stockify.ui.screens.AssetStockValue
 import com.rsps1008.stockify.ui.screens.HoldingsUiState
 import com.rsps1008.stockify.ui.screens.TransactionUiState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
@@ -28,10 +32,14 @@ class OfflineStockRepository(
 
     private val valuationClock = valuationClockFlow()
 
+    override fun getHoldings(): Flow<HoldingsUiState> = flow {
+        emitAll(holdingsFlow(HoldingCalculationCache()))
+    }
+
     @Suppress("UNCHECKED_CAST")
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    override fun getHoldings(): Flow<HoldingsUiState> {
-        val transactionsFlow = settingsDataStore.activeAccountIdFlow.flatMapLatest { accountId ->
+    private fun holdingsFlow(holdingCache: HoldingCalculationCache): Flow<HoldingsUiState> {
+        val transactionsFlow = settingsDataStore.activeAccountIdFlow.distinctUntilChanged().flatMapLatest { accountId ->
             if (accountId == 0) {
                 stockDao.getAllTransactions()
             } else {
@@ -39,26 +47,28 @@ class OfflineStockRepository(
             }
         }
 
+        val orderedTransactions = transactionsFlow.orderedTransactionsByStock()
+
         // Combine held stocks, all transactions, and real-time data to calculate holdings state
         return combine(
-            stockDao.getHeldStocks(),
-            transactionsFlow,
+            stockDao.getHeldStocks().distinctUntilChanged(),
+            orderedTransactions,
             realtimeStockDataService.realtimeStockInfo,
-            settingsDataStore.preDeductSellFeesFlow,
+            settingsDataStore.preDeductSellFeesFlow.distinctUntilChanged(),
             exchangeRateService.usdToTwdRate,
-            settingsDataStore.homeDisplayModeFlow,
-            settingsDataStore.returnRateModeFlow,
-            settingsDataStore.marginDayCountFlow,
-            settingsDataStore.feeDiscountFlow,
-            settingsDataStore.minFeeRegularFlow,
-            settingsDataStore.minFeeOddLotFlow,
-            stockDao.getAllAccountsFlow(),
+            settingsDataStore.homeDisplayModeFlow.distinctUntilChanged(),
+            settingsDataStore.returnRateModeFlow.distinctUntilChanged(),
+            settingsDataStore.marginDayCountFlow.distinctUntilChanged(),
+            settingsDataStore.feeDiscountFlow.distinctUntilChanged(),
+            settingsDataStore.minFeeRegularFlow.distinctUntilChanged(),
+            settingsDataStore.minFeeOddLotFlow.distinctUntilChanged(),
+            stockDao.getAllAccountsFlow().distinctUntilChanged(),
             valuationClock,
-            settingsDataStore.partialSalesAsRealizedFlow,
-            settingsDataStore.excludeDividendIncomeFromReturnsFlow,
+            settingsDataStore.partialSalesAsRealizedFlow.distinctUntilChanged(),
+            settingsDataStore.excludeDividendIncomeFromReturnsFlow.distinctUntilChanged(),
         ) { values ->
             val stocks = values[0] as List<Stock>
-            val allTransactions = values[1] as List<StockTransaction>
+            val transactionsByStock = values[1] as Map<String, List<StockTransaction>>
             val realTimeData = values[2] as Map<String, RealtimeStockInfo>
             val preDeductSellFees = values[3] as Boolean
             val usdToTwdRate = values[4] as Double
@@ -79,17 +89,6 @@ class OfflineStockRepository(
                 minFeeRegular,
                 minFeeOddLot
             )
-            val transactions = allTransactions
-
-            val transactionsByStock = transactions
-                .groupBy { it.toStockKey().cacheKey() }
-                .mapValues { (_, stockTransactions) ->
-                    stockTransactions.sortedWith(
-                        compareBy<StockTransaction> { it.date }
-                            .thenBy { it.recordTime }
-                            .thenBy { it.id }
-                    )
-                }
             val mode = HomeDisplayMode.normalize(homeDisplayMode)
             val transactedStocks = stocks.filter { stock ->
                 transactionsByStock[stock.toStockKey().cacheKey()]?.any { it.date <= currentDateMillis } == true
@@ -101,6 +100,7 @@ class OfflineStockRepository(
                 else -> transactedStocks
             }
 
+            holdingCache.retainStocks(transactedStocks.map { it.toStockKey().cacheKey() }.toSet())
             fun calculateHoldingInfoFor(stock: Stock): HoldingInfo {
                 val stockKey = stock.toStockKey().cacheKey()
                 val realtime = realTimeData[stockKey]
@@ -109,7 +109,7 @@ class OfflineStockRepository(
                 val dailyChange = realTimeData[stockKey]?.change ?: 0.0
                 val dailyChangePercentage = realTimeData[stockKey]?.changePercent ?: 0.0
                 val limitState = realtime?.limitState ?: LimitState.NONE
-                return calculateHoldingInfo(
+                val inputs = HoldingCalculationInputs(
                     stock = stock,
                     transactions = stockTransactions,
                     currentPrice = currentPrice,
@@ -125,6 +125,7 @@ class OfflineStockRepository(
                     includeProfitLossBreakdown = partialSalesAsRealized,
                     excludeDividendIncomeFromReturns = excludeDividendIncomeFromReturns
                 )
+                return holdingCache.getOrCalculate(inputs, ::calculateHoldingInfo)
             }
 
             val allHoldingInfos = mutableListOf<HoldingInfo>()
@@ -244,13 +245,13 @@ class OfflineStockRepository(
         }
 
         val baseHoldingInfoSettingsFlow = combine(
-            settingsDataStore.preDeductSellFeesFlow,
-            settingsDataStore.returnRateModeFlow,
-            settingsDataStore.marginDayCountFlow,
-            settingsDataStore.feeDiscountFlow,
-            settingsDataStore.minFeeRegularFlow,
-            settingsDataStore.minFeeOddLotFlow,
-            stockDao.getAllAccountsFlow()
+            settingsDataStore.preDeductSellFeesFlow.distinctUntilChanged(),
+            settingsDataStore.returnRateModeFlow.distinctUntilChanged(),
+            settingsDataStore.marginDayCountFlow.distinctUntilChanged(),
+            settingsDataStore.feeDiscountFlow.distinctUntilChanged(),
+            settingsDataStore.minFeeRegularFlow.distinctUntilChanged(),
+            settingsDataStore.minFeeOddLotFlow.distinctUntilChanged(),
+            stockDao.getAllAccountsFlow().distinctUntilChanged()
         ) { values ->
             val preDeductSellFees = values[0] as Boolean
             val returnRateMode = values[1] as ReturnRateMode
@@ -274,29 +275,28 @@ class OfflineStockRepository(
             )
         }
         val holdingInfoSettingsFlow = baseHoldingInfoSettingsFlow
-            .combine(settingsDataStore.excludeDividendIncomeFromReturnsFlow) { settings, exclude ->
+            .combine(settingsDataStore.excludeDividendIncomeFromReturnsFlow.distinctUntilChanged()) { settings, exclude ->
                 settings.copy(excludeDividendIncomeFromReturns = exclude)
             }
 
         return combine(
-            stockFlow,
-            transactionsFlow,
-            realtimeStockDataService.realtimeStockInfo,
-            holdingInfoSettingsFlow,
+            stockFlow.distinctUntilChanged(),
+            transactionsFlow.distinctUntilChanged(),
+            realtimeStockDataService.realtimeStockInfo
+                .map { it[stockCacheKey(normalizedMarket, stockCode)] }.distinctUntilChanged(),
+            holdingInfoSettingsFlow.distinctUntilChanged(),
             valuationClock
-        ) { stock, transactions, realTimeData, settings, currentDateMillis ->
+        ) { stock, transactions, realtime, settings, currentDateMillis ->
             val preDeductSellFees = settings.preDeductSellFees
             val returnRateMode = settings.returnRateMode
             val marginDayCount = settings.marginDayCount
             val feeSettingsByAccount = settings.feeSettingsByAccount
             stock?.let {
-                val realtimeKey = it.toStockKey().cacheKey()
-                val realtime = realTimeData[realtimeKey]
-                val currentPrice = realTimeData[realtimeKey]?.currentPrice ?: 0.0
-                val dailyChange = realTimeData[realtimeKey]?.change ?: 0.0
-                val dailyChangePercentage = realTimeData[realtimeKey]?.changePercent ?: 0.0
+                val currentPrice = realtime?.currentPrice ?: 0.0
+                val dailyChange = realtime?.change ?: 0.0
+                val dailyChangePercentage = realtime?.changePercent ?: 0.0
                 val limitState = realtime?.limitState ?: LimitState.NONE
-                calculateHoldingInfo(
+                calculateHoldingInfo(HoldingCalculationInputs(
                     stock = it,
                     transactions = transactions,
                     currentPrice = currentPrice,
@@ -310,7 +310,7 @@ class OfflineStockRepository(
                     currentDateMillis = currentDateMillis,
                     marginDayCount = marginDayCount,
                     excludeDividendIncomeFromReturns = settings.excludeDividendIncomeFromReturns
-                )
+                ))
             }
         }.flowOn(Dispatchers.Default)
     }
@@ -334,22 +334,10 @@ class OfflineStockRepository(
         }
     }
 
-    private fun calculateHoldingInfo(
-        stock: Stock,
-        transactions: List<StockTransaction>,
-        currentPrice: Double,
-        dailyChange: Double,
-        dailyChangePercentage: Double,
-        limitState: LimitState,
-        preDeductSellFees: Boolean,
-        feeSettingsByAccount: Map<Int, AccountFeeSettings>,
-        sharedFeeSettings: AccountFeeSettings,
-        returnRateMode: ReturnRateMode,
-        currentDateMillis: Long,
-        marginDayCount: Int,
-        includeProfitLossBreakdown: Boolean = false,
-        excludeDividendIncomeFromReturns: Boolean = false
-    ): HoldingInfo {
+    private fun calculateHoldingInfo(inputs: HoldingCalculationInputs): HoldingInfo {
+        val (stock, transactions, currentPrice, dailyChange, dailyChangePercentage, limitState,
+            preDeductSellFees, feeSettingsByAccount, sharedFeeSettings, returnRateMode,
+            currentDateMillis, marginDayCount, includeProfitLossBreakdown, excludeDividendIncomeFromReturns) = inputs
         val effectiveTransactions = HoldingCalculationSupport.transactionsAtOrBefore(
             transactions,
             currentDateMillis
@@ -609,3 +597,10 @@ class OfflineStockRepository(
         return cashFlows
     }
 }
+
+internal fun Flow<List<StockTransaction>>.orderedTransactionsByStock(): Flow<Map<String, List<StockTransaction>>> =
+    distinctUntilChanged().map { transactions ->
+        transactions.groupBy { it.toStockKey().cacheKey() }.mapValues { (_, rows) ->
+            rows.sortedWith(compareBy<StockTransaction> { it.date }.thenBy { it.recordTime }.thenBy { it.id })
+        }
+    }.flowOn(Dispatchers.Default)

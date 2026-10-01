@@ -1,5 +1,15 @@
 package com.rsps1008.stockify.ui.screens
 
+import android.content.ActivityNotFoundException
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalContext
+import com.rsps1008.stockify.data.AssetBalanceBackupCodec
+import com.rsps1008.stockify.data.formatAssetInputAmount
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -119,7 +129,27 @@ fun AssetOverviewScreen(navController: NavController) {
         )
     )
     val uiState by viewModel.uiState.collectAsState()
-    var chartMode by remember { mutableStateOf(AssetChartMode.CATEGORY) }
+    val isBusy by viewModel.isBusy.collectAsState()
+    val message by viewModel.message.collectAsState()
+    val restorePreview by viewModel.restorePreview.collectAsState()
+    val context = LocalContext.current
+    val resolver = context.contentResolver
+    var filePickerPending by rememberSaveable { mutableStateOf(false) }
+    val backupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) {
+        filePickerPending = false
+        it?.let { uri -> viewModel.exportBackup(resolver, uri) }
+    }
+    val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {
+        filePickerPending = false
+        it?.let { uri -> viewModel.previewRestore(resolver, uri) }
+    }
+    LaunchedEffect(message) {
+        message?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.clearMessage()
+        }
+    }
+    var chartMode by rememberSaveable { mutableStateOf(AssetChartMode.CATEGORY) }
     var editingDeposit by remember { mutableStateOf<BankDeposit?>(null) }
     var isEditorVisible by remember { mutableStateOf(false) }
     var deletingDeposit by remember { mutableStateOf<BankDeposit?>(null) }
@@ -151,6 +181,29 @@ fun AssetOverviewScreen(navController: NavController) {
             contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp)
         ) {
             item {
+                AssetBalanceBackupCard(
+                    isBusy = isBusy || filePickerPending,
+                    onBackup = {
+                        filePickerPending = true
+                        try {
+                            backupLauncher.launch(AssetBalanceBackupCodec.FILE_NAME)
+                        } catch (_: ActivityNotFoundException) {
+                            filePickerPending = false
+                            viewModel.exportBackupToDownloads(resolver)
+                        }
+                    },
+                    onRestore = {
+                        filePickerPending = true
+                        try {
+                            restoreLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
+                        } catch (_: ActivityNotFoundException) {
+                            filePickerPending = false
+                            viewModel.showMessage("請先安裝或啟用系統檔案選擇器，再選擇存款與貸款備份檔")
+                        }
+                    }
+                )
+            }
+            item {
                 AssetSummaryCard(
                     uiState = uiState,
                     chartMode = chartMode,
@@ -160,6 +213,7 @@ fun AssetOverviewScreen(navController: NavController) {
             item {
                 BankDepositSection(
                     deposits = uiState.bankDeposits,
+                    enabled = !isBusy,
                     onAdd = {
                         editingDeposit = null
                         isEditorVisible = true
@@ -174,6 +228,7 @@ fun AssetOverviewScreen(navController: NavController) {
             item {
                 LoanSection(
                     loans = uiState.loans,
+                    enabled = !isBusy,
                     onAdd = {
                         editingLoan = null
                         isLoanEditorVisible = true
@@ -188,13 +243,17 @@ fun AssetOverviewScreen(navController: NavController) {
         }
     }
 
+    restorePreview?.let { preview ->
+        AssetBalanceRestoreDialog(preview, isBusy, viewModel::confirmRestore, viewModel::dismissRestore)
+    }
+
     if (isEditorVisible) {
         BankDepositEditorDialog(
             deposit = editingDeposit,
+            isSaving = isBusy,
             onDismiss = { isEditorVisible = false },
             onSave = { id, name, amount ->
-                viewModel.saveBankDeposit(id, name, amount)
-                isEditorVisible = false
+                viewModel.saveBankDeposit(id, name, amount) { isEditorVisible = false }
             }
         )
     }
@@ -225,10 +284,10 @@ fun AssetOverviewScreen(navController: NavController) {
     if (isLoanEditorVisible) {
         LoanEditorDialog(
             loan = editingLoan,
+            isSaving = isBusy,
             onDismiss = { isLoanEditorVisible = false },
             onSave = { id, name, amount ->
-                viewModel.saveLoan(id, name, amount)
-                isLoanEditorVisible = false
+                viewModel.saveLoan(id, name, amount) { isLoanEditorVisible = false }
             }
         )
     }
@@ -263,7 +322,7 @@ private fun AssetSummaryCard(
     chartMode: AssetChartMode,
     onChartModeChange: (AssetChartMode) -> Unit
 ) {
-    val slices = buildAssetSlices(uiState, chartMode)
+    val slices = remember(uiState, chartMode) { buildAssetSlices(uiState, chartMode) }
     val chartTotal = slices.sumOf { abs(it.value) }
     var selectedSliceId by remember { mutableStateOf<String?>(null) }
     val selectedSlice = slices.firstOrNull { it.id == selectedSliceId }
@@ -625,6 +684,7 @@ private fun AssetLegendRow(
 @Composable
 private fun BankDepositSection(
     deposits: List<BankDeposit>,
+    enabled: Boolean,
     onAdd: () -> Unit,
     onEdit: (BankDeposit) -> Unit,
     onDelete: (BankDeposit) -> Unit
@@ -656,10 +716,10 @@ private fun BankDepositSection(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        IconButton(onClick = { onEdit(deposit) }) {
+                        IconButton(onClick = { onEdit(deposit) }, enabled = enabled) {
                             Icon(Icons.Filled.Edit, contentDescription = "編輯 ${deposit.name}")
                         }
-                        IconButton(onClick = { onDelete(deposit) }) {
+                        IconButton(onClick = { onDelete(deposit) }, enabled = enabled) {
                             Icon(Icons.Filled.Delete, contentDescription = "刪除 ${deposit.name}")
                         }
                     }
@@ -669,6 +729,7 @@ private fun BankDepositSection(
             Spacer(modifier = Modifier.height(8.dp))
             Button(
                 onClick = onAdd,
+                enabled = enabled,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("新增存款")
@@ -678,24 +739,26 @@ private fun BankDepositSection(
 }
 
 @Composable
-private fun BankDepositEditorDialog(
+internal fun BankDepositEditorDialog(
     deposit: BankDeposit?,
+    isSaving: Boolean = false,
     onDismiss: () -> Unit,
     onSave: (Long?, String, Double) -> Unit
 ) {
-    var name by remember(deposit?.id) { mutableStateOf(deposit?.name ?: "") }
-    var amountText by remember(deposit?.id) {
-        mutableStateOf(deposit?.amount?.let(::formatInputAmount) ?: "0")
+    var name by rememberSaveable(deposit?.id) { mutableStateOf(deposit?.name ?: "") }
+    var amountText by rememberSaveable(deposit?.id) {
+        mutableStateOf(deposit?.amount?.let(::formatAssetInputAmount) ?: "")
     }
     var errorMessage by remember(deposit?.id) { mutableStateOf<String?>(null) }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSaving) onDismiss() },
         title = { Text(if (deposit == null) "新增存款" else "編輯存款") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = name,
+                    enabled = !isSaving,
                     onValueChange = {
                         name = it
                         errorMessage = null
@@ -707,6 +770,7 @@ private fun BankDepositEditorDialog(
                 )
                 OutlinedTextField(
                     value = amountText,
+                    enabled = !isSaving,
                     onValueChange = {
                         amountText = it
                         errorMessage = null
@@ -723,6 +787,7 @@ private fun BankDepositEditorDialog(
         },
         confirmButton = {
             TextButton(
+                enabled = !isSaving,
                 onClick = {
                     val amount = amountText.trim().toDoubleOrNull()
                     errorMessage = when {
@@ -740,7 +805,7 @@ private fun BankDepositEditorDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, enabled = !isSaving) {
                 Text("取消")
             }
         }
@@ -750,6 +815,7 @@ private fun BankDepositEditorDialog(
 @Composable
 private fun LoanSection(
     loans: List<Loan>,
+    enabled: Boolean,
     onAdd: () -> Unit,
     onEdit: (Loan) -> Unit,
     onDelete: (Loan) -> Unit
@@ -781,10 +847,10 @@ private fun LoanSection(
                                 color = MaterialTheme.colorScheme.error
                             )
                         }
-                        IconButton(onClick = { onEdit(loan) }) {
+                        IconButton(onClick = { onEdit(loan) }, enabled = enabled) {
                             Icon(Icons.Filled.Edit, contentDescription = "編輯 ${loan.name}")
                         }
-                        IconButton(onClick = { onDelete(loan) }) {
+                        IconButton(onClick = { onDelete(loan) }, enabled = enabled) {
                             Icon(Icons.Filled.Delete, contentDescription = "刪除 ${loan.name}")
                         }
                     }
@@ -794,6 +860,7 @@ private fun LoanSection(
             Spacer(modifier = Modifier.height(8.dp))
             Button(
                 onClick = onAdd,
+                enabled = enabled,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("新增貸款")
@@ -803,24 +870,26 @@ private fun LoanSection(
 }
 
 @Composable
-private fun LoanEditorDialog(
+internal fun LoanEditorDialog(
     loan: Loan?,
+    isSaving: Boolean = false,
     onDismiss: () -> Unit,
     onSave: (Long?, String, Double) -> Unit
 ) {
-    var name by remember(loan?.id) { mutableStateOf(loan?.name ?: "") }
-    var amountText by remember(loan?.id) {
-        mutableStateOf(loan?.amount?.let(::formatInputAmount) ?: "0")
+    var name by rememberSaveable(loan?.id) { mutableStateOf(loan?.name ?: "") }
+    var amountText by rememberSaveable(loan?.id) {
+        mutableStateOf(loan?.amount?.let(::formatAssetInputAmount) ?: "")
     }
     var errorMessage by remember(loan?.id) { mutableStateOf<String?>(null) }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSaving) onDismiss() },
         title = { Text(if (loan == null) "新增貸款" else "編輯貸款") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = name,
+                    enabled = !isSaving,
                     onValueChange = {
                         name = it
                         errorMessage = null
@@ -832,6 +901,7 @@ private fun LoanEditorDialog(
                 )
                 OutlinedTextField(
                     value = amountText,
+                    enabled = !isSaving,
                     onValueChange = {
                         amountText = it
                         errorMessage = null
@@ -848,6 +918,7 @@ private fun LoanEditorDialog(
         },
         confirmButton = {
             TextButton(
+                enabled = !isSaving,
                 onClick = {
                     val amount = amountText.trim().toDoubleOrNull()
                     errorMessage = when {
@@ -865,7 +936,7 @@ private fun LoanEditorDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, enabled = !isSaving) {
                 Text("取消")
             }
         }
@@ -971,8 +1042,6 @@ private fun individualAssetColor(index: Int): Color {
     val lightness = 0.50f + (fallbackIndex % 4) * 0.04f
     return Color.hsl(hue, saturation, lightness)
 }
-
-private fun formatInputAmount(value: Double): String = String.format(Locale.US, "%.0f", value)
 
 private fun formatPercentage(value: Double, total: Double): String {
     val percentage = if (total > 0.0) value / total * 100.0 else 0.0

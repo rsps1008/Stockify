@@ -13,6 +13,8 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.rsps1008.stockify.data.dividend.DividendInfoCacheEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
@@ -393,6 +395,17 @@ class SettingsDataStore private constructor(
                 ?: emptyList()
         }
 
+    // Read both lists from the same preferences snapshot so a restore never exposes mixed balances.
+    val assetBalancesFlow: Flow<AssetBalances> = dataStoreInstance.data
+        .map { it[bankDepositsKey] to it[loansKey] }
+        .distinctUntilChanged()
+        .map { (deposits, loans) ->
+            AssetBalances(
+                deposits?.let { runCatching { Json.decodeFromString<List<BankDeposit>>(it) }.getOrDefault(emptyList()) }.orEmpty(),
+                loans?.let { runCatching { Json.decodeFromString<List<Loan>>(it) }.getOrDefault(emptyList()) }.orEmpty()
+            )
+        }.flowOn(Dispatchers.Default)
+
     val appLockEnabledFlow: Flow<Boolean> = dataStoreInstance.data
         .map { preferences ->
             preferences[appLockEnabledKey] == true &&
@@ -716,6 +729,36 @@ class SettingsDataStore private constructor(
     suspend fun setLoans(loans: List<Loan>) {
         dataStoreInstance.edit {
             it[loansKey] = Json.encodeToString(loans)
+        }
+    }
+
+    suspend fun replaceAssetBalances(balances: AssetBalances) {
+        AssetBalanceBackupCodec.validate(balances)
+        dataStoreInstance.edit {
+            it[bankDepositsKey] = Json.encodeToString(balances.bankDeposits)
+            it[loansKey] = Json.encodeToString(balances.loans)
+        }
+    }
+
+    suspend fun readAssetBalancesForBackup(): AssetBalances {
+        val preferences = dataStoreInstance.data.first()
+        // Export must fail on damaged data rather than create a seemingly valid empty backup.
+        return AssetBalances(
+            preferences[bankDepositsKey]?.let { Json.decodeFromString<List<BankDeposit>>(it) }.orEmpty(),
+            preferences[loansKey]?.let { Json.decodeFromString<List<Loan>>(it) }.orEmpty()
+        )
+    }
+
+    suspend fun updateAssetBalances(transform: (AssetBalances) -> AssetBalances) {
+        dataStoreInstance.edit { preferences ->
+            val current = AssetBalances(
+                preferences[bankDepositsKey]?.let { Json.decodeFromString<List<BankDeposit>>(it) }.orEmpty(),
+                preferences[loansKey]?.let { Json.decodeFromString<List<Loan>>(it) }.orEmpty()
+            )
+            val updated = transform(current)
+            AssetBalanceBackupCodec.validate(updated)
+            preferences[bankDepositsKey] = Json.encodeToString(updated.bankDeposits)
+            preferences[loansKey] = Json.encodeToString(updated.loans)
         }
     }
 

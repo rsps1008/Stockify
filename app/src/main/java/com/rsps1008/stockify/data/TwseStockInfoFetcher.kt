@@ -73,7 +73,7 @@ class TwseStockInfoFetcher : StockInfoFetcher {
         if (normalized.isEmpty()) return emptyMap()
 
         return normalized.keys.toList()
-            .chunked(5)
+            .chunked(TWSE_QUOTE_BATCH_SIZE)
             .flatMap { chunk ->
                 fetchStockInfoBatch(chunk, normalized)
                     .entries
