@@ -10,7 +10,7 @@ class UpdateHighlightsDialogTest {
     @Test
     fun currentReleaseIsShownUntilUserDismissesIt() {
         assertTrue(shouldShowUpdateHighlights(UPDATE_HIGHLIGHTS_VERSION, null))
-        assertTrue(shouldShowUpdateHighlights(UPDATE_HIGHLIGHTS_VERSION, "1.6.7"))
+        assertTrue(shouldShowUpdateHighlights(UPDATE_HIGHLIGHTS_VERSION, "1.6.8"))
         assertFalse(
             shouldShowUpdateHighlights(
                 UPDATE_HIGHLIGHTS_VERSION,
@@ -21,6 +21,6 @@ class UpdateHighlightsDialogTest {
 
     @Test
     fun highlightsAreNotReusedForAnotherRelease() {
-        assertFalse(shouldShowUpdateHighlights("1.6.9", UPDATE_HIGHLIGHTS_VERSION))
+        assertFalse(shouldShowUpdateHighlights("1.7.0", UPDATE_HIGHLIGHTS_VERSION))
     }
 }

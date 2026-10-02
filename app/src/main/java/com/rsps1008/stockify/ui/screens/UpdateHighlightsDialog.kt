@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoGraph
-import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -23,7 +25,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
-internal const val UPDATE_HIGHLIGHTS_VERSION = "1.6.8"
+internal const val UPDATE_HIGHLIGHTS_VERSION = "1.6.9"
 
 internal fun shouldShowUpdateHighlights(
     currentVersion: String,
@@ -41,27 +43,27 @@ fun UpdateHighlightsDialog(
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "這次更新，損益更好懂",
+                    text = "這次更新，記帳更方便",
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "兩個新選項，讓畫面更貼近你的投資習慣。",
+                    text = "存款與貸款安心備份，交易紀錄更好找。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 UpdateHighlightCard(
-                    icon = Icons.Filled.AutoGraph,
-                    title = "已賣出、還持有，一眼分清楚",
-                    description = "部分賣出後，可將已落袋的損益分開顯示，不再和手上的部位混在一起。"
+                    icon = Icons.Filled.CloudUpload,
+                    title = "存款、貸款，也能安心備份",
+                    description = "在資產總覽最下方，可備份至檔案或 Google Drive；還原前先預覽，與持股備份分開管理。"
                 )
                 UpdateHighlightCard(
-                    icon = Icons.Filled.CardGiftcard,
-                    title = "想看純股價表現，也可以",
-                    description = "損益與報酬可選擇不計股息，方便專注查看買賣表現；原有股息紀錄仍會保留。"
+                    icon = Icons.Filled.Search,
+                    title = "交易紀錄，更快找到",
+                    description = "輸入股票代號、名稱、交易類型、筆記或日期，快速找出需要的紀錄。"
                 )
             }
         },
