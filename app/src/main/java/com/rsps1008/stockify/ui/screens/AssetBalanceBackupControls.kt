@@ -23,7 +23,12 @@ import com.rsps1008.stockify.data.AssetBalances
 import java.util.Locale
 
 @Composable
-internal fun AssetBalanceBackupCard(isBusy: Boolean, onBackup: () -> Unit, onRestore: () -> Unit) {
+internal fun AssetBalanceBackupCard(
+    isBusy: Boolean,
+    onBackup: () -> Unit,
+    onRestore: () -> Unit,
+    cloudControls: @Composable () -> Unit = {}
+) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("存款與貸款備份", style = MaterialTheme.typography.titleMedium)
@@ -41,12 +46,25 @@ internal fun AssetBalanceBackupCard(isBusy: Boolean, onBackup: () -> Unit, onRes
                     }
                 }
             }
+            cloudControls()
             if (isBusy) {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
                 Text("處理中…", style = MaterialTheme.typography.bodySmall)
             }
         }
     }
+}
+
+@Composable
+internal fun AssetBalanceCloudControls(
+    email: String?,
+    enabled: Boolean,
+    onBackup: () -> Unit,
+    onRestore: () -> Unit
+) {
+    Text(email?.let { "Google Drive：$it" } ?: "Google Drive（操作時登入）", style = MaterialTheme.typography.bodySmall)
+    OutlinedButton(onClick = onBackup, enabled = enabled, modifier = Modifier.fillMaxWidth()) { Text("備份至 Google Drive") }
+    OutlinedButton(onClick = onRestore, enabled = enabled, modifier = Modifier.fillMaxWidth()) { Text("從 Google Drive 還原") }
 }
 
 @Composable

@@ -20,6 +20,7 @@ import com.rsps1008.stockify.data.AssetBalances
 import com.rsps1008.stockify.data.BankDeposit
 import com.rsps1008.stockify.data.Loan
 import com.rsps1008.stockify.ui.screens.AssetBalanceBackupCard
+import com.rsps1008.stockify.ui.screens.AssetBalanceCloudControls
 import com.rsps1008.stockify.ui.screens.AssetBalanceRestoreDialog
 import com.rsps1008.stockify.ui.screens.BankDepositEditorDialog
 import com.rsps1008.stockify.ui.screens.LoanEditorDialog
@@ -64,10 +65,28 @@ class AssetBalanceUiInstrumentedTest {
 
     @Test
     fun busyBackupDisablesBothFileActions() {
-        compose.setContent { StockifyTheme { Surface { AssetBalanceBackupCard(true, {}, {}) } } }
+        compose.setContent { StockifyTheme { Surface { AssetBalanceBackupCard(true, {}, {}) {
+            AssetBalanceCloudControls("test@example.com", false, {}, {})
+        } } } }
         compose.onNodeWithText("備份到檔案").assertIsNotEnabled()
         compose.onNodeWithText("從檔案還原").assertIsNotEnabled()
         compose.onNodeWithText("處理中…").assertIsDisplayed()
+        compose.onNodeWithText("備份至 Google Drive").assertIsNotEnabled()
+        compose.onNodeWithText("從 Google Drive 還原").assertIsNotEnabled()
+    }
+
+    @Test
+    fun cloudBackupAndRestoreAreSeparateActions() {
+        var backups = 0
+        var restores = 0
+        compose.setContent { StockifyTheme { Surface { AssetBalanceBackupCard(false, {}, {}) {
+            AssetBalanceCloudControls(null, true, { backups++ }, { restores++ })
+        } } } }
+        compose.onNodeWithText("Google Drive（操作時登入）").assertIsDisplayed()
+        compose.onNodeWithText("備份至 Google Drive").performClick()
+        compose.runOnIdle { assertEquals(1, backups); assertEquals(0, restores) }
+        compose.onNodeWithText("從 Google Drive 還原").performClick()
+        compose.runOnIdle { assertEquals(1, backups); assertEquals(1, restores) }
     }
 
     @Test

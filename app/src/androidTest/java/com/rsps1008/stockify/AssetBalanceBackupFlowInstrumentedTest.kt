@@ -56,6 +56,29 @@ class AssetBalanceBackupFlowInstrumentedTest {
             assertEquals(original, AssetBalanceBackupCodec.decode(file.readText()))
 
             val replacement = AssetBalances(listOf(BankDeposit(9, "新存款", 999.99)), emptyList())
+            var uploaded: AssetBalances? = null
+            action {
+                model.backupToGoogleDrive { name, bytes, mime ->
+                    assertEquals("stockify_asset_balances.json", name)
+                    assertEquals("application/json", mime)
+                    uploaded = AssetBalanceBackupCodec.read(bytes.inputStream())
+                }
+            }
+            assertEquals(original, uploaded)
+            action { model.previewGoogleDriveRestore { replacement } }
+            assertEquals(replacement, model.restorePreview.value)
+            assertEquals(original, settings.assetBalancesFlow.first())
+            instrumentation.runOnMainSync { model.dismissRestore() }
+            assertNull(model.restorePreview.value)
+            action { model.previewGoogleDriveRestore { error("網路中斷") } }
+            assertNull(model.restorePreview.value)
+            assertTrue(model.message.value!!.contains("網路中斷"))
+            action { model.previewGoogleDriveRestore { AssetBalances(listOf(BankDeposit(1, "錯誤", Double.NaN))) } }
+            assertNull(model.restorePreview.value)
+            assertEquals(original, settings.assetBalancesFlow.first())
+            action { model.backupToGoogleDrive { _, _, _ -> error("上傳失敗") } }
+            assertTrue(model.message.value!!.contains("上傳失敗"))
+
             file.writeText(AssetBalanceBackupCodec.encode(replacement))
             action { model.previewRestore(resolver, Uri.fromFile(file)) }
             assertEquals(replacement, model.restorePreview.value)
@@ -64,7 +87,7 @@ class AssetBalanceBackupFlowInstrumentedTest {
             assertNull(model.restorePreview.value)
             assertEquals(original, settings.assetBalancesFlow.first())
 
-            action { model.previewRestore(resolver, Uri.fromFile(file)) }
+            action { model.previewGoogleDriveRestore { replacement } }
             action { model.confirmRestore(); model.confirmRestore() }
             assertNull(model.restorePreview.value)
             assertEquals("存款與貸款還原成功", model.message.value)

@@ -48,7 +48,7 @@ class GoogleDriveService(context: Context, account: GoogleSignInAccount) {
 
             // Check for existing file in the appDataFolder
             val fileList = drive.files().list()
-                .setQ("name='$fileName' and 'appDataFolder' in parents")
+                .setQ("name='$fileName' and 'appDataFolder' in parents and trashed = false")
                 .setSpaces("appDataFolder")
                 .setFields("files(id, name)")
                 .setOrderBy("modifiedTime desc")
@@ -96,6 +96,17 @@ class GoogleDriveService(context: Context, account: GoogleSignInAccount) {
 
     suspend fun restoreBackupIfPresent(fileName: String): Result<ByteArray?> =
         restoreBackupWithModifiedTimeIfPresent(fileName).map { it?.content }
+
+    suspend fun restoreAssetBalances(): AssetBalances = withContext(Dispatchers.IO) {
+        val files = drive.files().list()
+            .setQ("name='${AssetBalanceBackupCodec.FILE_NAME}' and 'appDataFolder' in parents and trashed = false")
+            .setSpaces("appDataFolder")
+            .setFields("files(id)")
+            .setOrderBy("modifiedTime desc")
+            .execute()
+        val file = files.files.firstOrNull() ?: error("Google Drive 尚無存款與貸款備份")
+        drive.files().get(file.id).executeMediaAsInputStream().use(AssetBalanceBackupCodec::read)
+    }
 
     suspend fun restoreBackupWithModifiedTimeIfPresent(
         fileName: String

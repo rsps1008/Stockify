@@ -134,6 +134,7 @@ fun AssetOverviewScreen(navController: NavController) {
     val restorePreview by viewModel.restorePreview.collectAsState()
     val context = LocalContext.current
     val resolver = context.contentResolver
+    val cloudActions = rememberAssetBalanceGoogleDriveActions(viewModel)
     var filePickerPending by rememberSaveable { mutableStateOf(false) }
     val backupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) {
         filePickerPending = false
@@ -181,29 +182,6 @@ fun AssetOverviewScreen(navController: NavController) {
             contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp)
         ) {
             item {
-                AssetBalanceBackupCard(
-                    isBusy = isBusy || filePickerPending,
-                    onBackup = {
-                        filePickerPending = true
-                        try {
-                            backupLauncher.launch(AssetBalanceBackupCodec.FILE_NAME)
-                        } catch (_: ActivityNotFoundException) {
-                            filePickerPending = false
-                            viewModel.exportBackupToDownloads(resolver)
-                        }
-                    },
-                    onRestore = {
-                        filePickerPending = true
-                        try {
-                            restoreLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
-                        } catch (_: ActivityNotFoundException) {
-                            filePickerPending = false
-                            viewModel.showMessage("請先安裝或啟用系統檔案選擇器，再選擇存款與貸款備份檔")
-                        }
-                    }
-                )
-            }
-            item {
                 AssetSummaryCard(
                     uiState = uiState,
                     chartMode = chartMode,
@@ -238,6 +216,37 @@ fun AssetOverviewScreen(navController: NavController) {
                         isLoanEditorVisible = true
                     },
                     onDelete = { loan -> deletingLoan = loan }
+                )
+            }
+            item {
+                AssetBalanceBackupCard(
+                    isBusy = isBusy || filePickerPending || cloudActions.signingIn,
+                    onBackup = {
+                        filePickerPending = true
+                        try {
+                            backupLauncher.launch(AssetBalanceBackupCodec.FILE_NAME)
+                        } catch (_: ActivityNotFoundException) {
+                            filePickerPending = false
+                            viewModel.exportBackupToDownloads(resolver)
+                        }
+                    },
+                    onRestore = {
+                        filePickerPending = true
+                        try {
+                            restoreLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
+                        } catch (_: ActivityNotFoundException) {
+                            filePickerPending = false
+                            viewModel.showMessage("請先安裝或啟用系統檔案選擇器，再選擇存款與貸款備份檔")
+                        }
+                    },
+                    cloudControls = {
+                        AssetBalanceCloudControls(
+                            email = cloudActions.email,
+                            enabled = !isBusy && !filePickerPending && !cloudActions.signingIn,
+                            onBackup = cloudActions.backup,
+                            onRestore = cloudActions.restore
+                        )
+                    }
                 )
             }
         }

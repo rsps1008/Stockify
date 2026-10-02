@@ -162,6 +162,20 @@ class AssetOverviewViewModel(
             ?: error("無法讀取備份檔案")
     }
 
+    fun backupToGoogleDrive(upload: suspend (String, ByteArray, String) -> Unit) =
+        performOperation("存款與貸款已備份至 Google Drive") {
+            val content = AssetBalanceBackupCodec.encode(settingsDataStore.readAssetBalancesForBackup())
+            upload(AssetBalanceBackupCodec.FILE_NAME, content.toByteArray(Charsets.UTF_8), "application/json")
+        }
+
+    fun previewGoogleDriveRestore(download: suspend () -> AssetBalances) = performOperation {
+        _restorePreview.value = null
+        // Validate even when the transport returns an already decoded value.
+        val balances = download()
+        AssetBalanceBackupCodec.encode(balances)
+        _restorePreview.value = balances
+    }
+
     fun confirmRestore() {
         val preview = _restorePreview.value ?: return
         performOperation("存款與貸款還原成功", onSuccess = { _restorePreview.value = null }) {
