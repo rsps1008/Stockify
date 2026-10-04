@@ -353,6 +353,8 @@ class HoldingsViewModel(
     private val _historyStateInternal = MutableStateFlow<HomeHistoryStateInternal>(HomeHistoryStateInternal.Idle)
     private val _selectedHomeHistoryRange = MutableStateFlow(HistoryRange.ONE_MONTH)
     val selectedHomeHistoryRange: StateFlow<HistoryRange> = _selectedHomeHistoryRange.asStateFlow()
+    private val _selectedPerformanceMonth = MutableStateFlow<String?>(null)
+    val selectedPerformanceMonth: StateFlow<String?> = _selectedPerformanceMonth.asStateFlow()
     private var fetchPortfolioHistoryJob: Job? = null
     private var homeHistoryRequestVersion = 0L
 
@@ -718,7 +720,7 @@ class HoldingsViewModel(
 
         fetchPortfolioHistoryJob?.cancel()
         val requestVersion = ++homeHistoryRequestVersion
-        _historyStateInternal.value = HomeHistoryStateInternal.Loading(0f, "準備載入歷史股價...")
+        _historyStateInternal.value = HomeHistoryStateInternal.Loading(0f, "正在載入歷史股價...")
         fetchPortfolioHistoryJob = viewModelScope.launch {
             val selectedStocks = historyStocks.value
             val portfolioKey = buildPortfolioKey(historyStocks.value, homeDisplayMode.value, activeAccountId.value)
@@ -827,6 +829,20 @@ class HoldingsViewModel(
                 }
             }
         }
+    }
+
+    /**
+     * The calendar needs the preceding trading point for the first day of a
+     * month, so it reuses the existing one-year portfolio history cache.
+     */
+    fun ensurePerformanceCalendarHistory() {
+        if (_selectedHomeHistoryRange.value != HistoryRange.ONE_YEAR) {
+            fetchPortfolioHistory(HistoryRange.ONE_YEAR)
+        }
+    }
+
+    fun selectPerformanceMonth(yearMonth: String) {
+        _selectedPerformanceMonth.value = yearMonth
     }
 
     private fun buildHomeHistorySuccess(

@@ -75,6 +75,7 @@ fun HistoryChartSection(
     val isExpanded by viewModel.homeHistoryChartExpanded.collectAsState()
     val displayMode by viewModel.homeDisplayMode.collectAsState()
     val selectedRange by viewModel.selectedHomeHistoryRange.collectAsState()
+    val selectedPerformanceMonth by viewModel.selectedPerformanceMonth.collectAsState()
     HistoryChartSectionContent(
         historyState = historyState,
         onRangeSelected = { viewModel.fetchPortfolioHistory(it) },
@@ -82,6 +83,10 @@ fun HistoryChartSection(
         onToggleExpanded = { viewModel.setHomeHistoryChartExpanded(it) },
         displayMode = displayMode,
         controlledSelectedRange = selectedRange,
+        showPerformanceCalendar = true,
+        selectedPerformanceMonth = selectedPerformanceMonth,
+        onEnsurePerformanceCalendarHistory = viewModel::ensurePerformanceCalendarHistory,
+        onPerformanceMonthSelected = viewModel::selectPerformanceMonth,
         modifier = modifier
     )
 }
@@ -94,11 +99,16 @@ fun HistoryChartSectionContent(
     onToggleExpanded: (Boolean) -> Unit,
     displayMode: String = HomeDisplayMode.TW,
     controlledSelectedRange: HistoryRange? = null,
+    showPerformanceCalendar: Boolean = false,
+    selectedPerformanceMonth: String? = null,
+    onEnsurePerformanceCalendarHistory: (() -> Unit)? = null,
+    onPerformanceMonthSelected: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var selectedRange by remember { mutableStateOf(HistoryRange.ONE_MONTH) }
     var selectedMetric by remember { mutableStateOf("報酬") }
     var rangeLoadRequested by remember { mutableStateOf(false) }
+    var selectedPresentation by rememberSaveable { mutableStateOf("報酬曲線") }
     val normalizedDisplayMode = HomeDisplayMode.normalize(displayMode)
     LaunchedEffect(controlledSelectedRange) {
         controlledSelectedRange?.let { range ->
@@ -128,7 +138,7 @@ fun HistoryChartSectionContent(
         when (historyState) {
             is HistoryState.Loading,
             is HistoryState.Error -> historyState
-            else -> HistoryState.Loading(0f, "準備載入歷史股價...")
+            else -> HistoryState.Loading(0f, "正在載入歷史股價...")
         }
     } else {
         historyState
@@ -174,28 +184,50 @@ fun HistoryChartSectionContent(
             }
 
             if (isExpanded) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(6.dp))
+
+                if (showPerformanceCalendar) {
+                    PresentationSelectorRow(
+                        selectedPresentation = selectedPresentation,
+                        onSelected = { presentation ->
+                            selectedPresentation = presentation
+                            if (presentation == "報酬日曆") {
+                                // When one-year data is already displayed, no
+                                // new state emission occurs. Do not leave the
+                                // UI in a synthetic Loading state in that case.
+                                val needsOneYearHistory = controlledSelectedRange != HistoryRange.ONE_YEAR
+                                rangeLoadRequested = needsOneYearHistory
+                                if (needsOneYearHistory) {
+                                    onEnsurePerformanceCalendarHistory?.invoke()
+                                }
+                            }
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
 
                 // Metric toggler and range selector
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    MetricSelectorRow(
-                        selectedMetric = selectedMetric,
-                        onMetricSelected = { selectedMetric = it }
-                    )
-                    
-                    RangeSelectorRow(
-                        selectedRange = selectedRange,
-                        onRangeSelected = { range ->
-                            selectedRange = range
-                            rangeLoadRequested = true
-                            onRangeSelected(range)
-                        },
-                        enabled = displayedHistoryState !is HistoryState.Loading
-                    )
+                if (selectedPresentation == "報酬曲線") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        MetricSelectorRow(
+                            selectedMetric = selectedMetric,
+                            onMetricSelected = { selectedMetric = it }
+                        )
+
+                        RangeSelectorRow(
+                            selectedRange = selectedRange,
+                            onRangeSelected = { range ->
+                                selectedRange = range
+                                rangeLoadRequested = true
+                                onRangeSelected(range)
+                            },
+                            enabled = displayedHistoryState !is HistoryState.Loading
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -230,7 +262,7 @@ fun HistoryChartSectionContent(
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
-                                    text = state.statusText,
+                                    text = if (selectedPresentation == "報酬日曆") "正在載入報酬日曆..." else state.statusText,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -250,7 +282,10 @@ fun HistoryChartSectionContent(
                                     color = MaterialTheme.colorScheme.error
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
-                                Button(onClick = { onRangeSelected(selectedRange) }) {
+                                Button(onClick = {
+                                    if (selectedPresentation == "報酬日曆") onEnsurePerformanceCalendarHistory?.invoke()
+                                    else onRangeSelected(selectedRange)
+                                }) {
                                     Text("重試")
                                 }
                             }
@@ -264,25 +299,71 @@ fun HistoryChartSectionContent(
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Text(
-                                    text = state.message,
+                                    text = if (selectedPresentation == "報酬日曆") "此月份沒有可用的投資資料" else state.message,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
-                                Button(onClick = { onRangeSelected(selectedRange) }) {
+                                Button(onClick = {
+                                    if (selectedPresentation == "報酬日曆") onEnsurePerformanceCalendarHistory?.invoke()
+                                    else onRangeSelected(selectedRange)
+                                }) {
                                     Text("重新載入")
                                 }
                             }
                         }
                         is HistoryState.Success -> {
-                            HistoricalChartContent(
-                                points = state.points,
-                                selectedMetric = selectedMetric,
-                                displayMode = crossfadeDisplayMode
-                            )
+                            if (selectedPresentation == "報酬日曆") {
+                                PerformanceCalendarSection(
+                                    points = state.points,
+                                    selectedYearMonth = selectedPerformanceMonth,
+                                    displayMode = crossfadeDisplayMode,
+                                    onYearMonthSelected = onPerformanceMonthSelected
+                                )
+                            } else {
+                                HistoricalChartContent(
+                                    points = state.points,
+                                    selectedMetric = selectedMetric,
+                                    displayMode = crossfadeDisplayMode
+                                )
+                            }
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PresentationSelectorRow(
+    selectedPresentation: String,
+    onSelected: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .padding(3.dp)
+    ) {
+        listOf("報酬曲線", "報酬日曆").forEach { item ->
+            val selected = item == selectedPresentation
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (selected) MaterialTheme.colorScheme.secondary else Color.Transparent)
+                    .clickable { onSelected(item) }
+                    .padding(vertical = 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = item,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (selected) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

@@ -7,8 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -25,7 +24,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
-internal const val UPDATE_HIGHLIGHTS_VERSION = "1.6.9"
+internal const val UPDATE_HIGHLIGHTS_VERSION = "1.7.0"
 
 internal fun shouldShowUpdateHighlights(
     currentVersion: String,
@@ -43,11 +42,12 @@ fun UpdateHighlightsDialog(
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "這次更新，記帳更方便",
+                    text = "這次更新，投資表現更清楚",
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "存款與貸款安心備份，交易紀錄更好找。",
+                    text = "新增報酬日曆，投資表現一眼看懂。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -56,14 +56,9 @@ fun UpdateHighlightsDialog(
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 UpdateHighlightCard(
-                    icon = Icons.Filled.CloudUpload,
-                    title = "存款、貸款，也能安心備份",
-                    description = "在資產總覽最下方，可備份至檔案或 Google Drive；還原前先預覽，與持股備份分開管理。"
-                )
-                UpdateHighlightCard(
-                    icon = Icons.Filled.Search,
-                    title = "交易紀錄，更快找到",
-                    description = "輸入股票代號、名稱、交易類型、筆記或日期，快速找出需要的紀錄。"
+                    icon = Icons.Filled.ShowChart,
+                    title = "每天的賺賠，一看就懂",
+                    description = "用月曆回顧每天的賺賠與報酬，投資表現更清楚。"
                 )
             }
         },
