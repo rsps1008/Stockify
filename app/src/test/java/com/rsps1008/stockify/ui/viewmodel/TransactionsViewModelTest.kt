@@ -79,6 +79,37 @@ class TransactionsViewModelTest {
     }
 
     @Test
+    fun dateSectionsKeepIncomeAndExpenseTotalsSeparateByMarketAndSearchResult() {
+        val snapshot = TransactionListSnapshot(
+            stocks = listOf(
+                Stock(name = "台積電", code = "2330", market = "TW"),
+                Stock(name = "Apple", code = "AAPL", market = "US")
+            ),
+            transactions = listOf(
+                StockTransaction(id = 1, stockCode = "2330", market = "TW", accountId = 1, date = 0L, recordTime = 1L, type = "買進", expense = 1_000.0),
+                StockTransaction(id = 2, stockCode = "2330", market = "TW", accountId = 1, date = 0L, recordTime = 2L, type = "賣出", income = 1_500.0),
+                StockTransaction(id = 3, stockCode = "AAPL", market = "US", accountId = 1, date = 0L, recordTime = 3L, type = "配息", income = 12.5)
+            ),
+            accountId = 1
+        )
+
+        val section = buildTransactionDateSections(snapshot, 1, Locale.US, TimeZone.getTimeZone("UTC")).single()
+        assertEquals(
+            listOf(
+                TransactionDateCashFlowTotal("TW", income = 1_500.0, expense = 1_000.0),
+                TransactionDateCashFlowTotal("US", income = 12.5, expense = 0.0)
+            ),
+            section.cashFlowTotals
+        )
+
+        val searchedSection = filterTransactionDateSections(listOf(section), "aapl").single()
+        assertEquals(
+            listOf(TransactionDateCashFlowTotal("US", income = 12.5, expense = 0.0)),
+            searchedSection.cashFlowTotals
+        )
+    }
+
+    @Test
     fun searchMatchesCodeNameTypeNoteAndDateWithoutChangingOrder() {
         val sections = buildTransactionDateSections(searchSnapshot(), 1, Locale.US, TimeZone.getTimeZone("UTC"))
         fun ids(query: String) = filterTransactionDateSections(sections, query)

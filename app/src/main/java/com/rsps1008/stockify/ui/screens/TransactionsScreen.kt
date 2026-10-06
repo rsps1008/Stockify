@@ -45,6 +45,7 @@ import com.rsps1008.stockify.R
 import com.rsps1008.stockify.StockifyApplication
 import com.rsps1008.stockify.ui.navigation.Screen
 import com.rsps1008.stockify.ui.theme.StockifyAppTheme
+import com.rsps1008.stockify.ui.viewmodel.TransactionDateCashFlowTotal
 import com.rsps1008.stockify.ui.viewmodel.TransactionsViewModel
 import com.rsps1008.stockify.ui.viewmodel.TransactionsUiState
 import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
@@ -199,14 +200,20 @@ private fun TransactionsBody(
                     }
                     uiState.sections.forEach { section ->
                         item(key = "date:${section.date}", contentType = "date") {
-                            Text(
-                                text = section.date,
-                                style = MaterialTheme.typography.titleMedium,
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .background(MaterialTheme.colorScheme.surfaceVariant)
-                                    .padding(horizontal = 8.dp, vertical = 8.dp)
-                            )
+                                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = section.date,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                DailyCashFlowTotals(section.cashFlowTotals)
+                            }
                         }
                         items(
                             items = section.transactions,
@@ -221,6 +228,31 @@ private fun TransactionsBody(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DailyCashFlowTotals(totals: List<TransactionDateCashFlowTotal>) {
+    if (totals.isEmpty()) return
+
+    Column(horizontalAlignment = Alignment.End) {
+        totals.forEach { total ->
+            val currencyPrefix = if (total.market == "US") "\$" else ""
+            val summary = buildList {
+                if (total.income > 0.0) {
+                    add("收入: $currencyPrefix${formatMarketAmount(total.income, total.market)}")
+                }
+                if (total.expense > 0.0) {
+                    add("支出: $currencyPrefix${formatMarketAmount(total.expense, total.market)}")
+                }
+            }.joinToString("　")
+            Text(
+                text = summary,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.End
+            )
         }
     }
 }

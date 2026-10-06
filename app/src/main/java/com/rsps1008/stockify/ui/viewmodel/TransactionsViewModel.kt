@@ -5,10 +5,12 @@ import androidx.lifecycle.viewModelScope
 import com.rsps1008.stockify.data.Account
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.data.StockDao
+import com.rsps1008.stockify.data.StockMarket
 import com.rsps1008.stockify.data.toStockKey
 import com.rsps1008.stockify.data.TransactionListRepository
 import com.rsps1008.stockify.data.TransactionListSnapshot
 import com.rsps1008.stockify.ui.screens.TransactionUiState
+import com.rsps1008.stockify.ui.screens.transactionCashFlowAmount
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -26,7 +28,14 @@ import kotlinx.coroutines.launch
 
 data class TransactionDateSection(
     val date: String,
-    val transactions: List<TransactionUiState>
+    val transactions: List<TransactionUiState>,
+    val cashFlowTotals: List<TransactionDateCashFlowTotal> = emptyList()
+)
+
+data class TransactionDateCashFlowTotal(
+    val market: String,
+    val income: Double,
+    val expense: Double
 )
 
 data class TransactionsUiState(
@@ -65,8 +74,33 @@ internal fun buildTransactionDateSections(
                 dateFormatter.format(Date(it.transaction.date))
             }
         }
-        .map { (date, transactions) -> TransactionDateSection(date, transactions) }
+        .map { (date, transactions) ->
+            TransactionDateSection(
+                date = date,
+                transactions = transactions,
+                cashFlowTotals = transactions.cashFlowTotals()
+            )
+        }
 }
+
+private fun List<TransactionUiState>.cashFlowTotals(): List<TransactionDateCashFlowTotal> =
+    asSequence()
+        .mapNotNull { row ->
+            transactionCashFlowAmount(row.transaction)
+                ?.takeIf { kotlin.math.abs(it) >= 1e-6 }
+                ?.let { amount -> StockMarket.normalize(row.market) to amount }
+        }
+        .groupBy({ it.first }, { it.second })
+        .entries
+        .sortedBy { (market, _) -> if (market == StockMarket.TW) 0 else 1 }
+        .map { (market, amounts) ->
+            val expenses = amounts.filter { it < 0.0 }.sum()
+            TransactionDateCashFlowTotal(
+                market = market,
+                income = amounts.filter { it > 0.0 }.sum(),
+                expense = if (expenses == 0.0) 0.0 else -expenses
+            )
+        }
 
 internal fun filterTransactionDateSections(
     sections: List<TransactionDateSection>,
@@ -85,7 +119,14 @@ internal fun filterTransactionDateSections(
                     section.date.contains(term, ignoreCase = true)
             }
         }
-        if (matches.isEmpty()) null else section.copy(transactions = matches)
+        if (matches.isEmpty()) {
+            null
+        } else {
+            section.copy(
+                transactions = matches,
+                cashFlowTotals = matches.cashFlowTotals()
+            )
+        }
     }
 }
 

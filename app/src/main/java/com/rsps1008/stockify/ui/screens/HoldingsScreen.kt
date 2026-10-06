@@ -1323,7 +1323,7 @@ fun HoldingCard(
                         minTextSize = 11f
                     )
 
-                    Text(text = "持股 ${formatShareCount(holding.shares)}股", style = MaterialTheme.typography.bodySmall)
+                    Text(text = "${formatShareCount(holding.shares)}股", style = MaterialTheme.typography.bodySmall)
                     if (holding.shortOutstandingShares > 1e-6) {
                         Text(
                             text = "融券尚欠 ${formatShareCount(holding.shortOutstandingShares)}股",
