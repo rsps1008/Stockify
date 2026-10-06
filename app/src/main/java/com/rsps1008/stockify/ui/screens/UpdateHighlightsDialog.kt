@@ -29,8 +29,21 @@ internal const val UPDATE_HIGHLIGHTS_VERSION = "1.7.0"
 internal fun shouldShowUpdateHighlights(
     currentVersion: String,
     lastShownVersion: String?
-): Boolean = currentVersion == UPDATE_HIGHLIGHTS_VERSION &&
+): Boolean = currentVersion.isAtLeastVersion(UPDATE_HIGHLIGHTS_VERSION) &&
         lastShownVersion != UPDATE_HIGHLIGHTS_VERSION
+
+private fun String.isAtLeastVersion(requiredVersion: String): Boolean {
+    val currentParts = split('.').map { it.toIntOrNull() ?: return false }
+    val requiredParts = requiredVersion.split('.').map { it.toIntOrNull() ?: return false }
+    val partCount = maxOf(currentParts.size, requiredParts.size)
+
+    for (index in 0 until partCount) {
+        val currentPart = currentParts.getOrElse(index) { 0 }
+        val requiredPart = requiredParts.getOrElse(index) { 0 }
+        if (currentPart != requiredPart) return currentPart > requiredPart
+    }
+    return true
+}
 
 @Composable
 fun UpdateHighlightsDialog(

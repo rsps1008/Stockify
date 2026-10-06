@@ -8,7 +8,7 @@ import org.junit.Test
 
 class UpdateHighlightsDialogTest {
     @Test
-    fun currentReleaseIsShownUntilUserDismissesIt() {
+    fun highlightIsShownUntilUserDismissesIt() {
         assertTrue(shouldShowUpdateHighlights(UPDATE_HIGHLIGHTS_VERSION, null))
         assertTrue(shouldShowUpdateHighlights(UPDATE_HIGHLIGHTS_VERSION, "1.6.9"))
         assertFalse(
@@ -20,7 +20,10 @@ class UpdateHighlightsDialogTest {
     }
 
     @Test
-    fun highlightsAreNotReusedForAnotherRelease() {
+    fun laterReleaseShowsMissedHighlightButNotDismissedHighlight() {
+        assertTrue(shouldShowUpdateHighlights("1.7.1", null))
+        assertTrue(shouldShowUpdateHighlights("1.7.1", "1.6.9"))
         assertFalse(shouldShowUpdateHighlights("1.7.1", UPDATE_HIGHLIGHTS_VERSION))
+        assertFalse(shouldShowUpdateHighlights("1.6.9", null))
     }
 }
