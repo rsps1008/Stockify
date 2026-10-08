@@ -1,6 +1,5 @@
 package com.rsps1008.stockify.data
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
 import android.os.Handler
@@ -41,7 +40,6 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
 import com.rsps1008.stockify.data.StockMarket
 
 internal fun mergeRealtimeStockInfoMaps(
@@ -131,24 +129,44 @@ class RealtimeStockDataService(
 
     private val holidayCache = TaiwanHolidayCache(
         loadYear = { year ->
-            val response = runCatching {
-                applicationContext.assets.open("taiwan_calendar/$year.json")
-                    .bufferedReader().use { it.readText() }
-            }.getOrNull() ?: client.get(
-                "https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/$year.json"
+            val source = "https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/$year.json"
+            val response = client.get(
+                source
             ).body<String>()
             val items = Json.decodeFromString<List<TaiwanHolidayItem>>(response)
-            require(items.map { it.date }.distinct().size == items.size) { "Duplicate Taiwan calendar dates" }
-            items.associate {
-                LocalDate.parse(it.date, DateTimeFormatter.BASIC_ISO_DATE) to it.isHoliday
-            }.also { calendar ->
-                require(calendar.isNotEmpty() && calendar.keys.all { it.year == year }) {
-                    "Taiwan calendar is empty or contains another year"
-                }
-            }
+            val calendar = parseTaiwanHolidayItems(year, items)
+            TaiwanHolidayCalendarSnapshot(
+                year = year,
+                calendarVersion = 0,
+                updatedAtEpochMillis = System.currentTimeMillis(),
+                holidays = calendar.mapKeys { (date, _) -> date.toString() },
+                source = source
+            )
         },
         readSavedYear = settingsDataStore::getTaiwanHolidayCalendar,
-        saveYear = settingsDataStore::setTaiwanHolidayCalendar
+        saveYear = settingsDataStore::setTaiwanHolidayCalendar,
+        loadBundledYear = { year ->
+            val raw = try {
+                applicationContext.assets.open("taiwan_calendar/$year.json")
+                    .bufferedReader().use { it.readText() }
+            } catch (_: java.io.FileNotFoundException) {
+                null
+            }
+            raw?.let {
+                val asset = Json.decodeFromString<TaiwanHolidayCalendarAsset>(it)
+                require(asset.calendarVersion > 0 && asset.source.isNotBlank()) {
+                    "Bundled Taiwan calendar metadata is invalid"
+                }
+                val calendar = parseTaiwanHolidayItems(year, asset.items)
+                TaiwanHolidayCalendarSnapshot(
+                    year = year,
+                    calendarVersion = asset.calendarVersion,
+                    updatedAtEpochMillis = System.currentTimeMillis(),
+                    holidays = calendar.mapKeys { (date, _) -> date.toString() },
+                    source = asset.source
+                )
+            }
+        }
     )
 
     init {
@@ -580,15 +598,6 @@ class RealtimeStockDataService(
 
         taiwanWeightedIndexService.refreshOnce(preferredStockDataSource.value)
     }
-
-    @SuppressLint("UnsafeOptInUsageError")
-    @kotlinx.serialization.Serializable
-    data class TaiwanHolidayItem(
-        val date: String,
-        val week: String,
-        val isHoliday: Boolean,
-        val description: String
-    )
 
     private fun delayUntilNextAlignedFetch(intervalSeconds: Int): Long {
         if (intervalSeconds <= 0) return 0L

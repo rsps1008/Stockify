@@ -116,21 +116,28 @@ class SettingsDataStore private constructor(
     private val appLockBiometricEnabledKey = booleanPreferencesKey("app_lock_biometric_enabled")
     private val lastUpdateHighlightsVersionKey = stringPreferencesKey("last_update_highlights_version")
 
-    suspend fun getTaiwanHolidayCalendar(year: Int): Map<LocalDate, Boolean>? {
+    internal suspend fun getTaiwanHolidayCalendar(year: Int): TaiwanHolidayCalendarSnapshot? {
         val key = stringPreferencesKey("taiwan_holiday_calendar_$year")
         val raw = dataStoreInstance.data.first()[key] ?: return null
-        val encoded = runCatching { json.decodeFromString<Map<String, Boolean>>(raw) }.getOrNull() ?: return null
-        val decoded = encoded.mapNotNull { (date, isHoliday) ->
-            runCatching { LocalDate.parse(date) }.getOrNull()?.let { it to isHoliday }
+        val snapshot = runCatching { json.decodeFromString<TaiwanHolidayCalendarSnapshot>(raw) }.getOrNull()
+            ?.takeIf { it.year == year && it.toDateMap() != null }
+        if (snapshot != null) return snapshot
+
+        // Accept the earlier map-only cache format as version 0, then rewrite it when a newer
+        // bundled calendar is available.
+        val legacy = runCatching { json.decodeFromString<Map<String, Boolean>>(raw) }.getOrNull() ?: return null
+        val dates = legacy.mapNotNull { (date, isHoliday) ->
+            runCatching { LocalDate.parse(date) }.getOrNull()?.takeIf { it.year == year }
+                ?.let { it.toString() to isHoliday }
         }.toMap()
-        return decoded.takeIf { it.size == encoded.size && it.keys.all { date -> date.year == year } }
+        return TaiwanHolidayCalendarSnapshot(year, 0, 0L, dates, "legacy")
+            .takeIf { dates.size == legacy.size && it.toDateMap() != null }
     }
 
-    suspend fun setTaiwanHolidayCalendar(year: Int, holidays: Map<LocalDate, Boolean>) {
-        require(holidays.isNotEmpty() && holidays.keys.all { it.year == year })
-        val key = stringPreferencesKey("taiwan_holiday_calendar_$year")
-        val encoded = holidays.mapKeys { (date, _) -> date.toString() }
-        dataStoreInstance.edit { it[key] = json.encodeToString(encoded) }
+    internal suspend fun setTaiwanHolidayCalendar(calendar: TaiwanHolidayCalendarSnapshot) {
+        require(calendar.toDateMap() != null) { "Taiwan holiday calendar is incomplete or invalid" }
+        val key = stringPreferencesKey("taiwan_holiday_calendar_${calendar.year}")
+        dataStoreInstance.edit { it[key] = json.encodeToString(calendar) }
     }
 
     val fetchIntervalFlow: Flow<Int> = dataStoreInstance.data
