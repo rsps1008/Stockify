@@ -22,6 +22,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicLong
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -114,6 +115,23 @@ class SettingsDataStore private constructor(
     private val appLockPinHashKey = stringPreferencesKey("app_lock_pin_hash")
     private val appLockBiometricEnabledKey = booleanPreferencesKey("app_lock_biometric_enabled")
     private val lastUpdateHighlightsVersionKey = stringPreferencesKey("last_update_highlights_version")
+
+    suspend fun getTaiwanHolidayCalendar(year: Int): Map<LocalDate, Boolean>? {
+        val key = stringPreferencesKey("taiwan_holiday_calendar_$year")
+        val raw = dataStoreInstance.data.first()[key] ?: return null
+        val encoded = runCatching { json.decodeFromString<Map<String, Boolean>>(raw) }.getOrNull() ?: return null
+        val decoded = encoded.mapNotNull { (date, isHoliday) ->
+            runCatching { LocalDate.parse(date) }.getOrNull()?.let { it to isHoliday }
+        }.toMap()
+        return decoded.takeIf { it.size == encoded.size && it.keys.all { date -> date.year == year } }
+    }
+
+    suspend fun setTaiwanHolidayCalendar(year: Int, holidays: Map<LocalDate, Boolean>) {
+        require(holidays.isNotEmpty() && holidays.keys.all { it.year == year })
+        val key = stringPreferencesKey("taiwan_holiday_calendar_$year")
+        val encoded = holidays.mapKeys { (date, _) -> date.toString() }
+        dataStoreInstance.edit { it[key] = json.encodeToString(encoded) }
+    }
 
     val fetchIntervalFlow: Flow<Int> = dataStoreInstance.data
         .map { preferences ->

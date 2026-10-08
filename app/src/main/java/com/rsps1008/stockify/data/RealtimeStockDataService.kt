@@ -129,12 +129,27 @@ class RealtimeStockDataService(
         }
     }
 
-    private val holidayCache = TaiwanHolidayCache(loadYear = { year ->
-        val response = client.get("https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/$year.json").body<String>()
-        Json.decodeFromString<List<TaiwanHolidayItem>>(response).associate {
-            LocalDate.parse(it.date, DateTimeFormatter.BASIC_ISO_DATE) to it.isHoliday
-        }
-    })
+    private val holidayCache = TaiwanHolidayCache(
+        loadYear = { year ->
+            val response = runCatching {
+                applicationContext.assets.open("taiwan_calendar/$year.json")
+                    .bufferedReader().use { it.readText() }
+            }.getOrNull() ?: client.get(
+                "https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/$year.json"
+            ).body<String>()
+            val items = Json.decodeFromString<List<TaiwanHolidayItem>>(response)
+            require(items.map { it.date }.distinct().size == items.size) { "Duplicate Taiwan calendar dates" }
+            items.associate {
+                LocalDate.parse(it.date, DateTimeFormatter.BASIC_ISO_DATE) to it.isHoliday
+            }.also { calendar ->
+                require(calendar.isNotEmpty() && calendar.keys.all { it.year == year }) {
+                    "Taiwan calendar is empty or contains another year"
+                }
+            }
+        },
+        readSavedYear = settingsDataStore::getTaiwanHolidayCalendar,
+        saveYear = settingsDataStore::setTaiwanHolidayCalendar
+    )
 
     init {
         scope.launch {

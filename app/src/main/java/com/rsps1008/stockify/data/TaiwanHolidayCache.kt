@@ -6,10 +6,12 @@ import kotlinx.coroutines.sync.withLock
 import java.time.DayOfWeek
 import java.time.LocalDate
 
-/** Keep the last usable calendar on failure; retry unavailable calendars at most every five minutes. */
+/** Keep each year's calendar for the process lifetime; retry only until that year is available. */
 internal class TaiwanHolidayCache(
     private val loadYear: suspend (Int) -> Map<LocalDate, Boolean>,
-    private val nowMillis: () -> Long = System::currentTimeMillis
+    private val nowMillis: () -> Long = System::currentTimeMillis,
+    private val readSavedYear: suspend (Int) -> Map<LocalDate, Boolean>? = { null },
+    private val saveYear: suspend (Int, Map<LocalDate, Boolean>) -> Unit = { _, _ -> }
 ) {
     private val mutex = Mutex()
     private var cachedYear: Int? = null
@@ -27,11 +29,32 @@ internal class TaiwanHolidayCache(
                 refreshAfter = 0L
             }
             cachedYear = date.year
+            val saved = try {
+                readSavedYear(date.year)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }?.takeIf { calendar ->
+                calendar.isNotEmpty() && calendar.keys.all { it.year == date.year }
+            }
+            if (saved != null) {
+                holidays = saved
+                refreshAfter = Long.MAX_VALUE
+                return@withLock holidays[date] ?: false
+            }
             try {
                 val loaded = loadYear(date.year)
                 require(loaded.containsKey(date)) { "Calendar does not contain requested date" }
                 holidays = loaded
-                refreshAfter = now + 86_400_000L
+                try {
+                    saveYear(date.year, loaded)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // Keep the validated calendar usable in memory even if persistence fails.
+                }
+                refreshAfter = Long.MAX_VALUE
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {

@@ -14,7 +14,7 @@ class TaiwanHolidayCacheTest {
     private val date = LocalDate.of(2026, 10, 9)
 
     @Test
-    fun repeatedAndConcurrentLookupsOnlyLoadOnceAndRefreshAfterOneDay() = runBlocking {
+    fun repeatedAndConcurrentLookupsLoadOnlyOncePerYear() = runBlocking {
         var loads = 0
         var now = 0L
         val cache = TaiwanHolidayCache({ loads++; delay(10); mapOf(date to true) }, { now })
@@ -22,11 +22,11 @@ class TaiwanHolidayCacheTest {
         assertEquals(1, loads)
         now = 86_400_000
         assertTrue(cache.isHoliday(date))
-        assertEquals(2, loads)
+        assertEquals(1, loads)
     }
 
     @Test
-    fun failedRefreshRetainsHolidayAndBacksOffForFiveMinutes() = runBlocking {
+    fun successfullyLoadedCalendarIsNotRefetchedDuringTheSameYear() = runBlocking {
         var loads = 0
         var now = 0L
         val cache = TaiwanHolidayCache({
@@ -37,10 +37,10 @@ class TaiwanHolidayCacheTest {
         assertTrue(cache.isHoliday(date))
         now = 86_400_000
         repeat(10) { assertTrue(cache.isHoliday(date)) }
-        assertEquals(2, loads)
+        assertEquals(1, loads)
         now += 300_000
         assertTrue(cache.isHoliday(date))
-        assertEquals(3, loads)
+        assertEquals(1, loads)
     }
 
     @Test
@@ -76,5 +76,64 @@ class TaiwanHolidayCacheTest {
         assertEquals(1, calls)
         now += 300_000
         assertTrue(cache.isHoliday(date))
+    }
+
+    @Test
+    fun downloadedCalendarIsSavedAndUsedWhenLaterDownloadFails() = runBlocking {
+        var downloads = 0
+        var saved: Map<LocalDate, Boolean>? = null
+        var now = 0L
+        val firstRunCache = TaiwanHolidayCache(
+            loadYear = {
+                downloads++
+                mapOf(date to true)
+            },
+            nowMillis = { now },
+            readSavedYear = { saved },
+            saveYear = { _, calendar -> saved = calendar }
+        )
+
+        assertTrue(firstRunCache.isHoliday(date))
+        assertEquals(mapOf(date to true), saved)
+
+        val nextAppRunCache = TaiwanHolidayCache(
+            loadYear = { downloads++; error("network should not be called") },
+            nowMillis = { now },
+            readSavedYear = { saved }
+        )
+        assertTrue(nextAppRunCache.isHoliday(date))
+        assertEquals(1, downloads)
+        assertEquals(mapOf(date to true), saved)
+    }
+
+    @Test
+    fun savedCalendarIsUsedWithoutDownloadingAndNextYearIsFetchedWhenMissing() = runBlocking {
+        var downloads = 0
+        var now = 0L
+        val saved = mapOf(date to true)
+        val cache = TaiwanHolidayCache(
+            loadYear = { downloads++; error("offline") },
+            nowMillis = { now },
+            readSavedYear = { year -> saved.takeIf { year == 2026 } }
+        )
+        assertTrue(cache.isHoliday(date))
+        now = 86_400_000L
+        assertTrue(cache.isHoliday(date))
+        assertEquals(0, downloads)
+        assertFalse(cache.isHoliday(LocalDate.of(2027, 1, 4)))
+        assertEquals(1, downloads)
+    }
+
+    @Test
+    fun noNetworkOrSavedCalendarFallsBackToWeekendOnly() = runBlocking {
+        var now = 0L
+        val cache = TaiwanHolidayCache(
+            loadYear = { error("offline") },
+            nowMillis = { now }
+        )
+        assertFalse(cache.isHoliday(date))
+        assertTrue(cache.isHoliday(LocalDate.of(2026, 10, 10)))
+        now += 300_000L
+        assertFalse(cache.isHoliday(date))
     }
 }
