@@ -2,6 +2,11 @@ package com.rsps1008.stockify
 
 import android.app.Application
 import android.util.Log
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.rsps1008.stockify.data.CsvService
+import com.rsps1008.stockify.data.GoogleDriveBackupBundle
+import com.rsps1008.stockify.data.GoogleDriveService
+import com.rsps1008.stockify.data.HoldingsOrderBackupService
 import com.rsps1008.stockify.data.AppDatabase
 import com.rsps1008.stockify.data.RealtimeStockDataService
 import com.rsps1008.stockify.data.SettingsDataStore
@@ -24,6 +29,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.serialization.encodeToString
+import java.io.ByteArrayOutputStream
 
 private const val STOCK_LIST_UPDATE_INTERVAL_MILLIS = 7 * 24 * 60 * 60 * 1000L
 
@@ -37,6 +46,50 @@ class StockifyApplication : Application() {
     lateinit var twseStockHistoryService: TwseStockHistoryService
     lateinit var transactionListRepository: TransactionListRepository
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    suspend fun performAutomaticCloudBackupIfDue(): Boolean {
+        if (!settingsDataStore.autoCloudBackupEnabledFlow.first()) return true
+        val account = GoogleSignIn.getLastSignedInAccount(this)
+            ?: run {
+                settingsDataStore.setAutoCloudBackupLastError("Google Drive 登入狀態已失效，請重新登入")
+                return false
+            }
+        val now = System.currentTimeMillis()
+        if (!settingsDataStore.claimAutomaticCloudBackupAttempt(now)) return true
+        return try {
+            val transactions = database.stockDao().getTransactionsWithStock().first()
+            val csvContent = withContext(Dispatchers.IO) {
+                ByteArrayOutputStream().use { output ->
+                    CsvService().export(transactions, output)
+                    output.toByteArray()
+                }
+            }
+            val accountsJson = Json.encodeToString(database.stockDao().getAllAccountsFlow().first())
+                .toByteArray(Charsets.UTF_8)
+            val order = settingsDataStore.holdingsOrderFlow.first()
+            val realizedOrder = settingsDataStore.realizedHoldingsOrderFlow.first()
+            val orderBytes = withContext(Dispatchers.IO) {
+                HoldingsOrderBackupService().exportToBytes(order, realizedOrder)
+            }
+            val bundle = withContext(Dispatchers.Default) {
+                GoogleDriveBackupBundle.create(csvContent, accountsJson, orderBytes)
+            }
+            GoogleDriveService(this, account)
+                .uploadBackup(
+                    fileName = AUTO_CLOUD_BACKUP_FILE_NAME,
+                    content = bundle,
+                    mimeType = "application/zip"
+                ).getOrThrow()
+            settingsDataStore.setAutoCloudBackupLastSuccessAt(System.currentTimeMillis())
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Automatic Google Drive backup failed", e)
+            settingsDataStore.setAutoCloudBackupLastError(e.localizedMessage ?: e.javaClass.simpleName)
+            false
+        }
+    }
     // ★ 新增：全域 HttpClient（給 TWSE / 即時股價 / 配息用）
 
     val httpClient: HttpClient by lazy {
@@ -158,3 +211,5 @@ class StockifyApplication : Application() {
         const val TAG = "StockifyApplication"
     }
 }
+
+const val AUTO_CLOUD_BACKUP_FILE_NAME = "stockify_auto_backup_bundle.zip"

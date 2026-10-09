@@ -49,6 +49,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.ViewModel
+import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -56,6 +61,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.rsps1008.stockify.data.TextSizeMode
 import com.rsps1008.stockify.data.SettingsDataStore
+import com.rsps1008.stockify.data.AutomaticCloudBackupWorker
+import com.rsps1008.stockify.data.AUTOMATIC_CLOUD_BACKUP_WORK_NAME
 import com.rsps1008.stockify.ui.navigation.NavGraph
 import com.rsps1008.stockify.ui.navigation.Screen
 import com.rsps1008.stockify.ui.screens.AppLockScreen
@@ -129,6 +136,20 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
+        if (!isChangingConfigurations) {
+            val request = OneTimeWorkRequestBuilder<AutomaticCloudBackupWorker>()
+                .setConstraints(
+                    Constraints.Builder()
+                        .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .build()
+                )
+                .build()
+            WorkManager.getInstance(applicationContext).enqueueUniqueWork(
+                AUTOMATIC_CLOUD_BACKUP_WORK_NAME,
+                ExistingWorkPolicy.KEEP,
+                request
+            )
+        }
         if (!isChangingConfigurations && appLockEnabled == true) {
             appLockSession.lock()
         }

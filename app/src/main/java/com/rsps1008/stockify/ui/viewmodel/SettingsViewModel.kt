@@ -11,6 +11,7 @@ import androidx.annotation.RequiresApi
 import android.content.ContentUris
 import android.util.Log
 import androidx.room.withTransaction
+import androidx.work.WorkManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -28,6 +29,7 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 import com.rsps1008.stockify.data.GoogleDriveService
+import com.rsps1008.stockify.data.AUTOMATIC_CLOUD_BACKUP_WORK_NAME
 import com.rsps1008.stockify.data.GoogleDriveBackupBundle
 import com.rsps1008.stockify.data.HoldingsOrderBackupService
 import com.rsps1008.stockify.data.ReturnRateMode
@@ -225,6 +227,8 @@ class SettingsViewModel(
 
     private val _cloudDataBackupUpdatedAt = MutableStateFlow<Long?>(null)
     val cloudDataBackupUpdatedAt: StateFlow<Long?> = _cloudDataBackupUpdatedAt.asStateFlow()
+    private val _cloudRestoreSources = MutableStateFlow<Pair<Boolean, Boolean>?>(null)
+    val cloudRestoreSources: StateFlow<Pair<Boolean, Boolean>?> = _cloudRestoreSources.asStateFlow()
 
     private val _cloudOrderBackupUpdatedAt = MutableStateFlow<Long?>(null)
     val cloudOrderBackupUpdatedAt: StateFlow<Long?> = _cloudOrderBackupUpdatedAt.asStateFlow()
@@ -504,14 +508,29 @@ class SettingsViewModel(
         }
     }
 
-    fun restoreFromGoogleDrive() {
+    fun inspectCloudRestoreSources() {
+        viewModelScope.launch {
+            val account = _googleSignInAccount.value ?: return@launch
+            _cloudRestoreSources.value = null
+            val service = GoogleDriveService(getApplication(), account)
+            val manualBundle = service.getBackupModifiedTime(GoogleDriveBackupBundle.FILE_NAME).getOrNull()
+            val manualCsv = service.getBackupModifiedTime("stockify_backup.csv").getOrNull()
+            val autoBundle = service.getBackupModifiedTime(com.rsps1008.stockify.AUTO_CLOUD_BACKUP_FILE_NAME).getOrNull()
+            _cloudRestoreSources.value = (manualBundle != null || manualCsv != null) to (autoBundle != null)
+        }
+    }
+
+    fun restoreFromGoogleDrive(isAutomatic: Boolean = false) {
         viewModelScope.launch {
             _googleSignInAccount.value?.let { account ->
                 _isLoading.value = true
                 try {
                     val driveService = GoogleDriveService(getApplication(), account)
                     val bundleFile = driveService
-                        .restoreBackupWithModifiedTimeIfPresent(GoogleDriveBackupBundle.FILE_NAME)
+                        .restoreBackupWithModifiedTimeIfPresent(
+                            if (isAutomatic) com.rsps1008.stockify.AUTO_CLOUD_BACKUP_FILE_NAME
+                            else GoogleDriveBackupBundle.FILE_NAME
+                        )
                         .getOrThrow()
                     val restored = bundleFile?.content?.let {
                         withContext(Dispatchers.Default) { GoogleDriveBackupBundle.restore(it) }
@@ -520,15 +539,21 @@ class SettingsViewModel(
                         .restoreBackupWithModifiedTimeIfPresent("stockify_holdings_order.json")
                         .getOrNull()
                     val csvContent = restored?.transactionsCsv
-                        ?: driveService.restoreBackup("stockify_backup.csv").getOrThrow()
+                        ?: if (isAutomatic) error("自動備份檔內容無效")
+                        else driveService.restoreBackup("stockify_backup.csv").getOrThrow()
                     val accountsJson = restored?.accountsJson
-                        ?: driveService.restoreBackup("stockify_accounts.json").getOrNull()
-                    val orderJson = com.rsps1008.stockify.data.GoogleDriveBackupSelectionSupport
-                        .selectHoldingsOrder(
-                            bundleFile = bundleFile,
-                            restoredBundle = restored,
-                            legacyOrderFile = legacyOrderFile
-                        )
+                        ?: if (isAutomatic) null
+                        else driveService.restoreBackup("stockify_accounts.json").getOrNull()
+                    val orderJson = if (isAutomatic) {
+                        restored?.holdingsOrderJson
+                    } else {
+                        com.rsps1008.stockify.data.GoogleDriveBackupSelectionSupport
+                            .selectHoldingsOrder(
+                                bundleFile = bundleFile,
+                                restoredBundle = restored,
+                                legacyOrderFile = legacyOrderFile
+                            )
+                    }
 
                     importData = csvContent
                     accountsBackupData = accountsJson
@@ -1924,6 +1949,39 @@ class SettingsViewModel(
             settingsDataStore.clearRealtimeStockInfoCache()
             twseStockHistoryService?.clearCache()
             _message.value = "所有持股、帳戶與排序資料已刪除"
+        }
+    }
+
+    fun deleteAllGoogleDriveAppData() {
+        viewModelScope.launch {
+            val account = _googleSignInAccount.value
+            if (account == null) {
+                _message.value = "請先登入 Google Drive"
+                return@launch
+            }
+            _isLoading.value = true
+            try {
+                settingsDataStore.setAutoCloudBackupEnabled(false)
+                withContext(Dispatchers.IO) {
+                    WorkManager.getInstance(getApplication<Application>())
+                        .cancelUniqueWork(AUTOMATIC_CLOUD_BACKUP_WORK_NAME)
+                        .result
+                        .get()
+                }
+                val deletedCount = GoogleDriveService(getApplication(), account)
+                    .deleteAllAppDataFiles()
+                    .getOrThrow()
+                settingsDataStore.clearCloudBackupMetadata()
+                _cloudDataBackupUpdatedAt.value = null
+                _cloudOrderBackupUpdatedAt.value = null
+                _message.value = "已刪除 Google Drive 中此 App 專用資料夾的 $deletedCount 個項目"
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _message.value = "刪除 Google Drive 資料失敗: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
         }
     }
 

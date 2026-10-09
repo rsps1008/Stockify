@@ -104,6 +104,11 @@ class SettingsDataStore private constructor(
     private val homeHistoryChartExpandedKey = booleanPreferencesKey("home_history_chart_expanded")
     private val detailHistoryChartExpandedKey = booleanPreferencesKey("detail_history_chart_expanded")
     private val cloudDataBackupUpdatedAtKey = longPreferencesKey("cloud_data_backup_updated_at")
+    private val autoCloudBackupEnabledKey = booleanPreferencesKey("auto_cloud_backup_enabled")
+    private val autoCloudBackupIntervalDaysKey = intPreferencesKey("auto_cloud_backup_interval_days")
+    private val autoCloudBackupLastAttemptAtKey = longPreferencesKey("auto_cloud_backup_last_attempt_at")
+    private val autoCloudBackupLastSuccessAtKey = longPreferencesKey("auto_cloud_backup_last_success_at")
+    private val autoCloudBackupLastErrorKey = stringPreferencesKey("auto_cloud_backup_last_error")
     private val marginFeatureEnabledKey = booleanPreferencesKey("margin_feature_enabled")
     private val marginDayCountKey = intPreferencesKey("margin_day_count")
     private val defaultMarginAnnualRateKey = doublePreferencesKey("default_margin_annual_rate")
@@ -379,6 +384,21 @@ class SettingsDataStore private constructor(
         .map { preferences ->
             preferences[cloudDataBackupUpdatedAtKey]
         }
+
+    val autoCloudBackupEnabledFlow: Flow<Boolean> = dataStoreInstance.data
+        .map { it[autoCloudBackupEnabledKey] ?: false }
+
+    val autoCloudBackupIntervalDaysFlow: Flow<Int> = dataStoreInstance.data
+        .map { it[autoCloudBackupIntervalDaysKey]?.takeIf { days -> days in setOf(1, 3, 7) } ?: 1 }
+
+    val autoCloudBackupLastSuccessAtFlow: Flow<Long?> = dataStoreInstance.data
+        .map { it[autoCloudBackupLastSuccessAtKey] }
+
+    val autoCloudBackupLastAttemptAtFlow: Flow<Long?> = dataStoreInstance.data
+        .map { it[autoCloudBackupLastAttemptAtKey] }
+
+    val autoCloudBackupLastErrorFlow: Flow<String?> = dataStoreInstance.data
+        .map { it[autoCloudBackupLastErrorKey] }
 
     val marginFeatureEnabledFlow: Flow<Boolean> = dataStoreInstance.data
         .map { preferences -> preferences[marginFeatureEnabledKey] ?: false }
@@ -718,6 +738,59 @@ class SettingsDataStore private constructor(
     suspend fun setCloudDataBackupUpdatedAt(timeMillis: Long) {
         dataStoreInstance.edit {
             it[cloudDataBackupUpdatedAtKey] = timeMillis
+        }
+    }
+
+    suspend fun clearCloudBackupMetadata() {
+        dataStoreInstance.edit {
+            it.remove(cloudDataBackupUpdatedAtKey)
+            it.remove(autoCloudBackupLastAttemptAtKey)
+            it.remove(autoCloudBackupLastSuccessAtKey)
+            it.remove(autoCloudBackupLastErrorKey)
+        }
+    }
+
+    suspend fun setAutoCloudBackupEnabled(enabled: Boolean) {
+        dataStoreInstance.edit { it[autoCloudBackupEnabledKey] = enabled }
+    }
+
+    suspend fun setAutoCloudBackupIntervalDays(days: Int) {
+        require(days in setOf(1, 3, 7))
+        dataStoreInstance.edit { it[autoCloudBackupIntervalDaysKey] = days }
+    }
+
+    suspend fun claimAutomaticCloudBackupAttempt(nowMillis: Long): Boolean {
+        var claimed = false
+        dataStoreInstance.edit { preferences ->
+            val enabled = preferences[autoCloudBackupEnabledKey] ?: false
+            val interval = preferences[autoCloudBackupIntervalDaysKey]
+                ?.takeIf { it in setOf(1, 3, 7) } ?: 1
+            val lastAttempt = preferences[autoCloudBackupLastAttemptAtKey] ?: 0L
+            val lastSuccess = preferences[autoCloudBackupLastSuccessAtKey] ?: 0L
+            val hasRecordedFailure = preferences[autoCloudBackupLastErrorKey] != null
+            val intervalMillis = interval * 24L * 60L * 60L * 1000L
+            val due = lastAttempt == 0L ||
+                nowMillis - lastAttempt >= intervalMillis ||
+                (lastSuccess == 0L && !hasRecordedFailure)
+            if (enabled && due) {
+                preferences[autoCloudBackupLastAttemptAtKey] = nowMillis
+                claimed = true
+            }
+        }
+        return claimed
+    }
+
+    suspend fun setAutoCloudBackupLastSuccessAt(timeMillis: Long) {
+        dataStoreInstance.edit {
+            it[autoCloudBackupLastSuccessAtKey] = timeMillis
+            it.remove(autoCloudBackupLastErrorKey)
+        }
+    }
+
+    suspend fun setAutoCloudBackupLastError(message: String?) {
+        dataStoreInstance.edit { preferences ->
+            if (message.isNullOrBlank()) preferences.remove(autoCloudBackupLastErrorKey)
+            else preferences[autoCloudBackupLastErrorKey] = message.take(300)
         }
     }
 

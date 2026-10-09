@@ -33,6 +33,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
+import androidx.compose.material3.RadioButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -40,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,6 +54,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -67,6 +74,7 @@ import com.rsps1008.stockify.ui.viewmodel.ViewModelFactory
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -101,11 +109,19 @@ fun DataManagementScreen() {
     val pdfImportPreview by viewModel.pdfImportPreview.collectAsState()
     val skipPdfImportTutorial by viewModel.skipPdfImportTutorial.collectAsState()
     val cloudDataBackupUpdatedAt by viewModel.cloudDataBackupUpdatedAt.collectAsState()
+    val autoCloudBackupEnabled by application.settingsDataStore.autoCloudBackupEnabledFlow.collectAsState(initial = false)
+    val autoCloudBackupIntervalDays by application.settingsDataStore.autoCloudBackupIntervalDaysFlow.collectAsState(initial = 1)
+    val autoCloudBackupLastSuccessAt by application.settingsDataStore.autoCloudBackupLastSuccessAtFlow.collectAsState(initial = null)
+    val autoCloudBackupLastError by application.settingsDataStore.autoCloudBackupLastErrorFlow.collectAsState(initial = null)
+    val cloudRestoreSources by viewModel.cloudRestoreSources.collectAsState()
     val accounts by viewModel.accounts.collectAsState()
     val activeAccountId by viewModel.activeAccountId.collectAsState()
 
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var showPdfTutorialDialog by remember { mutableStateOf(false) }
+    var showCloudBackupOverwriteDialog by remember { mutableStateOf(false) }
+    var showCloudRestoreSourceDialog by remember { mutableStateOf(false) }
     var dontShowPdfTutorialAgain by remember(skipPdfImportTutorial) {
         mutableStateOf(skipPdfImportTutorial)
     }
@@ -243,6 +259,21 @@ fun DataManagementScreen() {
                     isLoading = isLoading,
                     googleSignInAccount = googleSignInAccount,
                     cloudDataBackupUpdatedAt = cloudDataBackupUpdatedAt,
+                    onBackupClick = { showCloudBackupOverwriteDialog = true },
+                    onRestoreClick = {
+                        showCloudRestoreSourceDialog = true
+                        viewModel.inspectCloudRestoreSources()
+                    },
+                    autoBackupEnabled = autoCloudBackupEnabled,
+                    autoBackupIntervalDays = autoCloudBackupIntervalDays,
+                    autoBackupLastSuccessAt = autoCloudBackupLastSuccessAt,
+                    autoBackupLastError = autoCloudBackupLastError,
+                    onAutoBackupEnabledChange = { enabled ->
+                        coroutineScope.launch { application.settingsDataStore.setAutoCloudBackupEnabled(enabled) }
+                    },
+                    onAutoBackupIntervalChange = { days ->
+                        coroutineScope.launch { application.settingsDataStore.setAutoCloudBackupIntervalDays(days) }
+                    },
                     onSignInClick = { googleSignInLauncher.launch(googleSignInClient.signInIntent) },
                     onSignOutClick = viewModel::signOut
                 )
@@ -285,7 +316,9 @@ fun DataManagementScreen() {
                 OtherDataOperationsSection(
                     viewModel = viewModel,
                     accounts = accounts,
-                    activeAccountId = activeAccountId
+                    activeAccountId = activeAccountId,
+                    isLoading = isLoading,
+                    googleDriveSignedIn = googleSignInAccount != null
                 )
             }
         }
@@ -297,18 +330,74 @@ fun DataManagementScreen() {
             title = { Text("還原確認") },
             text = { Text("要先清空現有交易資料，再還原這份 CSV 嗎？") },
             confirmButton = {
-                TextButton(onClick = { viewModel.onImportConfirm(true) }) {
-                    Text("清空後還原")
-                }
-            },
-            dismissButton = {
-                Row {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = { viewModel.onImportConfirm(true) }) {
+                        Text("清空後還原")
+                    }
                     TextButton(onClick = { viewModel.onImportConfirm(false) }) {
                         Text("直接新增")
                     }
+                    Spacer(modifier = Modifier.weight(1f))
                     TextButton(onClick = viewModel::onImportCancel) {
                         Text("取消")
                     }
+                }
+            }
+        )
+    }
+
+    if (showCloudBackupOverwriteDialog) {
+        AlertDialog(
+            onDismissRequest = { showCloudBackupOverwriteDialog = false },
+            title = { Text("確認雲端備份") },
+            text = { Text("備份會覆蓋目前 Google Drive 中的雲端備份檔案，要繼續嗎？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showCloudBackupOverwriteDialog = false
+                        viewModel.backupToGoogleDrive()
+                    }
+                ) { Text("繼續備份") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCloudBackupOverwriteDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    if (showCloudRestoreSourceDialog) {
+        AlertDialog(
+            onDismissRequest = { showCloudRestoreSourceDialog = false },
+            title = { Text("選擇雲端備份") },
+            text = {
+                Text(
+                    when (cloudRestoreSources) {
+                        null -> "正在確認雲端備份檔案…"
+                        false to false -> "Google Drive 中找不到可還原的手動或自動備份。"
+                        else -> "請選擇要還原的備份來源。"
+                    }
+                )
+            },
+            confirmButton = {
+                Row {
+                    TextButton(
+                        enabled = cloudRestoreSources?.first == true,
+                        onClick = {
+                            showCloudRestoreSourceDialog = false
+                            viewModel.restoreFromGoogleDrive(isAutomatic = false)
+                        }
+                    ) { Text("手動備份") }
+                    TextButton(
+                        enabled = cloudRestoreSources?.second == true,
+                        onClick = {
+                            showCloudRestoreSourceDialog = false
+                            viewModel.restoreFromGoogleDrive(isAutomatic = true)
+                        }
+                    ) { Text("自動備份") }
+                    TextButton(onClick = { showCloudRestoreSourceDialog = false }) { Text("取消") }
                 }
             }
         )
@@ -441,12 +530,15 @@ private fun formatBackupTime(timeMillis: Long?): String {
 private fun OtherDataOperationsSection(
     viewModel: SettingsViewModel,
     accounts: List<Account>,
-    activeAccountId: Int
+    activeAccountId: Int,
+    isLoading: Boolean,
+    googleDriveSignedIn: Boolean
 ) {
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showDeleteAllDataConfirmDialog by remember { mutableStateOf(false) }
     var showClearCacheConfirmDialog by remember { mutableStateOf(false) }
     var showClearHistoryPricesConfirmDialog by remember { mutableStateOf(false) }
+    var showDeleteGoogleDriveDataConfirmDialog by remember { mutableStateOf(false) }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -479,6 +571,17 @@ private fun OtherDataOperationsSection(
                 shape = DataManagementButtonShape
             ) {
                 Text("刪除全部資料")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = { showDeleteGoogleDriveDataConfirmDialog = true },
+                enabled = googleDriveSignedIn && !isLoading,
+                shape = DataManagementButtonShape
+            ) {
+                Text("刪除 Google Drive 所有備份資料")
+            }
+            if (!googleDriveSignedIn) {
+                Text("請先登入 Google Drive 才能刪除雲端資料", style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -540,6 +643,35 @@ private fun OtherDataOperationsSection(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteAllDataConfirmDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    if (showDeleteGoogleDriveDataConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteGoogleDriveDataConfirmDialog = false },
+            title = { Text("刪除 Google Drive 所有備份資料？") },
+            text = {
+                Text(
+                    "這會永久刪除 Google Drive 中 Stockify 此 App 專用資料夾內的所有檔案與子資料夾，" +
+                        "不依檔名篩選，並會關閉自動備份。此操作無法復原，不會刪除本機資料。"
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteAllGoogleDriveAppData()
+                        showDeleteGoogleDriveDataConfirmDialog = false
+                    },
+                    enabled = !isLoading
+                ) {
+                    Text("永久刪除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteGoogleDriveDataConfirmDialog = false }) {
                     Text("取消")
                 }
             }
@@ -677,6 +809,14 @@ private fun CloudBackupSection(
     isLoading: Boolean,
     googleSignInAccount: GoogleSignInAccount?,
     cloudDataBackupUpdatedAt: Long?,
+    onBackupClick: () -> Unit,
+    onRestoreClick: () -> Unit,
+    autoBackupEnabled: Boolean,
+    autoBackupIntervalDays: Int,
+    autoBackupLastSuccessAt: Long?,
+    autoBackupLastError: String?,
+    onAutoBackupEnabledChange: (Boolean) -> Unit,
+    onAutoBackupIntervalChange: (Int) -> Unit,
     onSignInClick: () -> Unit,
     onSignOutClick: () -> Unit
 ) {
@@ -707,22 +847,22 @@ private fun CloudBackupSection(
                 }
             } else {
                 Text("目前帳號: ${googleSignInAccount.email}")
-                Text("最後備份時間: ${formatBackupTime(lastBackupAt)}")
+                Text("最後手動備份時間: ${formatBackupTime(lastBackupAt)}")
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
-                        onClick = viewModel::backupToGoogleDrive,
+                        onClick = onBackupClick,
                         enabled = !isLoading,
                         shape = DataManagementButtonShape
                     ) {
-                        Text("備份至雲端")
+                        BackupRestoreLabel("備份至雲端", "備份")
                     }
                     Button(
-                        onClick = viewModel::restoreFromGoogleDrive,
+                        onClick = onRestoreClick,
                         enabled = !isLoading,
                         shape = DataManagementButtonShape
                     ) {
-                        Text("自雲端還原")
+                        BackupRestoreLabel("自雲端還原", "還原")
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -730,6 +870,33 @@ private fun CloudBackupSection(
                     Text("登出")
                 }
             }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("離開 App 時自動備份", style = MaterialTheme.typography.titleMedium)
+                    Text("(僅在 Google 帳號已登入時執行)", style = MaterialTheme.typography.bodySmall)
+                }
+                Switch(
+                    checked = autoBackupEnabled,
+                    onCheckedChange = onAutoBackupEnabledChange,
+                    enabled = googleSignInAccount != null || autoBackupEnabled
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                listOf(1 to "1 天", 3 to "3 天", 7 to "1 週").forEach { (days, label) ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(
+                            selected = autoBackupIntervalDays == days,
+                            onClick = { onAutoBackupIntervalChange(days) },
+                            enabled = autoBackupEnabled
+                        )
+                        Text(label)
+                    }
+                }
+            }
+            Text("最後自動備份成功：${formatBackupTime(autoBackupLastSuccessAt)}")
+            autoBackupLastError?.let { Text("上次自動備份失敗：$it", color = MaterialTheme.colorScheme.error) }
         }
     }
 }
@@ -821,12 +988,28 @@ private fun BackupButtonRow(
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = onBackup, enabled = !isLoading, shape = DataManagementButtonShape) {
-            Text(backupText)
+            BackupRestoreLabel(backupText, "備份")
         }
         Button(onClick = onRestore, enabled = !isLoading, shape = DataManagementButtonShape) {
-            Text(restoreText)
+            BackupRestoreLabel(restoreText, "還原")
         }
     }
+}
+
+@Composable
+private fun BackupRestoreLabel(text: String, emphasizedWord: String) {
+    val wordStart = text.indexOf(emphasizedWord)
+    Text(
+        buildAnnotatedString {
+            if (wordStart < 0) {
+                append(text)
+            } else {
+                append(text.substring(0, wordStart))
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(emphasizedWord) }
+                append(text.substring(wordStart + emphasizedWord.length))
+            }
+        }
+    )
 }
 
 @Composable

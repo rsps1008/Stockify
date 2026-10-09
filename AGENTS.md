@@ -6,7 +6,7 @@
 
 - 專案：原生 Android App「韭菜記帳本（Stockify）」；公開文案優先使用中文名 `韭菜記帳本`。
 - 技術：Kotlin、Jetpack Compose、Material 3、MVVM 風格分層。
-- SDK：最低 API 26，`compileSdk` / `targetSdk` 36。
+- SDK：最低 API 26，`compileSdk` / `targetSdk` 37。
 - 主要功能：台股／美股持股與交易管理、即時報價、損益與歷史圖表、配息配股、融資融券、CSV／PDF 匯入、本地與 Google Drive 備份。
 - 此專案不需要寫入 `E:\DailyDev.csv`。
 
@@ -114,9 +114,8 @@
 - 不要回退使用者或其他人的無關修改；先檢查 `git status` / `git diff`，只改需求範圍。
 - 搜尋優先用 `rg` / `rg --files`，手動編輯優先用 `apply_patch`。註解只解釋不直觀的原因。
 - 完成後執行最小但有效的測試；`git diff --check` 只驗證空白，不等於編譯成功。
-- 目前版本以 `gradle/libs.versions.toml` 與 wrapper 為準：AGP 9.2.1、Gradle 9.6.1、Kotlin 2.2.10、Room 2.7.1、KSP 2.2.10-2.0.2。
+- 目前版本以 `gradle/libs.versions.toml` 與 wrapper 為準：AGP 9.4.1、Gradle 9.6.1、Kotlin 2.4.21、Room 2.8.5、KSP 2.3.10；Google API Client 2.9.1、Google HTTP Client／Gson／Android 2.2.0、Drive API `v3-rev20230822-2.0.0`。更新時以這些設定檔為準。
 - 目前使用 Java/Kotlin 21；AGP 9 至少需 JDK 17。Release 已啟用 R8。
-- KSP 仍需 `android.disallowKotlinSourceSets=false` 時才保留；升級並確認 source-set 問題修正後移除。
 - Windows 常用驗證：
 
 ```powershell

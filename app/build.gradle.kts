@@ -5,7 +5,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.serialization)
     alias(libs.plugins.jetbrains.kotlin.compose)
-    alias(libs.plugins.ksp)
+    id("com.google.devtools.ksp")
 }
 
 val keystoreProperties = Properties().apply {
@@ -23,14 +23,14 @@ val hasReleaseSigning = listOf(
 
 android {
     namespace = "com.rsps1008.stockify"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.rsps1008.stockify"
         minSdk = 26
-        targetSdk = 36
-        versionCode = 1711
-        versionName = "1.7.1"
+        targetSdk = 37
+        versionCode = 1720
+        versionName = "1.7.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -101,6 +101,7 @@ dependencies {
     // Default
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)

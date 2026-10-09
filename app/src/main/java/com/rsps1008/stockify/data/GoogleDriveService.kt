@@ -11,6 +11,7 @@ import com.google.api.services.drive.model.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 
 data class GoogleDriveBackupFile(
     val content: ByteArray,
@@ -64,6 +65,47 @@ class GoogleDriveService(context: Context, account: GoogleSignInAccount) {
                 drive.files().update(fileId, null, mediaContent).execute()
             }
             Result.success(Unit)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteAllAppDataFiles(): Result<Int> = withContext(Dispatchers.IO) {
+        try {
+            val filesToDelete = mutableListOf<File>()
+            val visitedFolders = mutableSetOf<String>()
+
+            suspend fun collectFiles(parentId: String) {
+                if (!visitedFolders.add(parentId)) return
+                var pageToken: String? = null
+                do {
+                    val page = drive.files().list()
+                        .setQ("'$parentId' in parents and trashed = false")
+                        .setSpaces("appDataFolder")
+                        .setFields("nextPageToken, files(id, name, mimeType)")
+                        .setPageSize(1000)
+                        .setPageToken(pageToken)
+                        .execute()
+                    val children = page.files.orEmpty().filter { !it.id.isNullOrBlank() }
+                    children.filter { it.mimeType == FOLDER_MIME_TYPE }
+                        .forEach { child -> child.id?.let { collectFiles(it) } }
+                    filesToDelete += children
+                    pageToken = page.nextPageToken
+                } while (pageToken != null)
+            }
+
+            collectFiles(APP_DATA_FOLDER_ID)
+            var deletedCount = 0
+            try {
+                filesToDelete.forEach { file ->
+                    drive.files().delete(file.id).execute()
+                    deletedCount++
+                }
+            } catch (e: Exception) {
+                throw IOException("已刪除 $deletedCount 個雲端項目，後續刪除失敗：${e.message}", e)
+            }
+            Result.success(deletedCount)
         } catch (e: Exception) {
             e.printStackTrace()
             Result.failure(e)
@@ -149,5 +191,10 @@ class GoogleDriveService(context: Context, account: GoogleSignInAccount) {
             e.printStackTrace()
             Result.failure(e)
         }
+    }
+
+    private companion object {
+        const val APP_DATA_FOLDER_ID = "appDataFolder"
+        const val FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
     }
 }

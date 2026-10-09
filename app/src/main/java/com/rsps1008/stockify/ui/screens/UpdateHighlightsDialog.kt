@@ -7,7 +7,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -24,7 +25,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
-internal const val UPDATE_HIGHLIGHTS_VERSION = "1.7.0"
+internal const val UPDATE_HIGHLIGHTS_VERSION = "1.7.2"
 
 internal fun shouldShowUpdateHighlights(
     currentVersion: String,
@@ -55,12 +56,12 @@ fun UpdateHighlightsDialog(
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "這次更新，投資表現更清楚",
+                    text = "雲端備份更省心",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "新增報酬日曆，投資表現一眼看懂。",
+                    text = "重要資料備份與還原更方便。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -69,9 +70,14 @@ fun UpdateHighlightsDialog(
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 UpdateHighlightCard(
-                    icon = Icons.Filled.ShowChart,
-                    title = "每天的賺賠，一看就懂",
-                    description = "用月曆回顧每天的賺賠與報酬，投資表現更清楚。"
+                    icon = Icons.Filled.Backup,
+                    title = "離開 App 後自動備份",
+                    description = "可設定每 1 天、3 天或 1 週嘗試備份，讓重要資料更方便保存。"
+                )
+                UpdateHighlightCard(
+                    icon = Icons.Filled.Restore,
+                    title = "備份與還原更安心",
+                    description = "覆蓋雲端資料前會先提醒；還原時可選擇要使用的備份。"
                 )
             }
         },
