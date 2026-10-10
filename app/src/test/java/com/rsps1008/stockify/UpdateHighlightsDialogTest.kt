@@ -21,9 +21,9 @@ class UpdateHighlightsDialogTest {
 
     @Test
     fun laterReleaseShowsMissedHighlightButNotDismissedHighlight() {
-        assertTrue(shouldShowUpdateHighlights("1.7.1", null))
-        assertTrue(shouldShowUpdateHighlights("1.7.1", "1.6.9"))
-        assertFalse(shouldShowUpdateHighlights("1.7.1", UPDATE_HIGHLIGHTS_VERSION))
-        assertFalse(shouldShowUpdateHighlights("1.6.9", null))
+        assertTrue(shouldShowUpdateHighlights("1.7.3", null))
+        assertTrue(shouldShowUpdateHighlights("1.7.3", "1.7.1"))
+        assertFalse(shouldShowUpdateHighlights("1.7.3", UPDATE_HIGHLIGHTS_VERSION))
+        assertFalse(shouldShowUpdateHighlights("1.7.1", null))
     }
 }

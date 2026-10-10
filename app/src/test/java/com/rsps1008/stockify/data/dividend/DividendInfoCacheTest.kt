@@ -1,7 +1,8 @@
 package com.rsps1008.stockify.data.dividend
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
-import androidx.datastore.preferences.PreferencesProto
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.rsps1008.stockify.data.SettingsDataStore
 import com.rsps1008.stockify.ui.viewmodel.getDividendFetchDateString
 import kotlinx.coroutines.CoroutineScope
@@ -22,7 +23,6 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.util.Calendar
 import java.util.TimeZone
-import java.io.FileOutputStream
 
 class DividendInfoCacheTest {
 
@@ -227,15 +227,12 @@ class DividendInfoCacheTest {
         val testFilePersisted = java.io.File(tempFolder.root, "test_settings_3_persisted.preferences_pb")
         val futureSequence = 9_000_000_000_000L
         val rawJson = """{"2330":{"cashDividend":2.0,"lastFetchedDate":"2026/08/16","requestSequence":$futureSequence}}"""
-        val persistedPreferences = PreferencesProto.PreferenceMap.newBuilder()
-            .putPreferences(
-                "dividend_info_cache",
-                PreferencesProto.Value.newBuilder().setString(rawJson).build()
-            )
-            .build()
-        FileOutputStream(testFilePersisted).use { output ->
-            persistedPreferences.writeTo(output)
+        val scope1 = CoroutineScope(Dispatchers.IO + Job())
+        val dataStoreSession1 = PreferenceDataStoreFactory.create(scope = scope1, produceFile = { testFilePersisted })
+        dataStoreSession1.edit { preferences ->
+            preferences[stringPreferencesKey("dividend_info_cache")] = rawJson
         }
+        scope1.cancel()
 
         // 2. Simulate process restart with a lower / rolled-back clock.
         // The sequence reset stands in for a new process's in-memory state.

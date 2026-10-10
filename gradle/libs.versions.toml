@@ -22,7 +22,7 @@ googleHttpClientAndroid = "2.2.0" # 加入這個
 
 # 資料處理與資料庫
 room = "2.8.5"
-datastore = "1.0.0"
+datastore = "1.2.1"
 biometric = "1.1.0"
 kotlinxSerialization = "1.11.0"
 ktor = "2.3.11"
