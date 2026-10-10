@@ -163,7 +163,7 @@ class StockHistoryLoadingProgressTest {
         val client = HttpClient(object : HttpClientEngineBase("history-progress-test") {
             override val config = HttpClientEngineConfig()
 
-            @OptIn(io.ktor.util.InternalAPI::class)
+            @OptIn(io.ktor.utils.io.InternalAPI::class)
             override suspend fun execute(data: HttpRequestData): HttpResponseData {
                 val month = requireNotNull(data.url.parameters["date"]).take(6)
                 requestedMonths += month
