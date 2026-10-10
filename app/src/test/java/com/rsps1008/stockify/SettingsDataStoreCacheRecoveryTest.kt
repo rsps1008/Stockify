@@ -85,4 +85,19 @@ class SettingsDataStoreCacheRecoveryTest {
 
         scope.cancel()
     }
+
+    @Test
+    fun autoCloudBackupLastErrorAndAttemptAtArePersisted() = runBlocking {
+        val testFile = File(tempFolder.root, "auto-backup-persist.preferences_pb")
+        val scope = CoroutineScope(Dispatchers.IO + Job())
+        val dataStore = PreferenceDataStoreFactory.create(scope = scope, produceFile = { testFile })
+        val settingsDataStore = SettingsDataStore(dataStore)
+
+        val attemptTime = 1700000000000L
+        settingsDataStore.setAutoCloudBackupLastError("連線逾時", attemptTime)
+        assertEquals("連線逾時", settingsDataStore.autoCloudBackupLastErrorFlow.first())
+        assertEquals(attemptTime, settingsDataStore.autoCloudBackupLastAttemptAtFlow.first())
+
+        scope.cancel()
+    }
 }

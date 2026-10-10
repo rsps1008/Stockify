@@ -9,7 +9,7 @@ object GoogleDriveBackupSelectionSupport {
         val legacyIsNewer = legacyOrderFile != null &&
             (bundleFile == null || legacyOrderFile.modifiedAtMillis > bundleFile.modifiedAtMillis)
         return if (legacyIsNewer) {
-            legacyOrderFile?.content
+            legacyOrderFile.content
         } else {
             restoredBundle?.holdingsOrderJson ?: legacyOrderFile?.content
         }

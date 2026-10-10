@@ -442,9 +442,11 @@ private fun RealtimePriceRow(stockCode: String, market: String, viewModel: Stock
             Spacer(modifier = Modifier.weight(1f))
 
             // 右側：更新時間
-            val timeText = info.lastUpdated?.let {
-                SimpleDateFormat("MM/dd HH:mm:ss", Locale.US).format(Date(it))
-            } ?: "--:--"
+            val timeText = if (info.lastUpdated > 0L) {
+                SimpleDateFormat("MM/dd HH:mm:ss", Locale.US).format(Date(info.lastUpdated))
+            } else {
+                "--:--"
+            }
 
             AnimatedTimeText(
                 text = timeText,

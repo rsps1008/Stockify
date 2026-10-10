@@ -1,5 +1,8 @@
 package com.rsps1008.stockify.ui.screens
 
+import com.rsps1008.stockify.data.CloudRestoreSources
+
+import android.accounts.AccountManager
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.graphics.Bitmap
@@ -18,6 +21,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
@@ -35,7 +39,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -58,11 +64,19 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.activity.result.IntentSenderRequest
+import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.auth.api.identity.RevokeAccessRequest
+import com.rsps1008.stockify.data.GoogleDriveAccount
+import com.rsps1008.stockify.data.GoogleDriveAuthState
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.android.gms.common.api.Scope
 import com.google.api.services.drive.DriveScopes
 import com.rsps1008.stockify.R
@@ -104,6 +118,7 @@ fun DataManagementScreen() {
     val downloadBackupFiles by viewModel.downloadBackupFiles.collectAsState()
     val downloadBackupType by viewModel.downloadBackupType.collectAsState()
     val googleSignInAccount by viewModel.googleSignInAccount.collectAsState()
+    val googleDriveAuthState by viewModel.googleDriveAuthState.collectAsState()
     val showPdfPasswordDialog by viewModel.showPdfPasswordDialog.collectAsState()
     val pdfPassword by viewModel.pdfPassword.collectAsState()
     val pdfImportPreview by viewModel.pdfImportPreview.collectAsState()
@@ -112,7 +127,11 @@ fun DataManagementScreen() {
     val autoCloudBackupEnabled by application.settingsDataStore.autoCloudBackupEnabledFlow.collectAsState(initial = false)
     val autoCloudBackupIntervalDays by application.settingsDataStore.autoCloudBackupIntervalDaysFlow.collectAsState(initial = 1)
     val autoCloudBackupLastSuccessAt by application.settingsDataStore.autoCloudBackupLastSuccessAtFlow.collectAsState(initial = null)
+    val autoCloudBackupLastAttemptAt by application.settingsDataStore.autoCloudBackupLastAttemptAtFlow.collectAsState(initial = null)
     val autoCloudBackupLastError by application.settingsDataStore.autoCloudBackupLastErrorFlow.collectAsState(initial = null)
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.refreshCloudBackupTimes()
+    }
     val cloudRestoreSources by viewModel.cloudRestoreSources.collectAsState()
     val accounts by viewModel.accounts.collectAsState()
     val activeAccountId by viewModel.activeAccountId.collectAsState()
@@ -126,22 +145,119 @@ fun DataManagementScreen() {
         mutableStateOf(skipPdfImportTutorial)
     }
 
-    val googleSignInClient = remember {
-        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestEmail()
-            .requestScopes(Scope(DriveScopes.DRIVE_APPDATA))
+    var pendingAuthEmail by rememberSaveable { mutableStateOf<String?>(null) }
+
+    val authorizationClient = remember(context) { Identity.getAuthorizationClient(context) }
+
+    lateinit var authorizationLauncher: ActivityResultLauncher<IntentSenderRequest>
+
+    fun requestAccountAuthorization(email: String) {
+        pendingAuthEmail = email
+        val driveScope = Scope(DriveScopes.DRIVE_APPDATA)
+        val request = AuthorizationRequest.builder()
+            .setRequestedScopes(listOf(driveScope, Scope("email")))
+            .setAccount(android.accounts.Account(email, "com.google"))
             .build()
-        GoogleSignIn.getClient(context, gso)
+        authorizationClient.authorize(request)
+            .addOnSuccessListener { authResult ->
+                if (authResult.hasResolution()) {
+                    val pendingIntent = authResult.pendingIntent
+                    if (pendingIntent != null) {
+                        authorizationLauncher.launch(
+                            IntentSenderRequest.Builder(pendingIntent.intentSender).build()
+                        )
+                    } else {
+                        viewModel.handleAuthorizationFailure(IllegalStateException("無法開啟 Google 授權視窗"))
+                    }
+                } else if (authResult.grantedScopes.any { it.contains("drive.appdata") }) {
+                    viewModel.handleAccountAuthorized(email, authResult)
+                    pendingAuthEmail = null
+                } else {
+                    viewModel.handleAuthorizationFailure(IllegalStateException("未授予 Google Drive 權限"))
+                }
+            }
+            .addOnFailureListener { e ->
+                viewModel.handleAuthorizationFailure(e)
+            }
     }
 
-    val googleSignInLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult(),
+    authorizationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult(),
         onResult = { result ->
-            if (result.resultCode == Activity.RESULT_OK) {
-                result.data?.let(viewModel::handleSignInResult)
+            val email = pendingAuthEmail
+            val intent = result.data
+            if (result.resultCode == Activity.RESULT_OK && intent != null) {
+                try {
+                    val authResult = authorizationClient.getAuthorizationResultFromIntent(intent)
+                    if (authResult.hasResolution()) {
+                        val pendingIntent = authResult.pendingIntent
+                        if (pendingIntent != null) {
+                            authorizationLauncher.launch(
+                                IntentSenderRequest.Builder(pendingIntent.intentSender).build()
+                            )
+                        } else {
+                            viewModel.handleAuthorizationFailure(IllegalStateException("無法開啟 Google 授權視窗"))
+                        }
+                    } else if (authResult.grantedScopes.any { it.contains("drive.appdata") }) {
+                        if (!email.isNullOrBlank()) {
+                            viewModel.handleAccountAuthorized(email, authResult)
+                        } else {
+                            viewModel.handleAuthorizationResult(authResult)
+                        }
+                        pendingAuthEmail = null
+                    } else {
+                        viewModel.handleAuthorizationFailure(IllegalStateException("未授予 Google Drive 權限"))
+                    }
+                } catch (e: Exception) {
+                    pendingAuthEmail = null
+                    viewModel.handleAuthorizationFailure(e)
+                }
+            } else if (intent != null) {
+                try {
+                    authorizationClient.getAuthorizationResultFromIntent(intent)
+                } catch (e: Exception) {
+                    pendingAuthEmail = null
+                    if (e !is ApiException || (e.statusCode != CommonStatusCodes.CANCELED && e.statusCode != 12501)) {
+                        viewModel.handleAuthorizationFailure(e)
+                    }
+                }
+            } else {
+                pendingAuthEmail = null
             }
         }
     )
+
+    val accountChooserLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+        onResult = { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                val email = result.data?.getStringExtra(AccountManager.KEY_ACCOUNT_NAME)
+                if (!email.isNullOrBlank()) {
+                    pendingAuthEmail = email
+                    requestAccountAuthorization(email)
+                } else {
+                    viewModel.handleAuthorizationFailure(IllegalStateException("未選擇 Google 帳號"))
+                }
+            }
+        }
+    )
+
+    fun startAuthorizationFlow() {
+        val chooseAccountIntent = AccountManager.newChooseAccountIntent(
+            null,
+            null,
+            arrayOf("com.google"),
+            null,
+            null,
+            null,
+            null
+        )
+        try {
+            accountChooserLauncher.launch(chooseAccountIntent)
+        } catch (e: Exception) {
+            viewModel.handleAuthorizationFailure(e)
+        }
+    }
 
     val exportCsvLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/csv"),
@@ -231,7 +347,19 @@ fun DataManagementScreen() {
 
     LaunchedEffect(viewModel) {
         viewModel.onSignOut.collectLatest {
-            googleSignInClient.signOut().addOnCompleteListener { viewModel.onSignOutComplete() }
+            try {
+                val driveScope = Scope(DriveScopes.DRIVE_APPDATA)
+                val account = googleSignInAccount?.account
+                val builder = RevokeAccessRequest.builder()
+                    .setScopes(listOf(driveScope, Scope("email")))
+                if (account != null) {
+                    builder.setAccount(account)
+                }
+                authorizationClient.revokeAccess(builder.build())
+                    .addOnCompleteListener { viewModel.onSignOutComplete() }
+            } catch (_: Exception) {
+                viewModel.onSignOutComplete()
+            }
         }
     }
 
@@ -258,6 +386,7 @@ fun DataManagementScreen() {
                     viewModel = viewModel,
                     isLoading = isLoading,
                     googleSignInAccount = googleSignInAccount,
+                    googleDriveAuthState = googleDriveAuthState,
                     cloudDataBackupUpdatedAt = cloudDataBackupUpdatedAt,
                     onBackupClick = { showCloudBackupOverwriteDialog = true },
                     onRestoreClick = {
@@ -267,6 +396,7 @@ fun DataManagementScreen() {
                     autoBackupEnabled = autoCloudBackupEnabled,
                     autoBackupIntervalDays = autoCloudBackupIntervalDays,
                     autoBackupLastSuccessAt = autoCloudBackupLastSuccessAt,
+                    autoBackupLastAttemptAt = autoCloudBackupLastAttemptAt,
                     autoBackupLastError = autoCloudBackupLastError,
                     onAutoBackupEnabledChange = { enabled ->
                         coroutineScope.launch { application.settingsDataStore.setAutoCloudBackupEnabled(enabled) }
@@ -274,7 +404,16 @@ fun DataManagementScreen() {
                     onAutoBackupIntervalChange = { days ->
                         coroutineScope.launch { application.settingsDataStore.setAutoCloudBackupIntervalDays(days) }
                     },
-                    onSignInClick = { googleSignInLauncher.launch(googleSignInClient.signInIntent) },
+                    onSignInClick = ::startAuthorizationFlow,
+                    onReauthorizeClick = {
+                        val email = googleSignInAccount?.email
+                        if (!email.isNullOrBlank()) {
+                            requestAccountAuthorization(email)
+                        } else {
+                            startAuthorizationFlow()
+                        }
+                    },
+                    onRetryVerificationClick = viewModel::checkGoogleDriveAuthorization,
                     onSignOutClick = viewModel::signOut
                 )
             }
@@ -375,28 +514,33 @@ fun DataManagementScreen() {
             text = {
                 Text(
                     when (cloudRestoreSources) {
-                        null -> "正在確認雲端備份檔案…"
-                        false to false -> "Google Drive 中找不到可還原的手動或自動備份。"
+                        CloudRestoreSources.Loading -> "正在確認雲端備份檔案…"
+                        CloudRestoreSources.QueryFailed -> "無法查詢 Google Drive 備份，請稍後重試。"
+                        CloudRestoreSources.Available(false, false) -> "Google Drive 中找不到可還原的手動或自動備份。"
                         else -> "請選擇要還原的備份來源。"
                     }
                 )
             },
             confirmButton = {
                 Row {
-                    TextButton(
-                        enabled = cloudRestoreSources?.first == true,
-                        onClick = {
-                            showCloudRestoreSourceDialog = false
-                            viewModel.restoreFromGoogleDrive(isAutomatic = false)
-                        }
-                    ) { Text("手動備份") }
-                    TextButton(
-                        enabled = cloudRestoreSources?.second == true,
-                        onClick = {
-                            showCloudRestoreSourceDialog = false
-                            viewModel.restoreFromGoogleDrive(isAutomatic = true)
-                        }
-                    ) { Text("自動備份") }
+                    if (cloudRestoreSources == CloudRestoreSources.QueryFailed) {
+                        TextButton(onClick = viewModel::inspectCloudRestoreSources) { Text("重試") }
+                    } else {
+                        TextButton(
+                            enabled = (cloudRestoreSources as? CloudRestoreSources.Available)?.manual == true,
+                            onClick = {
+                                showCloudRestoreSourceDialog = false
+                                viewModel.restoreFromGoogleDrive(isAutomatic = false)
+                            }
+                        ) { Text("手動備份") }
+                        TextButton(
+                            enabled = (cloudRestoreSources as? CloudRestoreSources.Available)?.automatic == true,
+                            onClick = {
+                                showCloudRestoreSourceDialog = false
+                                viewModel.restoreFromGoogleDrive(isAutomatic = true)
+                            }
+                        ) { Text("自動備份") }
+                    }
                     TextButton(onClick = { showCloudRestoreSourceDialog = false }) { Text("取消") }
                 }
             }
@@ -807,17 +951,21 @@ private fun PdfTutorialImage(
 private fun CloudBackupSection(
     viewModel: SettingsViewModel,
     isLoading: Boolean,
-    googleSignInAccount: GoogleSignInAccount?,
+    googleSignInAccount: GoogleDriveAccount?,
+    googleDriveAuthState: GoogleDriveAuthState,
     cloudDataBackupUpdatedAt: Long?,
     onBackupClick: () -> Unit,
     onRestoreClick: () -> Unit,
     autoBackupEnabled: Boolean,
     autoBackupIntervalDays: Int,
     autoBackupLastSuccessAt: Long?,
+    autoBackupLastAttemptAt: Long?,
     autoBackupLastError: String?,
     onAutoBackupEnabledChange: (Boolean) -> Unit,
     onAutoBackupIntervalChange: (Int) -> Unit,
     onSignInClick: () -> Unit,
+    onReauthorizeClick: () -> Unit,
+    onRetryVerificationClick: () -> Unit,
     onSignOutClick: () -> Unit
 ) {
     // The primary backup time is based on the holdings data backup, not the
@@ -839,7 +987,7 @@ private fun CloudBackupSection(
             }
             Spacer(modifier = Modifier.height(12.dp))
 
-            if (googleSignInAccount == null) {
+            if (googleSignInAccount == null || googleDriveAuthState == GoogleDriveAuthState.NOT_SIGNED_IN) {
                 Text("尚未登入 Google Drive")
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(onClick = onSignInClick, shape = DataManagementButtonShape) {
@@ -848,21 +996,65 @@ private fun CloudBackupSection(
             } else {
                 Text("目前帳號: ${googleSignInAccount.email}")
                 Text("最後手動備份時間: ${formatBackupTime(lastBackupAt)}")
+                when (googleDriveAuthState) {
+                    GoogleDriveAuthState.NEEDS_REAUTHORIZATION -> {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "需要重新授權 Google Drive",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            OutlinedButton(
+                                onClick = onReauthorizeClick,
+                                shape = DataManagementButtonShape
+                            ) {
+                                Text("重新授權")
+                            }
+                        }
+                    }
+                    GoogleDriveAuthState.TEMPORARILY_UNAVAILABLE -> {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "雲端連線暫時無法驗證",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            OutlinedButton(
+                                onClick = onRetryVerificationClick,
+                                shape = DataManagementButtonShape
+                            ) {
+                                Text("重試連線")
+                            }
+                        }
+                    }
+                    GoogleDriveAuthState.AUTHORIZED,
+                    GoogleDriveAuthState.NOT_SIGNED_IN -> {
+                        // 正常已授權，無須額外警告
+                    }
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = onBackupClick,
-                        enabled = !isLoading,
+                        enabled = !isLoading && googleDriveAuthState != GoogleDriveAuthState.NEEDS_REAUTHORIZATION,
                         shape = DataManagementButtonShape
                     ) {
-                        BackupRestoreLabel("備份至雲端", "備份")
+                        BackupRestoreLabel("雲端備份", "備份")
                     }
                     Button(
                         onClick = onRestoreClick,
-                        enabled = !isLoading,
+                        enabled = !isLoading && googleDriveAuthState != GoogleDriveAuthState.NEEDS_REAUTHORIZATION,
                         shape = DataManagementButtonShape
                     ) {
-                        BackupRestoreLabel("自雲端還原", "還原")
+                        BackupRestoreLabel("雲端還原", "還原")
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -874,29 +1066,53 @@ private fun CloudBackupSection(
             Spacer(modifier = Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("離開 App 時自動備份", style = MaterialTheme.typography.titleMedium)
-                    Text("(僅在 Google 帳號已登入時執行)", style = MaterialTheme.typography.bodySmall)
+                    Text("離開 App 嘗試自動備份", style = MaterialTheme.typography.titleMedium)
+                    Text("(僅在帳號登入並正常關閉 APP 時執行)", style = MaterialTheme.typography.bodySmall)
                 }
                 Switch(
                     checked = autoBackupEnabled,
                     onCheckedChange = onAutoBackupEnabledChange,
-                    enabled = googleSignInAccount != null || autoBackupEnabled
+                    enabled = (googleSignInAccount != null && googleDriveAuthState != GoogleDriveAuthState.NOT_SIGNED_IN) || autoBackupEnabled
                 )
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                listOf(1 to "1 天", 3 to "3 天", 7 to "1 週").forEach { (days, label) ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = autoBackupIntervalDays == days,
-                            onClick = { onAutoBackupIntervalChange(days) },
-                            enabled = autoBackupEnabled
-                        )
-                        Text(label)
+            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 32.dp) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        modifier = Modifier.width(48.dp),
+                        selected = autoBackupIntervalDays == 0,
+                        onClick = { onAutoBackupIntervalChange(0) },
+                        enabled = autoBackupEnabled
+                    )
+                    Text("每次關閉都自動備份")
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    listOf(1 to "1 天", 3 to "3 天", 7 to "1 週").forEach { (days, label) ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(
+                                modifier = Modifier.width(48.dp),
+                                selected = autoBackupIntervalDays == days,
+                                onClick = { onAutoBackupIntervalChange(days) },
+                                enabled = autoBackupEnabled
+                            )
+                            Text(label)
+                        }
                     }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "至多更新一次",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
-            Text("最後自動備份成功：${formatBackupTime(autoBackupLastSuccessAt)}")
-            autoBackupLastError?.let { Text("上次自動備份失敗：$it", color = MaterialTheme.colorScheme.error) }
+            if (googleSignInAccount != null && googleDriveAuthState != GoogleDriveAuthState.NOT_SIGNED_IN) {
+                Text("最後自動備份成功：${formatBackupTime(autoBackupLastSuccessAt)}")
+                val error = autoBackupLastError
+                if (error != null) {
+                    val attemptTimeText = autoBackupLastAttemptAt?.takeIf { it > 0 }?.let { "（${formatBackupTime(it)}）" }.orEmpty()
+                    Text("上次自動備份失敗$attemptTimeText：$error", color = MaterialTheme.colorScheme.error)
+                }
+            }
         }
     }
 }

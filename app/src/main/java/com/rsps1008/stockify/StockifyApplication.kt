@@ -2,10 +2,16 @@ package com.rsps1008.stockify
 
 import android.app.Application
 import android.util.Log
-import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.common.api.Scope
+import com.google.android.gms.tasks.Tasks
+import com.google.api.services.drive.DriveScopes
 import com.rsps1008.stockify.data.CsvService
 import com.rsps1008.stockify.data.GoogleDriveBackupBundle
 import com.rsps1008.stockify.data.GoogleDriveService
+import com.rsps1008.stockify.data.GoogleDriveAuthState
+import com.rsps1008.stockify.data.GoogleDriveAuthResolutionHelper
 import com.rsps1008.stockify.data.HoldingsOrderBackupService
 import com.rsps1008.stockify.data.AppDatabase
 import com.rsps1008.stockify.data.RealtimeStockDataService
@@ -31,6 +37,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CancellationException
+import com.rsps1008.stockify.data.AutomaticCloudBackupGate
 import kotlinx.serialization.encodeToString
 import java.io.ByteArrayOutputStream
 
@@ -46,17 +53,95 @@ class StockifyApplication : Application() {
     lateinit var twseStockHistoryService: TwseStockHistoryService
     lateinit var transactionListRepository: TransactionListRepository
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val automaticCloudBackupGate = AutomaticCloudBackupGate()
 
     suspend fun performAutomaticCloudBackupIfDue(): Boolean {
+        return automaticCloudBackupGate.runIfIdle {
+            performAutomaticCloudBackupIfDueInternal()
+        }
+    }
+
+    private suspend fun performAutomaticCloudBackupIfDueInternal(): Boolean {
         if (!settingsDataStore.autoCloudBackupEnabledFlow.first()) return true
-        val account = GoogleSignIn.getLastSignedInAccount(this)
-            ?: run {
-                settingsDataStore.setAutoCloudBackupLastError("Google Drive 登入狀態已失效，請重新登入")
-                return false
-            }
         val now = System.currentTimeMillis()
         if (!settingsDataStore.claimAutomaticCloudBackupAttempt(now)) return true
-        return try {
+        var savedEmail = settingsDataStore.googleAccountEmailFlow.first()
+        if (savedEmail.isNullOrBlank()) {
+            val legacyAccount = com.rsps1008.stockify.data.GoogleDriveAccount.fromLegacyStorage(this@StockifyApplication)
+            if (legacyAccount != null) {
+                savedEmail = legacyAccount.email
+                settingsDataStore.setGoogleAccountEmail(savedEmail)
+            }
+        }
+        val authVersion = settingsDataStore.googleDriveAuthVersionFlow.first()
+        val attemptTime = settingsDataStore.beginGoogleDriveAuthValidationIfMatching(
+            expectedEmail = savedEmail,
+            expectedVersion = authVersion
+        ) ?: return true
+        if (savedEmail.isNullOrBlank()) {
+            settingsDataStore.setGoogleDriveAuthStateIfMatching(
+                expectedEmail = null,
+                expectedVersion = authVersion,
+                state = GoogleDriveAuthState.NOT_SIGNED_IN,
+                lastError = "尚未登入 Google Drive，無法自動備份",
+                attemptTime = attemptTime
+            )
+            return false
+        }
+        val driveScope = Scope(DriveScopes.DRIVE_APPDATA)
+        val request = AuthorizationRequest.builder()
+            .setRequestedScopes(listOf(driveScope, Scope("email")))
+            .setAccount(android.accounts.Account(savedEmail, "com.google"))
+            .build()
+        val authResult = try {
+            withContext(Dispatchers.IO) {
+                Tasks.await(Identity.getAuthorizationClient(this@StockifyApplication).authorize(request))
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to verify Google Drive authorization", e)
+            null
+        }
+        if (authResult == null) {
+            settingsDataStore.setGoogleDriveAuthStateIfMatching(
+                expectedEmail = savedEmail,
+                expectedVersion = authVersion,
+                state = GoogleDriveAuthState.TEMPORARILY_UNAVAILABLE,
+                lastError = "Google Drive 授權驗證失敗（網路或連線問題）",
+                attemptTime = attemptTime
+            )
+            return false
+        }
+        if (authResult.hasResolution()) {
+            settingsDataStore.setGoogleDriveAuthStateIfMatching(
+                expectedEmail = savedEmail,
+                expectedVersion = authVersion,
+                state = GoogleDriveAuthState.NEEDS_REAUTHORIZATION,
+                lastError = "Google Drive 需要重新確認授權，請開啟 App 重新授權",
+                attemptTime = attemptTime
+            )
+            return false
+        }
+        if (!authResult.grantedScopes.any { it.contains("drive.appdata") }) {
+            settingsDataStore.setGoogleDriveAuthStateIfMatching(
+                expectedEmail = savedEmail,
+                expectedVersion = authVersion,
+                state = GoogleDriveAuthState.NEEDS_REAUTHORIZATION,
+                lastError = "Google Drive 尚未取得備份權限，請開啟 App 重新授權",
+                attemptTime = attemptTime
+            )
+            return false
+        }
+        val validationUpdated = settingsDataStore.setGoogleDriveAuthStateIfMatching(
+            expectedEmail = savedEmail,
+            expectedVersion = authVersion,
+            state = GoogleDriveAuthState.AUTHORIZED,
+            attemptTime = attemptTime
+        )
+        if (!validationUpdated) return true
+
+        val bundle = try {
             val transactions = database.stockDao().getTransactionsWithStock().first()
             val csvContent = withContext(Dispatchers.IO) {
                 ByteArrayOutputStream().use { output ->
@@ -71,22 +156,73 @@ class StockifyApplication : Application() {
             val orderBytes = withContext(Dispatchers.IO) {
                 HoldingsOrderBackupService().exportToBytes(order, realizedOrder)
             }
-            val bundle = withContext(Dispatchers.Default) {
+            withContext(Dispatchers.Default) {
                 GoogleDriveBackupBundle.create(csvContent, accountsJson, orderBytes)
             }
-            GoogleDriveService(this, account)
-                .uploadBackup(
-                    fileName = AUTO_CLOUD_BACKUP_FILE_NAME,
-                    content = bundle,
-                    mimeType = "application/zip"
-                ).getOrThrow()
-            settingsDataStore.setAutoCloudBackupLastSuccessAt(System.currentTimeMillis())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to prepare backup bundle data", e)
+            settingsDataStore.setAutoCloudBackupLastErrorIfMatching(
+                expectedEmail = savedEmail,
+                expectedVersion = authVersion,
+                attemptTime = attemptTime,
+                message = "建立備份資料失敗: ${e.localizedMessage ?: e.javaClass.simpleName}",
+                failedAt = now
+            )
+            return false
+        }
+
+        return try {
+            val driveService = GoogleDriveService(this, savedEmail)
+            driveService.uploadBackup(
+                fileName = AUTO_CLOUD_BACKUP_FILE_NAME,
+                content = bundle,
+                mimeType = "application/zip"
+            ).getOrThrow()
+            val localSuccessAt = System.currentTimeMillis()
+            settingsDataStore.setGoogleDriveAuthStateIfMatching(
+                expectedEmail = savedEmail,
+                expectedVersion = authVersion,
+                state = GoogleDriveAuthState.AUTHORIZED,
+                clearLastError = true,
+                attemptTime = attemptTime,
+                localBackupSuccessAt = localSuccessAt
+            )
+            // 上傳已成功；修改時間查詢失敗時保留快取，待畫面再次同步。
+            val cloudModifiedTime = driveService.getBackupModifiedTime(AUTO_CLOUD_BACKUP_FILE_NAME).getOrNull()
+            settingsDataStore.setGoogleDriveAuthStateIfMatching(
+                expectedEmail = savedEmail,
+                expectedVersion = authVersion,
+                state = GoogleDriveAuthState.AUTHORIZED,
+                clearLastError = true,
+                attemptTime = attemptTime,
+                backupSuccessAt = cloudModifiedTime
+            )
             true
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "Automatic Google Drive backup failed", e)
-            settingsDataStore.setAutoCloudBackupLastError(e.localizedMessage ?: e.javaClass.simpleName)
+            val failedAt = System.currentTimeMillis()
+            Log.w(TAG, "Automatic Google Drive backup failed during upload", e)
+            val uploadAuthState = GoogleDriveAuthResolutionHelper.resolveUploadFailureAuthState(e)
+            if (uploadAuthState != null) {
+                settingsDataStore.setGoogleDriveAuthStateIfMatching(
+                    expectedEmail = savedEmail,
+                    expectedVersion = authVersion,
+                    state = uploadAuthState,
+                    lastError = e.localizedMessage ?: e.javaClass.simpleName,
+                    attemptTime = attemptTime
+                )
+            } else {
+                settingsDataStore.setAutoCloudBackupLastErrorIfMatching(
+                    expectedEmail = savedEmail,
+                    expectedVersion = authVersion,
+                    attemptTime = attemptTime,
+                    message = e.localizedMessage ?: e.javaClass.simpleName,
+                    failedAt = failedAt
+                )
+            }
             false
         }
     }

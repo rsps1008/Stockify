@@ -14,11 +14,15 @@ import androidx.room.withTransaction
 import androidx.work.WorkManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.AuthorizationResult
+import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.tasks.Tasks
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
 import com.google.api.services.drive.DriveScopes
+import com.rsps1008.stockify.data.GoogleDriveAccount
+import com.rsps1008.stockify.data.GoogleDriveAuthState
 import com.rsps1008.stockify.data.CsvService
 import com.rsps1008.stockify.data.CsvTransaction
 import com.rsps1008.stockify.data.Account
@@ -29,6 +33,7 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 import com.rsps1008.stockify.data.GoogleDriveService
+import com.rsps1008.stockify.data.CloudRestoreSources
 import com.rsps1008.stockify.data.AUTOMATIC_CLOUD_BACKUP_WORK_NAME
 import com.rsps1008.stockify.data.GoogleDriveBackupBundle
 import com.rsps1008.stockify.data.HoldingsOrderBackupService
@@ -55,6 +60,7 @@ import com.rsps1008.stockify.data.TwseStockHistoryService
 import com.rsps1008.stockify.data.assignProvisionalImportIds
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -222,13 +228,20 @@ class SettingsViewModel(
     private var pendingForceImportTransactions: List<CsvTransaction>? = null
     private var pendingForceImportDeleteOldData = false
 
-    private val _googleSignInAccount = MutableStateFlow<GoogleSignInAccount?>(null)
-    val googleSignInAccount: StateFlow<GoogleSignInAccount?> = _googleSignInAccount.asStateFlow()
+    private val _googleSignInAccount = MutableStateFlow<GoogleDriveAccount?>(null)
+    val googleSignInAccount: StateFlow<GoogleDriveAccount?> = _googleSignInAccount.asStateFlow()
+
+    private val _googleDriveAuthState = MutableStateFlow(GoogleDriveAuthState.NOT_SIGNED_IN)
+    val googleDriveAuthState: StateFlow<GoogleDriveAuthState> = _googleDriveAuthState.asStateFlow()
+
+    private var authVerificationGeneration = 0L
+    private var checkAuthJob: Job? = null
+    private var cloudBackupTimesJob: Job? = null
 
     private val _cloudDataBackupUpdatedAt = MutableStateFlow<Long?>(null)
     val cloudDataBackupUpdatedAt: StateFlow<Long?> = _cloudDataBackupUpdatedAt.asStateFlow()
-    private val _cloudRestoreSources = MutableStateFlow<Pair<Boolean, Boolean>?>(null)
-    val cloudRestoreSources: StateFlow<Pair<Boolean, Boolean>?> = _cloudRestoreSources.asStateFlow()
+    private val _cloudRestoreSources = MutableStateFlow<CloudRestoreSources>(CloudRestoreSources.Loading)
+    val cloudRestoreSources: StateFlow<CloudRestoreSources> = _cloudRestoreSources.asStateFlow()
 
     private val _cloudOrderBackupUpdatedAt = MutableStateFlow<Long?>(null)
     val cloudOrderBackupUpdatedAt: StateFlow<Long?> = _cloudOrderBackupUpdatedAt.asStateFlow()
@@ -388,45 +401,219 @@ class SettingsViewModel(
     }
 
     init {
-        val account = GoogleSignIn.getLastSignedInAccount(getApplication())
-        // 在 init 和 handleSignInResult 中
-        val driveScope = Scope(DriveScopes.DRIVE_APPDATA)
+        checkGoogleDriveAuthorization()
+    }
 
-        viewModelScope.launch {
+    fun checkGoogleDriveAuthorization() {
+        val driveScope = Scope(DriveScopes.DRIVE_APPDATA)
+        val generation = ++authVerificationGeneration
+        checkAuthJob?.cancel()
+
+        checkAuthJob = viewModelScope.launch {
             // Show the last known holdings backup time immediately while Drive is queried.
             _cloudDataBackupUpdatedAt.value = settingsDataStore.cloudDataBackupUpdatedAtFlow.first()
+            var savedEmail = settingsDataStore.googleAccountEmailFlow.first()
+            val legacyAccount = GoogleDriveAccount.fromLegacyStorage(getApplication())
+            if (savedEmail.isNullOrBlank() && legacyAccount != null) {
+                savedEmail = legacyAccount.email
+                settingsDataStore.setGoogleAccountEmail(savedEmail)
+            }
 
-            if (account != null && GoogleSignIn.hasPermissions(account, driveScope)) {
-                _googleSignInAccount.value = account
-                refreshCloudBackupTimes(account)
-            } else {
-                // 如果登入成功但沒權限，可以發出一個訊息提示使用者要勾選權限
+            if (generation != authVerificationGeneration) return@launch
+
+            if (savedEmail.isNullOrBlank()) {
                 _googleSignInAccount.value = null
-                if (account != null) _message.value = "請務必勾選 Google Drive 權限以進行備份"
+                _googleDriveAuthState.value = GoogleDriveAuthState.NOT_SIGNED_IN
+                settingsDataStore.setGoogleDriveAuthState(GoogleDriveAuthState.NOT_SIGNED_IN)
+                return@launch
+            }
+
+            val savedAuthState = settingsDataStore.googleDriveAuthStateFlow.first()
+            val accountChanged = _googleSignInAccount.value?.email != savedEmail
+            if (accountChanged) {
+                _googleSignInAccount.value = GoogleDriveAccount(savedEmail, legacyAccount?.displayName)
+                _googleDriveAuthState.value = savedAuthState
+                _cloudDataBackupUpdatedAt.value = null
+                _cloudOrderBackupUpdatedAt.value = null
+            } else if (_googleDriveAuthState.value == GoogleDriveAuthState.NOT_SIGNED_IN) {
+                _googleDriveAuthState.value = savedAuthState
+            }
+
+            val authorizationClient = Identity.getAuthorizationClient(getApplication())
+            val requestBuilder = AuthorizationRequest.builder()
+                .setRequestedScopes(listOf(driveScope, Scope("email")))
+                .setAccount(android.accounts.Account(savedEmail, "com.google"))
+
+            try {
+                val authResult = withContext(Dispatchers.IO) {
+                    Tasks.await(authorizationClient.authorize(requestBuilder.build()))
+                }
+                if (generation != authVerificationGeneration) return@launch
+
+                val hasDriveScope = authResult.grantedScopes.any { it.contains("drive.appdata") }
+                if (!authResult.hasResolution() && hasDriveScope) {
+                    @Suppress("DEPRECATION")
+                    val signInAccount = authResult.toGoogleSignInAccount()
+                    val email = signInAccount?.email ?: savedEmail
+                    val displayName = signInAccount?.displayName ?: legacyAccount?.displayName
+                    val account = GoogleDriveAccount(email, displayName)
+                    _googleSignInAccount.value = account
+                    _googleDriveAuthState.value = GoogleDriveAuthState.AUTHORIZED
+                    settingsDataStore.updateGoogleDriveAccountState(
+                        email = email,
+                        state = GoogleDriveAuthState.AUTHORIZED
+                    )
+                    refreshCloudBackupTimes(account)
+                } else {
+                    val account = GoogleDriveAccount(savedEmail, legacyAccount?.displayName)
+                    _googleSignInAccount.value = account
+                    _googleDriveAuthState.value = GoogleDriveAuthState.NEEDS_REAUTHORIZATION
+                    settingsDataStore.setGoogleDriveAuthState(GoogleDriveAuthState.NEEDS_REAUTHORIZATION)
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                if (generation != authVerificationGeneration) return@launch
+
+                val account = GoogleDriveAccount(savedEmail, legacyAccount?.displayName)
+                _googleSignInAccount.value = account
+                val newState = if (e is ApiException && e.status.hasResolution()) {
+                    GoogleDriveAuthState.NEEDS_REAUTHORIZATION
+                } else {
+                    GoogleDriveAuthState.TEMPORARILY_UNAVAILABLE
+                }
+                _googleDriveAuthState.value = newState
+                settingsDataStore.setGoogleDriveAuthState(newState)
             }
         }
     }
 
-    fun handleSignInResult(intent: Intent) {
-        println("handleSignInResult")
-        val task = GoogleSignIn.getSignedInAccountFromIntent(intent)
-        try {
-            val account = task.getResult(ApiException::class.java)
-            val driveScope = Scope(DriveScopes.DRIVE_APPDATA)
-            val hasPermission = GoogleSignIn.hasPermissions(account, driveScope)
+    fun handleAccountAuthorized(email: String, authResult: AuthorizationResult) {
+        val hasDriveScope = authResult.grantedScopes.any { it.contains("drive.appdata") }
+        @Suppress("DEPRECATION")
+        val signInAccount = authResult.toGoogleSignInAccount()
+        val displayName = signInAccount?.displayName
+        val generation = ++authVerificationGeneration
+        checkAuthJob?.cancel()
 
-            println("Debug: account is null? ${account == null}, hasPermission? $hasPermission")
+        viewModelScope.launch {
+            if (generation != authVerificationGeneration) return@launch
 
-            if (account != null && GoogleSignIn.hasPermissions(account, driveScope)) {
+            val previousEmail = _googleSignInAccount.value?.email
+            if (previousEmail != null && previousEmail != email) {
+                _cloudDataBackupUpdatedAt.value = null
+                _cloudOrderBackupUpdatedAt.value = null
+            }
+
+            if (hasDriveScope && email.isNotBlank()) {
+                val legacyAccount = GoogleDriveAccount.fromLegacyStorage(getApplication())
+                val account = GoogleDriveAccount(email, displayName ?: legacyAccount?.displayName)
                 _googleSignInAccount.value = account
+                _googleDriveAuthState.value = GoogleDriveAuthState.AUTHORIZED
                 _message.value = "Google 登入成功"
+                settingsDataStore.updateGoogleDriveAccountState(
+                    email = email,
+                    state = GoogleDriveAuthState.AUTHORIZED
+                )
                 refreshCloudBackupTimes(account)
             } else {
-                _googleSignInAccount.value = null
-                _message.value = "Google 登入失敗，請授予 Google Drive 權限。"
+                val legacyAccount = GoogleDriveAccount.fromLegacyStorage(getApplication())
+                val account = GoogleDriveAccount(email, displayName ?: legacyAccount?.displayName)
+                _googleSignInAccount.value = account
+                _googleDriveAuthState.value = GoogleDriveAuthState.NEEDS_REAUTHORIZATION
+                settingsDataStore.updateGoogleDriveAccountState(
+                    email = email,
+                    state = GoogleDriveAuthState.NEEDS_REAUTHORIZATION
+                )
+                _message.value = "未授予 Google Drive 權限，無法備份與還原。"
             }
-        } catch (e: ApiException) {
+        }
+    }
+
+    fun handleAuthorizationResult(
+        authResult: AuthorizationResult,
+        fallbackEmail: String? = null,
+        fallbackDisplayName: String? = null
+    ) {
+        val hasDriveScope = authResult.grantedScopes.any { it.contains("drive.appdata") }
+        @Suppress("DEPRECATION")
+        val signInAccount = authResult.toGoogleSignInAccount()
+        val generation = ++authVerificationGeneration
+        checkAuthJob?.cancel()
+
+        viewModelScope.launch {
+            val savedEmail = settingsDataStore.googleAccountEmailFlow.first()
+            val legacyAccount = GoogleDriveAccount.fromLegacyStorage(getApplication())
+            val email = fallbackEmail
+                ?: signInAccount?.email
+                ?: signInAccount?.account?.name
+                ?: savedEmail
+                ?: legacyAccount?.email
+
+            if (generation != authVerificationGeneration) return@launch
+
+            val previousEmail = _googleSignInAccount.value?.email
+            if (previousEmail != null && email != null && previousEmail != email) {
+                _cloudDataBackupUpdatedAt.value = null
+                _cloudOrderBackupUpdatedAt.value = null
+            }
+
+            if (hasDriveScope && !email.isNullOrBlank()) {
+                val displayName = signInAccount?.displayName
+                    ?: fallbackDisplayName
+                    ?: legacyAccount?.displayName
+                val account = GoogleDriveAccount(email, displayName)
+                _googleSignInAccount.value = account
+                _googleDriveAuthState.value = GoogleDriveAuthState.AUTHORIZED
+                _message.value = "Google 登入成功"
+                settingsDataStore.updateGoogleDriveAccountState(
+                    email = email,
+                    state = GoogleDriveAuthState.AUTHORIZED
+                )
+                refreshCloudBackupTimes(account)
+            } else {
+                val displayName = signInAccount?.displayName
+                    ?: fallbackDisplayName
+                    ?: legacyAccount?.displayName
+                if (!email.isNullOrBlank()) {
+                    val account = GoogleDriveAccount(email, displayName)
+                    _googleSignInAccount.value = account
+                    _googleDriveAuthState.value = GoogleDriveAuthState.NEEDS_REAUTHORIZATION
+                    settingsDataStore.updateGoogleDriveAccountState(
+                        email = email,
+                        state = GoogleDriveAuthState.NEEDS_REAUTHORIZATION
+                    )
+                } else {
+                    _googleSignInAccount.value = null
+                    _googleDriveAuthState.value = GoogleDriveAuthState.NOT_SIGNED_IN
+                    settingsDataStore.updateGoogleDriveAccountState(
+                        email = null,
+                        state = GoogleDriveAuthState.NOT_SIGNED_IN
+                    )
+                }
+                _message.value = "未授予 Google Drive 權限，無法備份與還原。"
+            }
+        }
+    }
+
+    fun handleAuthorizationFailure(e: Exception) {
+        if (e is ApiException) {
             _message.value = "Google 登入失敗: ${e.statusCode}"
+        } else {
+            _message.value = "Google 登入失敗: ${e.message ?: "請稍後再試"}"
+        }
+    }
+
+    fun handleSignInResult(
+        intent: Intent,
+        fallbackEmail: String? = null,
+        fallbackDisplayName: String? = null
+    ) {
+        try {
+            val authorizationClient = Identity.getAuthorizationClient(getApplication())
+            val authResult = authorizationClient.getAuthorizationResultFromIntent(intent)
+            handleAuthorizationResult(authResult, fallbackEmail, fallbackDisplayName)
+        } catch (e: Exception) {
+            handleAuthorizationFailure(e)
         }
     }
 
@@ -437,15 +624,43 @@ class SettingsViewModel(
     }
 
     fun onSignOutComplete() {
+        val generation = ++authVerificationGeneration
+        checkAuthJob?.cancel()
+        cloudBackupTimesJob?.cancel()
         _googleSignInAccount.value = null
+        _googleDriveAuthState.value = GoogleDriveAuthState.NOT_SIGNED_IN
         _cloudDataBackupUpdatedAt.value = null
         _cloudOrderBackupUpdatedAt.value = null
+        viewModelScope.launch {
+            if (generation != authVerificationGeneration) return@launch
+            settingsDataStore.clearGoogleDriveAccountAndBackupMetadata()
+            GoogleDriveAccount.clearLegacyStorage(getApplication())
+        }
         _message.value = "Google 登出成功"
     }
 
-    private fun refreshCloudBackupTimes(account: GoogleSignInAccount) {
-        viewModelScope.launch {
+    fun refreshCloudBackupTimes() {
+        _googleSignInAccount.value?.let(::refreshCloudBackupTimes)
+    }
+
+    private fun refreshCloudBackupTimes(account: GoogleDriveAccount) {
+        cloudBackupTimesJob?.cancel()
+        cloudBackupTimesJob = viewModelScope.launch {
+            val authVersion = settingsDataStore.googleDriveAuthVersionFlow.first()
+            if (settingsDataStore.googleAccountEmailFlow.first() != account.email) return@launch
+            val lastSuccessAt = settingsDataStore.autoCloudBackupLastSuccessAtFlow.first()
+            val lastLocalSuccessAt = settingsDataStore.autoCloudBackupLastLocalSuccessAtFlow.first()
             val driveService = GoogleDriveService(getApplication(), account)
+            val automaticModifiedTime = driveService.getBackupModifiedTime(com.rsps1008.stockify.AUTO_CLOUD_BACKUP_FILE_NAME)
+            if (automaticModifiedTime.isSuccess) {
+                settingsDataStore.setAutoCloudBackupModifiedTimeIfMatching(
+                    expectedEmail = account.email,
+                    expectedVersion = authVersion,
+                    expectedLastSuccessAt = lastSuccessAt,
+                    modifiedTime = automaticModifiedTime.getOrThrow(),
+                    expectedLastLocalSuccessAt = lastLocalSuccessAt
+                )
+            }
             val bundleUpdatedAt = driveService.getBackupModifiedTime(GoogleDriveBackupBundle.FILE_NAME).getOrNull()
             val dataUpdatedAt = bundleUpdatedAt
                 ?: driveService.getBackupModifiedTime("stockify_backup.csv").getOrNull()
@@ -511,12 +726,12 @@ class SettingsViewModel(
     fun inspectCloudRestoreSources() {
         viewModelScope.launch {
             val account = _googleSignInAccount.value ?: return@launch
-            _cloudRestoreSources.value = null
+            _cloudRestoreSources.value = CloudRestoreSources.Loading
             val service = GoogleDriveService(getApplication(), account)
-            val manualBundle = service.getBackupModifiedTime(GoogleDriveBackupBundle.FILE_NAME).getOrNull()
-            val manualCsv = service.getBackupModifiedTime("stockify_backup.csv").getOrNull()
-            val autoBundle = service.getBackupModifiedTime(com.rsps1008.stockify.AUTO_CLOUD_BACKUP_FILE_NAME).getOrNull()
-            _cloudRestoreSources.value = (manualBundle != null || manualCsv != null) to (autoBundle != null)
+            val sources = com.rsps1008.stockify.data.inspectCloudRestoreSources(service::getBackupModifiedTime)
+            if (_googleSignInAccount.value?.email == account.email) {
+                _cloudRestoreSources.value = sources
+            }
         }
     }
 

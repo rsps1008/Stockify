@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -22,10 +23,43 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.atomic.AtomicLong
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
+
+internal fun isAutomaticCloudBackupDue(
+    enabled: Boolean,
+    intervalDays: Int,
+    lastAttempt: Long,
+    lastSuccess: Long,
+    hasRecordedFailure: Boolean,
+    nowMillis: Long,
+    zoneId: ZoneId = ZoneId.systemDefault(),
+    retryCooldownMillis: Long = 5 * 60 * 1000L
+): Boolean {
+    if (!enabled) return false
+
+    if (hasRecordedFailure && lastAttempt > 0L && (nowMillis - lastAttempt) in 0 until retryCooldownMillis) {
+        return false
+    }
+
+    return when {
+        intervalDays == 0 -> true
+        lastSuccess == 0L -> {
+            lastAttempt == 0L || (nowMillis - lastAttempt) >= retryCooldownMillis
+        }
+        else -> {
+            val nowDate = Instant.ofEpochMilli(nowMillis).atZone(zoneId).toLocalDate()
+            val lastSuccessDate = Instant.ofEpochMilli(lastSuccess).atZone(zoneId).toLocalDate()
+            val daysSinceSuccess = ChronoUnit.DAYS.between(lastSuccessDate, nowDate)
+            daysSinceSuccess >= intervalDays || daysSinceSuccess < 0
+        }
+    }
+}
 
 class SettingsDataStore private constructor(
     val context: Context?,
@@ -57,6 +91,20 @@ class SettingsDataStore private constructor(
 
         internal fun resetSequenceForTesting(value: Long) {
             sequenceGenerator.set(value)
+        }
+
+        fun parseGoogleDriveAuthState(raw: String?, email: String?): GoogleDriveAuthState {
+            if (email.isNullOrBlank()) {
+                return GoogleDriveAuthState.NOT_SIGNED_IN
+            }
+            if (raw != null) {
+                try {
+                    return GoogleDriveAuthState.valueOf(raw)
+                } catch (_: IllegalArgumentException) {
+                    // Safe fallback for unknown enum value
+                }
+            }
+            return GoogleDriveAuthState.TEMPORARILY_UNAVAILABLE
         }
     }
 
@@ -108,7 +156,12 @@ class SettingsDataStore private constructor(
     private val autoCloudBackupIntervalDaysKey = intPreferencesKey("auto_cloud_backup_interval_days")
     private val autoCloudBackupLastAttemptAtKey = longPreferencesKey("auto_cloud_backup_last_attempt_at")
     private val autoCloudBackupLastSuccessAtKey = longPreferencesKey("auto_cloud_backup_last_success_at")
+    private val autoCloudBackupLastLocalSuccessAtKey = longPreferencesKey("auto_cloud_backup_last_local_success_at")
     private val autoCloudBackupLastErrorKey = stringPreferencesKey("auto_cloud_backup_last_error")
+    private val googleAccountEmailKey = stringPreferencesKey("google_account_email")
+    private val googleDriveAuthStateKey = stringPreferencesKey("google_drive_auth_state")
+    private val googleDriveAuthVersionKey = longPreferencesKey("google_drive_auth_version")
+    private val googleDriveAuthValidationTimeKey = longPreferencesKey("google_drive_auth_validation_time")
     private val marginFeatureEnabledKey = booleanPreferencesKey("margin_feature_enabled")
     private val marginDayCountKey = intPreferencesKey("margin_day_count")
     private val defaultMarginAnnualRateKey = doublePreferencesKey("default_margin_annual_rate")
@@ -389,16 +442,36 @@ class SettingsDataStore private constructor(
         .map { it[autoCloudBackupEnabledKey] ?: false }
 
     val autoCloudBackupIntervalDaysFlow: Flow<Int> = dataStoreInstance.data
-        .map { it[autoCloudBackupIntervalDaysKey]?.takeIf { days -> days in setOf(1, 3, 7) } ?: 1 }
+        .map { it[autoCloudBackupIntervalDaysKey]?.takeIf { days -> days in setOf(0, 1, 3, 7) } ?: 1 }
 
     val autoCloudBackupLastSuccessAtFlow: Flow<Long?> = dataStoreInstance.data
         .map { it[autoCloudBackupLastSuccessAtKey] }
+
+    val autoCloudBackupLastLocalSuccessAtFlow: Flow<Long?> = dataStoreInstance.data
+        .map { it[autoCloudBackupLastLocalSuccessAtKey] }
 
     val autoCloudBackupLastAttemptAtFlow: Flow<Long?> = dataStoreInstance.data
         .map { it[autoCloudBackupLastAttemptAtKey] }
 
     val autoCloudBackupLastErrorFlow: Flow<String?> = dataStoreInstance.data
         .map { it[autoCloudBackupLastErrorKey] }
+
+    val googleAccountEmailFlow: Flow<String?> = dataStoreInstance.data
+        .map { it[googleAccountEmailKey] }
+
+    val googleDriveAuthStateFlow: Flow<GoogleDriveAuthState> = dataStoreInstance.data
+        .map { preferences ->
+            parseGoogleDriveAuthState(
+                raw = preferences[googleDriveAuthStateKey],
+                email = preferences[googleAccountEmailKey]
+            )
+        }
+
+    val googleDriveAuthVersionFlow: Flow<Long> = dataStoreInstance.data
+        .map { preferences -> preferences[googleDriveAuthVersionKey] ?: 0L }
+
+    val googleDriveAuthValidationTimeFlow: Flow<Long> = dataStoreInstance.data
+        .map { preferences -> preferences[googleDriveAuthValidationTimeKey] ?: 0L }
 
     val marginFeatureEnabledFlow: Flow<Boolean> = dataStoreInstance.data
         .map { preferences -> preferences[marginFeatureEnabledKey] ?: false }
@@ -743,10 +816,154 @@ class SettingsDataStore private constructor(
 
     suspend fun clearCloudBackupMetadata() {
         dataStoreInstance.edit {
-            it.remove(cloudDataBackupUpdatedAtKey)
-            it.remove(autoCloudBackupLastAttemptAtKey)
-            it.remove(autoCloudBackupLastSuccessAtKey)
-            it.remove(autoCloudBackupLastErrorKey)
+            clearCloudBackupMetadata(it)
+            // 刪除備份後，較早開始的雲端讀取或上傳不得重新填入已清除的紀錄。
+            it[googleDriveAuthVersionKey] = (it[googleDriveAuthVersionKey] ?: 0L) + 1L
+            it.remove(googleDriveAuthValidationTimeKey)
+        }
+    }
+
+    private fun clearCloudBackupMetadata(preferences: MutablePreferences) {
+        with(preferences) {
+            remove(cloudDataBackupUpdatedAtKey)
+            remove(autoCloudBackupLastAttemptAtKey)
+            remove(autoCloudBackupLastSuccessAtKey)
+            remove(autoCloudBackupLastLocalSuccessAtKey)
+            remove(autoCloudBackupLastErrorKey)
+        }
+    }
+
+    suspend fun clearGoogleDriveAccountAndBackupMetadata() {
+        dataStoreInstance.edit {
+            clearCloudBackupMetadata(it)
+            it.remove(googleAccountEmailKey)
+            it[googleDriveAuthStateKey] = GoogleDriveAuthState.NOT_SIGNED_IN.name
+            it[googleDriveAuthVersionKey] = (it[googleDriveAuthVersionKey] ?: 0L) + 1L
+            it.remove(googleDriveAuthValidationTimeKey)
+        }
+    }
+
+    suspend fun setGoogleDriveAuthState(state: GoogleDriveAuthState) {
+        dataStoreInstance.edit { preferences ->
+            invalidateGoogleDriveAuthIfNeeded(preferences, preferences[googleAccountEmailKey], state)
+            preferences[googleDriveAuthStateKey] = state.name
+        }
+    }
+
+    private fun invalidateGoogleDriveAuthIfNeeded(
+        preferences: MutablePreferences,
+        email: String?,
+        state: GoogleDriveAuthState
+    ) {
+        val accountChanged = preferences[googleAccountEmailKey] != email
+        val previousState = parseGoogleDriveAuthState(preferences[googleDriveAuthStateKey], preferences[googleAccountEmailKey])
+        val authorizationRevoked = state != previousState &&
+            (state == GoogleDriveAuthState.NOT_SIGNED_IN || state == GoogleDriveAuthState.NEEDS_REAUTHORIZATION)
+        // 一般驗證不取代正在執行的背景工作；帳戶切換或撤銷授權才使其失效。
+        if (accountChanged || authorizationRevoked) {
+            preferences[googleDriveAuthVersionKey] = (preferences[googleDriveAuthVersionKey] ?: 0L) + 1L
+            preferences.remove(googleDriveAuthValidationTimeKey)
+        }
+    }
+
+    suspend fun updateGoogleDriveAccountState(
+        email: String?,
+        state: GoogleDriveAuthState,
+        lastError: String? = null
+    ) {
+        dataStoreInstance.edit { preferences ->
+            invalidateGoogleDriveAuthIfNeeded(preferences, email, state)
+            if (preferences[googleAccountEmailKey] != email) {
+                preferences.remove(autoCloudBackupLastSuccessAtKey)
+                preferences.remove(autoCloudBackupLastLocalSuccessAtKey)
+                preferences.remove(autoCloudBackupLastAttemptAtKey)
+                preferences.remove(autoCloudBackupLastErrorKey)
+            }
+            if (email.isNullOrBlank()) {
+                preferences.remove(googleAccountEmailKey)
+                preferences[googleDriveAuthStateKey] = GoogleDriveAuthState.NOT_SIGNED_IN.name
+            } else {
+                preferences[googleAccountEmailKey] = email
+                preferences[googleDriveAuthStateKey] = state.name
+            }
+            if (lastError != null) {
+                preferences[autoCloudBackupLastErrorKey] = lastError
+            }
+        }
+    }
+
+    suspend fun beginGoogleDriveAuthValidationIfMatching(
+        expectedEmail: String?,
+        expectedVersion: Long,
+        nowMillis: Long = System.currentTimeMillis()
+    ): Long? {
+        var attemptTime: Long? = null
+        dataStoreInstance.edit { preferences ->
+            if (preferences[googleAccountEmailKey] == expectedEmail &&
+                (preferences[googleDriveAuthVersionKey] ?: 0L) == expectedVersion
+            ) {
+                // 同毫秒開始或時鐘回撥時，仍依 DataStore 的原子寫入順序分配序號。
+                val nextAttempt = maxOf(nowMillis, (preferences[googleDriveAuthValidationTimeKey] ?: 0L) + 1L)
+                preferences[googleDriveAuthValidationTimeKey] = nextAttempt
+                attemptTime = nextAttempt
+            }
+        }
+        return attemptTime
+    }
+
+    suspend fun setGoogleDriveAuthStateIfMatching(
+        expectedEmail: String?,
+        expectedVersion: Long,
+        state: GoogleDriveAuthState,
+        lastError: String? = null,
+        clearLastError: Boolean = false,
+        attemptTime: Long = 0L,
+        backupSuccessAt: Long? = null,
+        localBackupSuccessAt: Long? = null
+    ): Boolean {
+        var updated = false
+        dataStoreInstance.edit { preferences ->
+            val currentEmail = preferences[googleAccountEmailKey]
+            val currentVersion = preferences[googleDriveAuthVersionKey] ?: 0L
+            val lastValidationTime = preferences[googleDriveAuthValidationTimeKey] ?: 0L
+            if (GoogleDriveAuthResolutionHelper.isAuthVersionMatching(
+                    currentEmail, currentVersion, expectedEmail, expectedVersion,
+                    attemptTime, lastValidationTime
+                )
+            ) {
+                preferences[googleDriveAuthStateKey] = state.name
+                if (attemptTime > 0L) {
+                    preferences[googleDriveAuthValidationTimeKey] = attemptTime
+                }
+                if (clearLastError) {
+                    preferences.remove(autoCloudBackupLastErrorKey)
+                } else if (lastError != null) {
+                    preferences[autoCloudBackupLastErrorKey] = lastError
+                }
+                if (backupSuccessAt != null) {
+                    preferences[autoCloudBackupLastSuccessAtKey] = backupSuccessAt
+                }
+                if (localBackupSuccessAt != null) {
+                    preferences[autoCloudBackupLastLocalSuccessAtKey] = localBackupSuccessAt
+                }
+                updated = true
+            }
+        }
+        return updated
+    }
+
+    suspend fun setGoogleAccountEmail(email: String?) {
+        dataStoreInstance.edit { preferences ->
+            if (preferences[googleAccountEmailKey] != email) {
+                preferences.remove(autoCloudBackupLastSuccessAtKey)
+                preferences.remove(autoCloudBackupLastLocalSuccessAtKey)
+                preferences.remove(autoCloudBackupLastAttemptAtKey)
+                preferences.remove(autoCloudBackupLastErrorKey)
+            }
+            if (email.isNullOrBlank()) preferences.remove(googleAccountEmailKey)
+            else preferences[googleAccountEmailKey] = email
+            preferences[googleDriveAuthVersionKey] = (preferences[googleDriveAuthVersionKey] ?: 0L) + 1L
+            preferences.remove(googleDriveAuthValidationTimeKey)
         }
     }
 
@@ -755,24 +972,37 @@ class SettingsDataStore private constructor(
     }
 
     suspend fun setAutoCloudBackupIntervalDays(days: Int) {
-        require(days in setOf(1, 3, 7))
+        require(days in setOf(0, 1, 3, 7))
         dataStoreInstance.edit { it[autoCloudBackupIntervalDaysKey] = days }
     }
 
-    suspend fun claimAutomaticCloudBackupAttempt(nowMillis: Long): Boolean {
+    suspend fun claimAutomaticCloudBackupAttempt(
+        nowMillis: Long,
+        zoneId: ZoneId = ZoneId.systemDefault(),
+        retryCooldownMillis: Long = 5 * 60 * 1000L
+    ): Boolean {
         var claimed = false
         dataStoreInstance.edit { preferences ->
             val enabled = preferences[autoCloudBackupEnabledKey] ?: false
             val interval = preferences[autoCloudBackupIntervalDaysKey]
-                ?.takeIf { it in setOf(1, 3, 7) } ?: 1
+                ?.takeIf { it in setOf(0, 1, 3, 7) } ?: 1
             val lastAttempt = preferences[autoCloudBackupLastAttemptAtKey] ?: 0L
-            val lastSuccess = preferences[autoCloudBackupLastSuccessAtKey] ?: 0L
+            val lastSuccess = preferences[autoCloudBackupLastLocalSuccessAtKey]
+                ?: preferences[autoCloudBackupLastSuccessAtKey] ?: 0L
             val hasRecordedFailure = preferences[autoCloudBackupLastErrorKey] != null
-            val intervalMillis = interval * 24L * 60L * 60L * 1000L
-            val due = lastAttempt == 0L ||
-                nowMillis - lastAttempt >= intervalMillis ||
-                (lastSuccess == 0L && !hasRecordedFailure)
-            if (enabled && due) {
+
+            val due = isAutomaticCloudBackupDue(
+                enabled = enabled,
+                intervalDays = interval,
+                lastAttempt = lastAttempt,
+                lastSuccess = lastSuccess,
+                hasRecordedFailure = hasRecordedFailure,
+                nowMillis = nowMillis,
+                zoneId = zoneId,
+                retryCooldownMillis = retryCooldownMillis
+            )
+
+            if (due) {
                 preferences[autoCloudBackupLastAttemptAtKey] = nowMillis
                 claimed = true
             }
@@ -780,17 +1010,69 @@ class SettingsDataStore private constructor(
         return claimed
     }
 
-    suspend fun setAutoCloudBackupLastSuccessAt(timeMillis: Long) {
-        dataStoreInstance.edit {
-            it[autoCloudBackupLastSuccessAtKey] = timeMillis
-            it.remove(autoCloudBackupLastErrorKey)
+    suspend fun setAutoCloudBackupLastErrorIfMatching(
+        expectedEmail: String?,
+        expectedVersion: Long,
+        attemptTime: Long,
+        message: String,
+        failedAt: Long
+    ): Boolean {
+        require(attemptTime > 0L)
+        var updated = false
+        dataStoreInstance.edit { preferences ->
+            if (GoogleDriveAuthResolutionHelper.isAuthVersionMatching(
+                    currentEmail = preferences[googleAccountEmailKey],
+                    currentVersion = preferences[googleDriveAuthVersionKey] ?: 0L,
+                    expectedEmail = expectedEmail,
+                    expectedVersion = expectedVersion,
+                    attemptTime = attemptTime,
+                    lastValidationTime = preferences[googleDriveAuthValidationTimeKey] ?: 0L
+                )
+            ) {
+                preferences[autoCloudBackupLastErrorKey] = message.take(300)
+                preferences[autoCloudBackupLastAttemptAtKey] = failedAt
+                updated = true
+            }
         }
+        return updated
     }
 
-    suspend fun setAutoCloudBackupLastError(message: String?) {
+    suspend fun setAutoCloudBackupModifiedTimeIfMatching(
+        expectedEmail: String,
+        expectedVersion: Long,
+        expectedLastSuccessAt: Long?,
+        modifiedTime: Long?,
+        expectedLastLocalSuccessAt: Long? = null
+    ): Boolean {
+        require(modifiedTime == null || modifiedTime > 0L)
+        var updated = false
         dataStoreInstance.edit { preferences ->
-            if (message.isNullOrBlank()) preferences.remove(autoCloudBackupLastErrorKey)
-            else preferences[autoCloudBackupLastErrorKey] = message.take(300)
+            // 只同步雲端檔案時間；讀取期間若有新備份完成，保留該次成功結果。
+            if (preferences[googleAccountEmailKey] == expectedEmail &&
+                (preferences[googleDriveAuthVersionKey] ?: 0L) == expectedVersion &&
+                preferences[autoCloudBackupLastSuccessAtKey] == expectedLastSuccessAt &&
+                preferences[autoCloudBackupLastLocalSuccessAtKey] == expectedLastLocalSuccessAt
+            ) {
+                if (modifiedTime == null) {
+                    preferences.remove(autoCloudBackupLastSuccessAtKey)
+                    preferences.remove(autoCloudBackupLastLocalSuccessAtKey)
+                } else {
+                    preferences[autoCloudBackupLastSuccessAtKey] = modifiedTime
+                }
+                updated = true
+            }
+        }
+        return updated
+    }
+
+    suspend fun setAutoCloudBackupLastError(message: String?, attemptTimeMillis: Long? = null) {
+        dataStoreInstance.edit { preferences ->
+            if (message.isNullOrBlank()) {
+                preferences.remove(autoCloudBackupLastErrorKey)
+            } else {
+                preferences[autoCloudBackupLastErrorKey] = message.take(300)
+                preferences[autoCloudBackupLastAttemptAtKey] = attemptTimeMillis ?: System.currentTimeMillis()
+            }
         }
     }
 

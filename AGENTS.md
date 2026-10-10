@@ -80,8 +80,10 @@
 
 - CSV 匯入須先完整解析與驗證，再以單一原子流程寫入；任何列失敗都不可先清資料或部分匯入。`recordTime` 保存毫秒，舊檔缺市場欄位時才可由代號推斷。
 - 匯出時依代號正規化市場；還原後修正既有股票主檔的錯誤市場標記。舊 CSV 缺少「融資自備款是否覆寫」時，不可由數值猜測為手動覆寫。
-- Google Drive 使用 `GsonFactory`；Release R8 規則必須保留 Google API、Google Sign-In 與 Gson 反射所需類別。
+- Google Drive 使用 `GsonFactory`；Release R8 規則必須保留 Google API、Google Identity / Sign-In 與 Gson 反射所需類別。
 - Google Drive 固定交易備份為 `stockify_backup.csv`；畫面「最後備份時間」只看此檔並先顯示 DataStore 快取。持股排序另存 `stockify_holdings_order.json`，不得混入交易備份。
+- 自動雲端備份 UI 成功時間以 `stockify_auto_backup_bundle.zip` 的 Google Drive `modifiedTime` 為準；排程使用本機確認上傳成功時間，舊資料未有本機紀錄時沿用雲端快取。上傳後、進入資料管理頁與回到前景時同步雲端時間，讀取失敗保留快取，確認檔案不存在才清除兩種成功時間。同步須比對帳戶、授權版本與讀取前兩種成功紀錄，不可覆蓋讀取期間剛完成的新備份；帳戶切換與登出須清除該帳戶的排程紀錄。完整自動備份流程使用互斥鎖，重疊觸發直接跳過；程序內同帳戶與檔名的 Drive 查詢及上傳須序列化。雲端成功時間不可用來比較裝置時鐘的失敗先後或清除本機錯誤。
+- 一般 Google 授權成功不得清除自動備份失敗紀錄，也不得重設背景驗證序號；同帳戶普通驗證不遞增授權世代，帳戶切換、登出或授權撤銷才使舊工作失效。自動備份上傳成功才清除執行錯誤。刪除雲端備份保留登入與授權狀態，但須關閉自動備份並使刪除前的工作失效；登出才同時清除帳戶。資產備份／還原須先確認授權，不能只憑快取 Email 呼叫 Drive；還原來源查詢須區分失敗與檔案不存在。
 - 本地備份優先走系統 picker；無 picker 時 API 29+ 可使用 `Download/Stockify` fallback。Android 9 以下仍需外部檔案管理 App。
 - CSV／Drive 還原完成後，強制刷新本次匯入股票的即時價，即使休市也執行。
 - PDF 庫存匯入支援密碼、教學、預覽與替代／新增匯入；快照交易使用目前價格、零手續費、`expense = price × shares`。大型教學圖片需降取樣載入。

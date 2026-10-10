@@ -16,7 +16,7 @@ workManager = "2.12.0"
 googleApiClient = "2.9.1"
 googleApiServicesDrive = "v3-rev20230822-2.0.0"
 googleHttpClientGson = "2.2.0"
-playServicesAuth = "21.5.0"
+playServicesAuth = "22.0.0"
 guava = "33.7.2-android"
 googleHttpClientAndroid = "2.2.0" # 加入這個
 

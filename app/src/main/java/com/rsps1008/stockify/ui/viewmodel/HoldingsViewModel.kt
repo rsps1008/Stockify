@@ -685,7 +685,6 @@ class HoldingsViewModel(
                 is HomeHistoryStateInternal.Idle -> HistoryState.Idle
                 is HomeHistoryStateInternal.Loading -> HistoryState.Loading(historyInternal.progress, historyInternal.statusText)
                 is HomeHistoryStateInternal.Error -> HistoryState.Error(historyInternal.message)
-                else -> HistoryState.Idle
             }
         }
     }.flowOn(Dispatchers.Default)

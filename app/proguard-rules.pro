@@ -43,6 +43,7 @@
 # Keep the generated model hierarchy and Gson metadata when R8 is enabled.
 -keep class com.google.api.** { *; }
 -keep class com.google.android.gms.auth.api.signin.** { *; }
+-keep class com.google.android.gms.auth.api.identity.** { *; }
 -keep class com.google.gson.** { *; }
 -keepattributes Signature
 -keepattributes RuntimeVisibleAnnotations

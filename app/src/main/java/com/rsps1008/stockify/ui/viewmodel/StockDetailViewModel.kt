@@ -307,7 +307,6 @@ class StockDetailViewModel(
                 is DetailHistoryStateInternal.Idle -> HistoryState.Idle
                 is DetailHistoryStateInternal.Loading -> HistoryState.Loading(historyInternal.progress, historyInternal.statusText)
                 is DetailHistoryStateInternal.Error -> HistoryState.Error(historyInternal.message)
-                else -> HistoryState.Idle
             }
         }
     }.flowOn(Dispatchers.Default)

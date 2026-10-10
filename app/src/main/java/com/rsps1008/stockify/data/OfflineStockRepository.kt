@@ -244,22 +244,21 @@ class OfflineStockRepository(
             stockDao.getTransactionsForStockAndAccount(stockCode, normalizedMarket, accountId)
         }
 
+        val feeSettingsFlow = combine(
+            settingsDataStore.feeDiscountFlow.distinctUntilChanged(),
+            settingsDataStore.minFeeRegularFlow.distinctUntilChanged(),
+            settingsDataStore.minFeeOddLotFlow.distinctUntilChanged()
+        ) { sharedFeeDiscount, minFeeRegular, minFeeOddLot ->
+            AccountFeeSettings(sharedFeeDiscount, minFeeRegular, minFeeOddLot)
+        }
+
         val baseHoldingInfoSettingsFlow = combine(
             settingsDataStore.preDeductSellFeesFlow.distinctUntilChanged(),
             settingsDataStore.returnRateModeFlow.distinctUntilChanged(),
             settingsDataStore.marginDayCountFlow.distinctUntilChanged(),
-            settingsDataStore.feeDiscountFlow.distinctUntilChanged(),
-            settingsDataStore.minFeeRegularFlow.distinctUntilChanged(),
-            settingsDataStore.minFeeOddLotFlow.distinctUntilChanged(),
+            feeSettingsFlow,
             stockDao.getAllAccountsFlow().distinctUntilChanged()
-        ) { values ->
-            val preDeductSellFees = values[0] as Boolean
-            val returnRateMode = values[1] as ReturnRateMode
-            val marginDayCount = values[2] as Int
-            val sharedFeeDiscount = values[3] as Double
-            val minFeeRegular = values[4] as Int
-            val minFeeOddLot = values[5] as Int
-            val accounts = values[6] as List<Account>
+        ) { preDeductSellFees, returnRateMode, marginDayCount, sharedFeeSettings, accounts ->
             HoldingInfoSettings(
                 preDeductSellFees = preDeductSellFees,
                 excludeDividendIncomeFromReturns = false,
@@ -267,11 +266,11 @@ class OfflineStockRepository(
                 marginDayCount = marginDayCount,
                 feeSettingsByAccount = accountFeeSettings(
                     accounts,
-                    sharedFeeDiscount,
-                    minFeeRegular,
-                    minFeeOddLot
+                    sharedFeeSettings.feeDiscount,
+                    sharedFeeSettings.minFeeRegular,
+                    sharedFeeSettings.minFeeOddLot
                 ),
-                sharedFeeSettings = AccountFeeSettings(sharedFeeDiscount, minFeeRegular, minFeeOddLot)
+                sharedFeeSettings = sharedFeeSettings
             )
         }
         val holdingInfoSettingsFlow = baseHoldingInfoSettingsFlow
