@@ -29,7 +29,7 @@ android {
         applicationId = "com.rsps1008.stockify"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1720
+        versionCode = 1721
         versionName = "1.7.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
