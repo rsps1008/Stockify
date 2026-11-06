@@ -14,8 +14,139 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.nio.charset.Charset
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 class CsvServiceTest {
+    @Test
+    fun `invalid record time explains accepted formats with row context`() {
+        val csv = editExportedRow(CsvService(), mapOf("紀錄時間" to "invalid"))
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            CsvService().import(csv.byteInputStream())
+        }
+        assertTrue(error.message.orEmpty().contains("CSV 第 2 列"))
+        assertTrue(error.message.orEmpty().contains("紀錄時間格式錯誤"))
+        assertTrue(error.message.orEmpty().contains("20261105 09:08:07.123"))
+        assertTrue(error.message.orEmpty().contains("日期與時間之間須有空格"))
+    }
+
+    @Test
+    fun `unclosed quote identifies opening record and field across multiline values`() {
+        for (newline in listOf("\n", "\r\n", "\r")) {
+            val csv = "a,b,c${newline}1,\"two${newline}lines\",3${newline}4,5,\"unfinished\"\"quote${newline}continued"
+            val error = assertThrows(IllegalArgumentException::class.java) {
+                CsvService().import(csv.byteInputStream())
+            }
+            assertTrue(error.message.orEmpty().contains("CSV 第 3 列第 3 欄的引號未閉合"))
+            assertTrue(error.message.orEmpty().contains("欄位結尾補上雙引號"))
+        }
+    }
+
+    @Test
+    fun `short row reports missing positions and headers instead of an index error`() {
+        val lines = exportSingleMarginTransaction(CsvService()).lineSequence().toList()
+        val headers = lines.first().removePrefix("\uFEFF").split(',')
+        for (cutAt in listOf(headers.indexOf("紀錄時間"), headers.lastIndex)) {
+            val csv = lines.first() + "\n" + lines[1].split(',').take(cutAt).joinToString(",")
+            val error = assertThrows(IllegalArgumentException::class.java) {
+                CsvService().import(csv.byteInputStream())
+            }
+            assertTrue(error.message.orEmpty().contains("CSV 第 2 列"))
+            assertTrue(error.message.orEmpty().contains("本列只有 $cutAt 欄"))
+            assertTrue(error.message.orEmpty().contains(headers.drop(cutAt).joinToString("、")))
+            assertFalse(error.cause is IndexOutOfBoundsException)
+        }
+    }
+
+    @Test
+    fun `empty trailing field remains a field and still imports`() {
+        val csv = editExportedRow(CsvService(), mapOf("融券補償金" to ""))
+        val imported = CsvService().import(csv.byteInputStream()).single()
+        assertEquals(0.0, imported.transaction.shortCompensation, 0.0)
+    }
+
+    @Test
+    fun `csv import accepts Big5 saved by traditional Chinese Excel`() {
+        val service = CsvService()
+        val csv = exportSingleMarginTransaction(service).removePrefix("\uFEFF")
+        val imported = service.import(ByteArrayInputStream(csv.toByteArray(Charset.forName("Big5")))).single()
+
+        assertEquals("台積電", imported.stockName)
+        assertEquals("融資買進", imported.transaction.type)
+        assertEquals(100_000.0, imported.transaction.expense, 0.0)
+    }
+
+    @Test
+    fun `csv import accepts unicode encodings and BOM before quoted first header`() {
+        val service = CsvService()
+        val csv = exportSingleMarginTransaction(service).removePrefix("\uFEFF")
+            .replaceFirst("id,", "\"id\",")
+        for (charset in listOf(Charsets.UTF_8, Charsets.UTF_16LE, Charsets.UTF_16BE)) {
+            val imported = service.import(ByteArrayInputStream(("\uFEFF" + csv).toByteArray(charset))).single()
+            assertEquals("0", imported.sourceId)
+            assertEquals("台積電", imported.stockName)
+        }
+    }
+
+    @Test
+    fun `csv import rejects broken BOM marked utf8 instead of substituting characters`() {
+        val csv = exportSingleMarginTransaction(CsvService()).toByteArray(Charsets.UTF_8)
+        assertThrows(IllegalArgumentException::class.java) {
+            CsvService().import(ByteArrayInputStream(csv + byteArrayOf(0xc3.toByte())))
+        }
+    }
+
+    @Test
+    fun `csv import accepts Excel date time and quoted thousands without changing values`() {
+        val service = CsvService()
+        for (separator in listOf("/", "-")) {
+            val csv = editExportedRow(service, mapOf(
+                "日期" to "2026${separator}11${separator}5",
+                "紀錄時間" to "2026${separator}11${separator}5 09:08:07.123",
+                "買進股數" to "\"1,000\"",
+                "支出" to "\"100,000.25\"",
+                "股號" to "0050"
+            ))
+            val imported = service.import(ByteArrayInputStream(csv.toByteArray(Charsets.UTF_8))).single()
+            assertEquals("0050", imported.stockCode)
+            assertEquals(1_000.0, imported.transaction.buyShares, 0.0)
+            assertEquals(100_000.25, imported.transaction.expense, 0.0)
+            assertEquals(SimpleDateFormat("yyyy/MM/dd", Locale.US).parse("2026/11/05")!!.time, imported.transaction.date)
+            assertEquals(SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS", Locale.US)
+                .parse("2026/11/05 09:08:07.123")!!.time, imported.transaction.recordTime)
+        }
+    }
+
+    @Test
+    fun `csv import accepts minute precision record time`() {
+        val csv = editExportedRow(CsvService(), mapOf("紀錄時間" to "2026/11/5 09:08"))
+        val imported = CsvService().import(ByteArrayInputStream(csv.toByteArray(Charsets.UTF_8))).single()
+        assertEquals(SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.US)
+            .parse("2026/11/05 09:08")!!.time, imported.transaction.recordTime)
+    }
+
+    @Test
+    fun `csv import still rejects malformed grouped numbers and invalid dates`() {
+        for ((header, value) in listOf(
+            "支出" to "\"10,00\"", "支出" to "NaN", "支出" to "Infinity",
+            "日期" to "2026/2/30", "日期" to "11/5/2026", "日期" to "2026/11/5abc"
+        )) {
+            val csv = editExportedRow(CsvService(), mapOf(header to value))
+            assertThrows("$header=$value", IllegalArgumentException::class.java) {
+                CsvService().import(ByteArrayInputStream(csv.toByteArray(Charsets.UTF_8)))
+            }
+        }
+    }
+
+    private fun editExportedRow(service: CsvService, replacements: Map<String, String>): String {
+        val lines = exportSingleMarginTransaction(service).lineSequence().toList()
+        val headers = lines.first().removePrefix("\uFEFF").split(',')
+        val values = lines[1].split(',').toMutableList()
+        replacements.forEach { (header, value) -> values[headers.indexOf(header)] = value }
+        return lines.first() + "\r\n" + values.joinToString(",") + "\r\n"
+    }
+
     @Test
     fun `csv import canonicalizes stock code casing and whitespace`() {
         val service = CsvService()

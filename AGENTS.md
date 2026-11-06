@@ -79,6 +79,7 @@
 ## 5. 匯入、備份與刪除
 
 - CSV 匯入須先完整解析與驗證，再以單一原子流程寫入；任何列失敗都不可先清資料或部分匯入。`recordTime` 保存毫秒，舊檔缺市場欄位時才可由代號推斷。
+- CSV 編碼優先嚴格解碼 UTF-8，無 BOM 且解碼失敗時才嘗試 Big5；有 BOM 的 UTF-16 亦可讀取。日期接受年月日順序的緊湊、斜線與連字號格式，數值可接受正確分組且以 CSV 引號包住的千分位；不可猜測 Excel 已遺失的股號前導零或日期／時間精度。
 - 匯出時依代號正規化市場；還原後修正既有股票主檔的錯誤市場標記。舊 CSV 缺少「融資自備款是否覆寫」時，不可由數值猜測為手動覆寫。
 - Google Drive 使用 `GsonFactory`；Release R8 規則必須保留 Google API、Google Identity / Sign-In 與 Gson 反射所需類別。
 - Google Drive 固定交易備份為 `stockify_backup.csv`；畫面「最後備份時間」只看此檔並先顯示 DataStore 快取。持股排序另存 `stockify_holdings_order.json`，不得混入交易備份。

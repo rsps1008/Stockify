@@ -2,6 +2,9 @@ package com.rsps1008.stockify.data
 
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.ByteBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.Charset
 import java.text.ParsePosition
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -40,6 +43,7 @@ internal fun assignProvisionalImportIds(
 class CsvService {
 
     private val csvSplitRegex = ",(?=([^\"]*\"[^\"]*\")*[^\"]*$)".toRegex()
+    private val groupedNumberRegex = "[+-]?[0-9]{1,3}(,[0-9]{3})+(\\.[0-9]+)?".toRegex()
 
     private val csvHeader = listOf(
         "id", "交易", "交易稅", "帳戶ID", "市場", "手續費", "支出", "收入", "日期",
@@ -148,10 +152,14 @@ class CsvService {
         val record = StringBuilder()
         var inQuotes = false
         var index = 0
+        var fieldNumber = 1
+        var quoteRowNumber = 1
+        var quoteFieldNumber = 1
 
         fun addRecord() {
             records += record.toString()
             record.setLength(0)
+            fieldNumber = 1
         }
 
         while (index < csv.length) {
@@ -163,8 +171,16 @@ class CsvService {
                         record.append(csv[index + 1])
                         index++
                     } else {
+                        if (!inQuotes) {
+                            quoteRowNumber = records.size + 1
+                            quoteFieldNumber = fieldNumber
+                        }
                         inQuotes = !inQuotes
                     }
+                }
+                !inQuotes && character == ',' -> {
+                    record.append(character)
+                    fieldNumber++
                 }
                 !inQuotes && character == '\r' -> {
                     addRecord()
@@ -177,15 +193,18 @@ class CsvService {
         }
 
         if (inQuotes) {
-            throw IllegalArgumentException("CSV 引號未閉合")
+            throw IllegalArgumentException(
+                "CSV 第 $quoteRowNumber 列第 $quoteFieldNumber 欄的引號未閉合，" +
+                    "請在欄位結尾補上雙引號；欄位內的雙引號須連寫兩次（\"\"）"
+            )
         }
         if (record.isNotEmpty()) addRecord()
         return records
     }
 
     fun import(inputStream: InputStream, validateMarket: Boolean = true): List<CsvTransaction> {
-        return inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
-            val records = splitCsvRecords(reader.readText())
+        return inputStream.use { stream ->
+            val records = splitCsvRecords(decodeCsv(stream.readBytes()))
             val iterator = records.iterator()
             if (!iterator.hasNext()) return@use emptyList()
 
@@ -216,6 +235,11 @@ class CsvService {
                 try {
                     val parsedValues = parseCsvLine(line)
                     values = parsedValues
+                    require(parsedValues.size >= headerValues.size) {
+                        "欄位數不足：表頭有 ${headerValues.size} 欄，本列只有 ${parsedValues.size} 欄；" +
+                            "依表頭順序未讀到的欄位：${headerValues.drop(parsedValues.size).joinToString("、")}。" +
+                            "請檢查是否漏掉逗號分隔符，空白欄位也須保留分隔符"
+                    }
                     val transaction = parseTransaction(parsedValues, headerMap)
                     val market = parseMarket(
                         parsedValues,
@@ -246,6 +270,32 @@ class CsvService {
                 }
             }
             importedTransactions
+        }
+    }
+
+    private fun decodeCsv(bytes: ByteArray): String {
+        fun hasPrefix(vararg prefix: Int) = bytes.size >= prefix.size &&
+            prefix.indices.all { bytes[it].toInt() and 0xff == prefix[it] }
+
+        val encoding = when {
+            hasPrefix(0xef, 0xbb, 0xbf) -> Charsets.UTF_8
+            hasPrefix(0xff, 0xfe) -> Charsets.UTF_16LE
+            hasPrefix(0xfe, 0xff) -> Charsets.UTF_16BE
+            else -> null
+        }
+        fun decode(charset: Charset) = charset.newDecoder()
+            .decode(ByteBuffer.wrap(bytes)).toString().removePrefix("\uFEFF")
+
+        try {
+            if (encoding != null) return decode(encoding)
+            return try {
+                decode(Charsets.UTF_8)
+            } catch (_: CharacterCodingException) {
+                // Traditional Chinese Excel CSV files may use the Windows Big5 code page.
+                decode(Charset.forName("Big5"))
+            }
+        } catch (e: CharacterCodingException) {
+            throw IllegalArgumentException("CSV 編碼無法辨識，請另存為 CSV UTF-8（逗號分隔）後再匯入", e)
         }
     }
 
@@ -318,7 +368,8 @@ class CsvService {
     ): Double {
         val rawValue = getOptionalValue(values, headerMap, header)
         if (rawValue.isBlank()) return 0.0
-        val parsed = rawValue.toDoubleOrNull()
+        val normalized = if (groupedNumberRegex.matches(rawValue)) rawValue.replace(",", "") else rawValue
+        val parsed = normalized.toDoubleOrNull()
         if (parsed == null || !parsed.isFinite()) {
             throw IllegalArgumentException("$header 不是有效數字")
         }
@@ -358,14 +409,20 @@ class CsvService {
     }
 
     private fun parseDate(value: String): Long {
-        return parseExactDateTime(value, "yyyyMMdd")
-            ?: throw IllegalArgumentException("日期格式錯誤")
+        val formats = listOf("yyyyMMdd", "yyyy/M/d", "yyyy-M-d")
+        return formats.firstNotNullOfOrNull { pattern -> parseExactDateTime(value, pattern) }
+            ?: throw IllegalArgumentException("日期格式錯誤，請使用 yyyyMMdd、yyyy/M/d 或 yyyy-M-d")
     }
 
     private fun parseRecordTime(value: String): Long {
-        val formats = listOf("yyyyMMdd HH:mm:ss.SSS", "yyyyMMdd HH:mm:ss")
+        val formats = listOf("yyyyMMdd", "yyyy/M/d", "yyyy-M-d").flatMap { date ->
+            listOf("$date HH:mm:ss.SSS", "$date HH:mm:ss", "$date HH:mm")
+        }
         return formats.firstNotNullOfOrNull { pattern -> parseExactDateTime(value, pattern) }
-            ?: throw IllegalArgumentException("紀錄時間格式錯誤")
+            ?: throw IllegalArgumentException(
+                "紀錄時間格式錯誤，請使用日期加 24 小時制時間，例如 20261105 09:08:07.123、" +
+                    "2026/11/5 09:08:07 或 2026-11-5 09:08；日期與時間之間須有空格"
+            )
     }
 
     private fun parseExactDateTime(value: String, pattern: String): Long? {
