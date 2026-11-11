@@ -4,6 +4,7 @@ import android.util.Log
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.parameter
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -265,25 +266,35 @@ class TwseStockHistoryService(
         for ((index, monthStr) in missingMonths.withIndex()) {
             onProgress(cachedMonthCount + index + 1, total)
             val cacheKey = historyCacheKey(market, stockCode, monthStr)
-            // 上市／上櫃使用 TWSE；興櫃使用 TPEx 月歷史行情 API。
-            val dateParam = "${monthStr}01" // YYYYMM01
+            // TPEx and TWSE expose different per-symbol history endpoints.
             val isEmerging = StockExchange.isEmerging(exchange)
+            val isOtc = StockExchange.normalize(exchange) == StockExchange.OTC
             val url = if (isEmerging) {
                 val formattedDate = "${monthStr.substring(0, 4)}%2F${monthStr.substring(4, 6)}%2F01"
                 "https://www.tpex.org.tw/www/zh-tw/emerging/historical?type=Monthly&date=$formattedDate&code=$stockCode&response=json"
+            } else if (isOtc) {
+                "https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock"
             } else {
+                val dateParam = "${monthStr}01" // YYYYMM01
                 "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=$dateParam&stockNo=$stockCode"
             }
 
             val body = retryOnTransientNetworkFailure(TAG, stockCode) {
                 client.get(url) {
+                    if (isOtc) {
+                        parameter("code", stockCode)
+                        parameter("date", "${monthStr.substring(0, 4)}/${monthStr.substring(4, 6)}/01")
+                        parameter("response", "json")
+                    }
                     header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
                 }.bodyAsText()
             }
 
             if (body != null) {
                 try {
-                    val points = if (isEmerging) {
+                    val points = if (isOtc) {
+                        parseTpexMainboardResponse(body)
+                    } else if (isEmerging) {
                         parseTpexEmergingResponse(body)
                     } else {
                         parseTwseResponse(body)
@@ -305,7 +316,7 @@ class TwseStockHistoryService(
                         stockDao.insertHistoryPrices(dbEntities)
                     }
                 } catch (e: Exception) {
-                    safeLogE("Error parsing ${if (isEmerging) "TPEx" else "TWSE"} response for $stockCode in $monthStr", e)
+                    safeLogE("Error parsing ${if (isEmerging || isOtc) "TPEx" else "TWSE"} response for $stockCode in $monthStr", e)
                 }
             }
 
@@ -599,6 +610,38 @@ class TwseStockHistoryService(
                     price = price
                 )
             )
+        }
+        return points
+    }
+
+    private fun parseTpexMainboardResponse(jsonText: String): List<StockHistoryPoint> {
+        val points = mutableListOf<StockHistoryPoint>()
+        if (jsonText.isBlank()) return points
+
+        val root = Json.parseToJsonElement(jsonText).jsonObject
+        if (!root["stat"]?.jsonPrimitive?.content.orEmpty().equals("ok", ignoreCase = true)) {
+            return points
+        }
+
+        val rows = root["tables"]?.jsonArray
+            ?.firstOrNull()
+            ?.jsonObject
+            ?.get("data")
+            ?.jsonArray
+            ?: return points
+
+        for (rowElement in rows) {
+            val row = rowElement.jsonArray
+            if (row.size <= 6) continue
+
+            val date = parseRocDate(row[0].jsonPrimitive.content.trim()) ?: continue
+            val price = row[6].jsonPrimitive.content
+                .replace(",", "")
+                .trim()
+                .toDoubleOrNull()
+                ?.takeIf { it.isFinite() && it > 0.0 }
+                ?: continue
+            points.add(StockHistoryPoint(date, price))
         }
         return points
     }
